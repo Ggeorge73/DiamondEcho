@@ -35,15 +35,15 @@ const PropertyDetail = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-20">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="min-h-screen bg-gray-50 pt-24">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         {/* Back Button */}
         <Button 
           variant="ghost" 
           onClick={() => navigate('/search')}
-          className="mb-6 hover:bg-gray-100"
+          className="mb-8 hover:bg-gray-100 text-[#002349] hover:text-[#BD9042] font-semibold"
         >
-          <ArrowLeft className="h-4 w-4 mr-2" />
+          <ArrowLeft className="h-5 w-5 mr-2" />
           Back to Search
         </Button>
 
