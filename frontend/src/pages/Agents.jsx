@@ -6,30 +6,30 @@ import { agents } from '../data/mockData';
 
 const Agents = () => {
   return (
-    <div className="min-h-screen bg-gray-50 pt-20">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    <div className="min-h-screen bg-gray-50 pt-24">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         {/* Header */}
-        <div className="text-center mb-12">
-          <h1 className="text-5xl font-bold text-gray-900 mb-4">
+        <div className="text-center mb-16">
+          <h1 className="text-6xl font-bold text-[#002349] mb-6 tracking-tight">
             Meet Our Expert Agents
           </h1>
-          <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+          <p className="text-2xl text-gray-600 max-w-3xl mx-auto font-light">
             Our team of experienced professionals is dedicated to helping you achieve your real estate goals.
           </p>
         </div>
 
         {/* Agents Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
           {agents.map((agent) => (
-            <Card key={agent.id} className="border-none shadow-lg hover:shadow-xl transition-shadow duration-300">
-              <CardContent className="p-8 text-center">
+            <Card key={agent.id} className="border border-gray-200 shadow-lg hover:shadow-2xl transition-all duration-500 hover:-translate-y-1">
+              <CardContent className="p-10 text-center">
                 <img 
                   src={agent.photo} 
                   alt={agent.name}
-                  className="w-32 h-32 rounded-full mx-auto mb-6 object-cover border-4 border-amber-100"
+                  className="w-36 h-36 rounded-full mx-auto mb-6 object-cover border-4 border-[#BD9042]"
                 />
-                <h3 className="text-2xl font-bold text-gray-900 mb-2">{agent.name}</h3>
-                <p className="text-amber-700 font-medium mb-4">{agent.title}</p>
+                <h3 className="text-2xl font-bold text-[#002349] mb-2">{agent.name}</h3>
+                <p className="text-[#BD9042] font-semibold mb-4 tracking-wide">{agent.title}</p>
                 <p className="text-gray-600 mb-6">{agent.bio}</p>
                 
                 <div className="space-y-2 mb-6">
