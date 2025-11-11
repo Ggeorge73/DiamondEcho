@@ -151,10 +151,10 @@ const InvestmentCalculator = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Input Section */}
           <div className="lg:col-span-2 space-y-6">
-            <Card className="border-none shadow-lg">
+            <Card className="border border-gray-200 shadow-lg">
               <CardHeader>
-                <CardTitle className="flex items-center text-xl">
-                  <DollarSign className="h-5 w-5 mr-2 text-amber-700" />
+                <CardTitle className="flex items-center text-2xl text-[#002349]">
+                  <DollarSign className="h-6 w-6 mr-2 text-[#BD9042]" />
                   Purchase & Financing
                 </CardTitle>
               </CardHeader>
