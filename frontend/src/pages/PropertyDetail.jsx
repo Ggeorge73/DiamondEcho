@@ -78,28 +78,28 @@ const PropertyDetail = () => {
 
           {/* Agent Card */}
           <div className="lg:col-span-1">
-            <Card className="border-none shadow-lg sticky top-24">
-              <CardContent className="p-6">
+            <Card className="border border-gray-200 shadow-xl sticky top-28">
+              <CardContent className="p-8">
                 <div className="text-center mb-6">
                   <img 
                     src={agent.photo} 
                     alt={agent.name}
-                    className="w-24 h-24 rounded-full mx-auto mb-4 object-cover"
+                    className="w-28 h-28 rounded-full mx-auto mb-4 object-cover border-4 border-[#BD9042]"
                   />
-                  <h3 className="font-bold text-lg text-gray-900">{agent.name}</h3>
-                  <p className="text-sm text-gray-600 mb-4">{agent.title}</p>
+                  <h3 className="font-bold text-xl text-[#002349]">{agent.name}</h3>
+                  <p className="text-sm text-[#BD9042] mb-4 font-medium">{agent.title}</p>
                 </div>
 
                 <div className="space-y-3 mb-6">
-                  <Button className="w-full bg-amber-700 hover:bg-amber-800">
-                    <Phone className="h-4 w-4 mr-2" />
-                    Call Agent
+                  <Button className="w-full bg-[#002349] hover:bg-[#003366] text-white font-bold tracking-wide py-6">
+                    <Phone className="h-5 w-5 mr-2" />
+                    CALL AGENT
                   </Button>
-                  <Button variant="outline" className="w-full border-gray-300 hover:border-amber-700 hover:text-amber-700">
-                    <Mail className="h-4 w-4 mr-2" />
+                  <Button variant="outline" className="w-full border-[#002349] text-[#002349] hover:bg-[#002349] hover:text-white font-semibold py-6">
+                    <Mail className="h-5 w-5 mr-2" />
                     Send Email
                   </Button>
-                  <Button variant="outline" className="w-full border-gray-300 hover:border-amber-700 hover:text-amber-700">
+                  <Button variant="outline" className="w-full border-[#002349] text-[#002349] hover:bg-[#002349] hover:text-white font-semibold py-6">
                     Schedule Tour
                   </Button>
                 </div>
@@ -107,18 +107,18 @@ const PropertyDetail = () => {
                 <div className="pt-6 border-t border-gray-200">
                   <Button 
                     variant="ghost" 
-                    className="w-full justify-start text-gray-700 hover:text-amber-700"
+                    className="w-full justify-start text-[#002349] hover:text-[#BD9042] hover:bg-transparent font-semibold"
                     onClick={() => navigate('/investment-calculator')}
                   >
-                    <CalcIcon className="h-4 w-4 mr-2" />
+                    <CalcIcon className="h-5 w-5 mr-2" />
                     Analyze Investment
                   </Button>
-                  <Button variant="ghost" className="w-full justify-start text-gray-700 hover:text-amber-700">
-                    <Heart className="h-4 w-4 mr-2" />
+                  <Button variant="ghost" className="w-full justify-start text-[#002349] hover:text-[#BD9042] hover:bg-transparent font-semibold">
+                    <Heart className="h-5 w-5 mr-2" />
                     Save Property
                   </Button>
-                  <Button variant="ghost" className="w-full justify-start text-gray-700 hover:text-amber-700">
-                    <Share2 className="h-4 w-4 mr-2" />
+                  <Button variant="ghost" className="w-full justify-start text-[#002349] hover:text-[#BD9042] hover:bg-transparent font-semibold">
+                    <Share2 className="h-5 w-5 mr-2" />
                     Share
                   </Button>
                 </div>
