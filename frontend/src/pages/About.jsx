@@ -95,19 +95,19 @@ const About = () => {
         </section>
 
         {/* Values Section */}
-        <section className="mb-16">
-          <h2 className="text-4xl font-bold text-center text-gray-900 mb-12">
+        <section className="mb-20">
+          <h2 className="text-5xl font-bold text-center text-[#002349] mb-16 tracking-tight">
             Our Values
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
             {values.map((value, index) => (
-              <Card key={index} className="border-none shadow-lg">
-                <CardContent className="p-8 text-center">
-                  <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <value.icon className="h-8 w-8 text-amber-700" />
+              <Card key={index} className="border border-gray-200 shadow-lg hover:shadow-2xl transition-shadow duration-500">
+                <CardContent className="p-10 text-center">
+                  <div className="w-20 h-20 bg-[#002349] rounded-full flex items-center justify-center mx-auto mb-6">
+                    <value.icon className="h-10 w-10 text-[#BD9042]" />
                   </div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-3">{value.title}</h3>
-                  <p className="text-gray-600">{value.description}</p>
+                  <h3 className="text-2xl font-bold text-[#002349] mb-4">{value.title}</h3>
+                  <p className="text-gray-600 leading-relaxed">{value.description}</p>
                 </CardContent>
               </Card>
             ))}
