@@ -64,10 +64,10 @@ const Search = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-20">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="min-h-screen bg-gray-50 pt-24">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         {/* Search Header */}
-        <div className="bg-white rounded-xl shadow-md p-6 mb-6">
+        <div className="bg-white rounded-lg shadow-lg p-8 mb-8">
           <div className="flex flex-col md:flex-row gap-4">
             <div className="flex-1 relative">
               <SearchIcon className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
@@ -76,16 +76,16 @@ const Search = () => {
                 placeholder="Search by city, zip code, or address..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-12 py-6 text-lg border-gray-300 focus:ring-amber-500 focus:border-amber-500"
+                className="pl-12 py-6 text-lg border-gray-300 focus:ring-[#002349] focus:border-[#002349]"
               />
             </div>
             <Button 
               onClick={() => setShowFilters(!showFilters)}
               variant="outline"
-              className="border-gray-300 hover:border-amber-500 py-6 px-6"
+              className="border-[#002349] text-[#002349] hover:bg-[#002349] hover:text-white py-6 px-8 font-bold tracking-wide"
             >
               <SlidersHorizontal className="h-5 w-5 mr-2" />
-              Filters
+              FILTERS
             </Button>
           </div>
 
