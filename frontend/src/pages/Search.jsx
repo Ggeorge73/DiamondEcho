@@ -252,13 +252,13 @@ const Search = () => {
             <div className="text-gray-400 mb-4">
               <SearchIcon className="h-16 w-16 mx-auto" />
             </div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">
+            <h3 className="text-2xl font-bold text-[#002349] mb-2">
               No properties found
             </h3>
-            <p className="text-gray-600 mb-6">
+            <p className="text-gray-600 mb-8 text-lg">
               Try adjusting your search criteria or filters
             </p>
-            <Button onClick={clearFilters} className="bg-amber-700 hover:bg-amber-800">
+            <Button onClick={clearFilters} className="bg-[#002349] hover:bg-[#003366] text-white font-bold tracking-wide px-8 py-6">
               Clear Filters
             </Button>
           </div>
