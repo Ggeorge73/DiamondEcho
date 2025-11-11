@@ -90,9 +90,9 @@ const Home = () => {
       </section>
 
       {/* Search Bar Section */}
-      <section className="bg-gray-50 py-10 -mt-16 relative z-20">
+      <section className="bg-gray-50 py-12 -mt-24 relative z-20">
         <div className="max-w-5xl mx-auto px-4">
-          <div className="bg-white rounded-lg shadow-xl p-6 border border-gray-100">
+          <div className="bg-white rounded-lg shadow-2xl p-8 border border-gray-100">
             <div className="flex flex-col md:flex-row gap-4">
               <input
                 type="text"
