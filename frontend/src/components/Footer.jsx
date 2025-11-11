@@ -4,34 +4,34 @@ import { Diamond, Mail, Phone, MapPin, Facebook, Instagram, Linkedin, Twitter } 
 
 const Footer = () => {
   return (
-    <footer className="bg-gray-900 text-gray-300">
+    <footer className="bg-[#002349] text-gray-300">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
           {/* Brand */}
           <div>
             <div className="flex items-center space-x-2 mb-4">
-              <div className="bg-gradient-to-br from-amber-600 to-amber-700 p-2 rounded-lg">
+              <div className="bg-[#BD9042] p-2 rounded-lg">
                 <Diamond className="h-5 w-5 text-white" />
               </div>
               <div className="flex flex-col">
                 <span className="text-lg font-bold text-white">DiamondEcho</span>
-                <span className="text-xs text-gray-400 -mt-1">Realty</span>
+                <span className="text-xs text-[#BD9042] -mt-1 tracking-wide">REALTY</span>
               </div>
             </div>
             <p className="text-sm text-gray-400 mb-4">
               Your trusted partner in luxury real estate and investment opportunities.
             </p>
             <div className="flex space-x-3">
-              <a href="#" className="text-gray-400 hover:text-amber-500 transition-colors">
+              <a href="#" className="text-gray-400 hover:text-[#BD9042] transition-colors">
                 <Facebook className="h-5 w-5" />
               </a>
-              <a href="#" className="text-gray-400 hover:text-amber-500 transition-colors">
+              <a href="#" className="text-gray-400 hover:text-[#BD9042] transition-colors">
                 <Instagram className="h-5 w-5" />
               </a>
-              <a href="#" className="text-gray-400 hover:text-amber-500 transition-colors">
+              <a href="#" className="text-gray-400 hover:text-[#BD9042] transition-colors">
                 <Twitter className="h-5 w-5" />
               </a>
-              <a href="#" className="text-gray-400 hover:text-amber-500 transition-colors">
+              <a href="#" className="text-gray-400 hover:text-[#BD9042] transition-colors">
                 <Linkedin className="h-5 w-5" />
               </a>
             </div>
