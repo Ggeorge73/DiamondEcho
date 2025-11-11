@@ -29,7 +29,7 @@ const About = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-20">
+    <div className="min-h-screen bg-gray-50 pt-24">
       {/* Hero Section */}
       <section className="relative h-[500px] flex items-center justify-center overflow-hidden mb-20">
         <div 
