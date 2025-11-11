@@ -133,17 +133,17 @@ const InvestmentCalculator = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-20">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="min-h-screen bg-gray-50 pt-24">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center space-x-3 mb-4">
-            <div className="bg-amber-100 p-3 rounded-xl">
-              <Calculator className="h-8 w-8 text-amber-700" />
+        <div className="mb-12">
+          <div className="flex items-center space-x-4 mb-4">
+            <div className="bg-[#002349] p-4 rounded-xl shadow-lg">
+              <Calculator className="h-10 w-10 text-[#BD9042]" />
             </div>
             <div>
-              <h1 className="text-4xl font-bold text-gray-900">Fix & Flip Investment Calculator</h1>
-              <p className="text-gray-600 mt-1">Analyze your real estate investment deals with precision</p>
+              <h1 className="text-5xl font-bold text-[#002349] tracking-tight">Fix & Flip Investment Calculator</h1>
+              <p className="text-gray-600 mt-2 text-lg">Analyze your real estate investment deals with precision</p>
             </div>
           </div>
         </div>
