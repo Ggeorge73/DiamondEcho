@@ -68,10 +68,10 @@ const About = () => {
         </section>
 
         {/* Story Section */}
-        <section className="mb-16">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+        <section className="mb-20">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
             <div>
-              <h2 className="text-4xl font-bold text-gray-900 mb-6">Our Story</h2>
+              <h2 className="text-5xl font-bold text-[#002349] mb-8 tracking-tight">Our Story</h2>
               <div className="space-y-4 text-gray-700 leading-relaxed">
                 <p>
                   Founded in 2009, DiamondEcho Realty was born from a vision to revolutionize the real estate industry by combining traditional brokerage excellence with cutting-edge investment tools.
