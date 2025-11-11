@@ -31,21 +31,21 @@ const About = () => {
   return (
     <div className="min-h-screen bg-gray-50 pt-20">
       {/* Hero Section */}
-      <section className="relative h-[400px] flex items-center justify-center overflow-hidden mb-16">
+      <section className="relative h-[500px] flex items-center justify-center overflow-hidden mb-20">
         <div 
           className="absolute inset-0 bg-cover bg-center"
           style={{
             backgroundImage: 'url(https://images.unsplash.com/photo-1600596542815-ffad4c1539a9)',
           }}
         >
-          <div className="absolute inset-0 bg-gradient-to-r from-gray-900/80 to-gray-900/40"></div>
+          <div className="absolute inset-0 bg-gradient-to-b from-[#002349]/70 via-[#002349]/50 to-[#002349]/80"></div>
         </div>
         
         <div className="relative z-10 max-w-4xl mx-auto px-4 text-center">
-          <h1 className="text-5xl md:text-6xl font-bold text-white mb-6">
+          <h1 className="text-6xl md:text-7xl font-bold text-white mb-6 tracking-tight">
             About DiamondEcho Realty
           </h1>
-          <p className="text-xl text-gray-200">
+          <p className="text-2xl text-gray-100 font-light">
             Where luxury real estate meets investment excellence
           </p>
         </div>
