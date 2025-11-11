@@ -16,29 +16,55 @@ const Home = () => {
     }).format(price);
   };
 
+  const [currentSlide, setCurrentSlide] = React.useState(0);
+  
+  const heroImages = [
+    'https://images.unsplash.com/photo-1505843513577-22bb7d21e455',
+    'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9',
+    'https://images.unsplash.com/photo-1416331108676-a22ccb276e35',
+    'https://images.unsplash.com/photo-1574120582683-1adf79c5dfd5',
+    'https://images.unsplash.com/photo-1505843795480-5cfb3c03f6ff'
+  ];
+
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentSlide((prev) => (prev + 1) % heroImages.length);
+    }, 5000); // Change image every 5 seconds
+    
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <div className="min-h-screen">
-      {/* Hero Section */}
+      {/* Hero Section with Video-like Slideshow */}
       <section className="relative h-[600px] flex items-center justify-center overflow-hidden">
-        <div 
-          className="absolute inset-0 bg-cover bg-center"
-          style={{
-            backgroundImage: 'url(https://images.unsplash.com/photo-1505843513577-22bb7d21e455)',
-          }}
-        >
-          <div className="absolute inset-0 bg-gradient-to-r from-gray-900/80 to-gray-900/40"></div>
-        </div>
+        {/* Image Slideshow Background */}
+        {heroImages.map((image, index) => (
+          <div
+            key={index}
+            className={`absolute inset-0 bg-cover bg-center transition-opacity duration-2000 ease-in-out ${
+              index === currentSlide ? 'opacity-100' : 'opacity-0'
+            }`}
+            style={{
+              backgroundImage: `url(${image})`,
+              transform: index === currentSlide ? 'scale(1.1)' : 'scale(1)',
+              transition: 'opacity 2s ease-in-out, transform 20s ease-out',
+            }}
+          >
+            <div className="absolute inset-0 bg-gradient-to-r from-gray-900/80 to-gray-900/40"></div>
+          </div>
+        ))}
         
         <div className="relative z-10 max-w-4xl mx-auto px-4 text-center">
-          <h1 className="text-5xl md:text-6xl font-bold text-white mb-6 leading-tight">
+          <h1 className="text-5xl md:text-6xl font-bold text-white mb-6 leading-tight animate-fade-in">
             Discover Your Dream Home
           </h1>
-          <p className="text-xl text-gray-200 mb-8">
+          <p className="text-xl text-gray-200 mb-8 animate-fade-in">
             Luxury real estate & investment opportunities that exceed expectations
           </p>
           
           {/* Search Bar */}
-          <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-3xl mx-auto">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-3xl mx-auto animate-fade-in">
             <div className="flex flex-col md:flex-row gap-4">
               <input
                 type="text"
@@ -65,6 +91,21 @@ const Home = () => {
               </Button>
             </div>
           </div>
+        </div>
+
+        {/* Slideshow Indicators */}
+        <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 flex space-x-2 z-20">
+          {heroImages.map((_, index) => (
+            <button
+              key={index}
+              onClick={() => setCurrentSlide(index)}
+              className={`w-2 h-2 rounded-full transition-all duration-300 ${
+                index === currentSlide 
+                  ? 'bg-white w-8' 
+                  : 'bg-white/50 hover:bg-white/75'
+              }`}
+            />
+          ))}
         </div>
       </section>
 
