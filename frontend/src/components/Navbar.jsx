@@ -43,12 +43,12 @@ const Navbar = () => {
 
           {/* CTA Buttons */}
           <div className="hidden md:flex items-center space-x-3">
-            <Button variant="ghost" onClick={() => navigate('/search')} className="text-[#002349] hover:text-[#BD9042] hover:bg-gray-50">
-              <Search className="h-4 w-4 mr-2" />
-              Search
+            <Button variant="ghost" onClick={() => navigate('/search')} className="text-[#002349] hover:text-[#BD9042] hover:bg-transparent font-bold text-base tracking-wider">
+              <Search className="h-5 w-5 mr-2" />
+              SEARCH
             </Button>
-            <Button className="bg-[#002349] hover:bg-[#003366] text-white shadow-md font-medium tracking-wide">
-              Contact Us
+            <Button className="bg-[#002349] hover:bg-[#003366] text-white shadow-md font-bold text-base tracking-wide">
+              CONTACT US
             </Button>
           </div>
 
