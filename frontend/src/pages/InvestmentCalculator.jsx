@@ -445,8 +445,8 @@ const InvestmentCalculator = () => {
               </CardContent>
             </Card>
 
-            <Button className="w-full bg-amber-700 hover:bg-amber-800 py-6 text-lg font-semibold">
-              Schedule Consultation
+            <Button className="w-full bg-[#002349] hover:bg-[#003366] text-white py-6 text-lg font-bold tracking-wide shadow-lg">
+              SCHEDULE CONSULTATION
             </Button>
           </div>
         </div>
