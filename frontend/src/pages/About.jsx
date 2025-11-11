@@ -128,53 +128,53 @@ const About = () => {
 
         {/* What Makes Us Different */}
         <section>
-          <h2 className="text-4xl font-bold text-center text-gray-900 mb-12">
+          <h2 className="text-5xl font-bold text-center text-[#002349] mb-16 tracking-tight">
             What Makes Us Different
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <Card className="border-none shadow-lg">
-              <CardContent className="p-8">
-                <h3 className="text-2xl font-bold text-gray-900 mb-4">For Home Buyers & Sellers</h3>
-                <ul className="space-y-3 text-gray-700">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+            <Card className="border border-gray-200 shadow-lg hover:shadow-2xl transition-shadow duration-500">
+              <CardContent className="p-10">
+                <h3 className="text-3xl font-bold text-[#002349] mb-6">For Home Buyers & Sellers</h3>
+                <ul className="space-y-4 text-gray-700">
                   <li className="flex items-start">
-                    <div className="w-2 h-2 bg-amber-700 rounded-full mt-2 mr-3 flex-shrink-0"></div>
-                    <span>Exclusive access to luxury properties and off-market listings</span>
+                    <div className="w-2 h-2 bg-[#BD9042] rounded-full mt-2 mr-4 flex-shrink-0"></div>
+                    <span className="text-base">Exclusive access to luxury properties and off-market listings</span>
                   </li>
                   <li className="flex items-start">
-                    <div className="w-2 h-2 bg-amber-700 rounded-full mt-2 mr-3 flex-shrink-0"></div>
-                    <span>Advanced property valuation tools and market insights</span>
+                    <div className="w-2 h-2 bg-[#BD9042] rounded-full mt-2 mr-4 flex-shrink-0"></div>
+                    <span className="text-base">Advanced property valuation tools and market insights</span>
                   </li>
                   <li className="flex items-start">
-                    <div className="w-2 h-2 bg-amber-700 rounded-full mt-2 mr-3 flex-shrink-0"></div>
-                    <span>White-glove service throughout the entire transaction</span>
+                    <div className="w-2 h-2 bg-[#BD9042] rounded-full mt-2 mr-4 flex-shrink-0"></div>
+                    <span className="text-base">White-glove service throughout the entire transaction</span>
                   </li>
                   <li className="flex items-start">
-                    <div className="w-2 h-2 bg-amber-700 rounded-full mt-2 mr-3 flex-shrink-0"></div>
-                    <span>Expert negotiation and comprehensive market knowledge</span>
+                    <div className="w-2 h-2 bg-[#BD9042] rounded-full mt-2 mr-4 flex-shrink-0"></div>
+                    <span className="text-base">Expert negotiation and comprehensive market knowledge</span>
                   </li>
                 </ul>
               </CardContent>
             </Card>
 
-            <Card className="border-none shadow-lg">
-              <CardContent className="p-8">
-                <h3 className="text-2xl font-bold text-gray-900 mb-4">For Investors</h3>
-                <ul className="space-y-3 text-gray-700">
+            <Card className="border border-gray-200 shadow-lg hover:shadow-2xl transition-shadow duration-500">
+              <CardContent className="p-10">
+                <h3 className="text-3xl font-bold text-[#002349] mb-6">For Investors</h3>
+                <ul className="space-y-4 text-gray-700">
                   <li className="flex items-start">
-                    <div className="w-2 h-2 bg-amber-700 rounded-full mt-2 mr-3 flex-shrink-0"></div>
-                    <span>Advanced fix & flip analysis calculator with detailed breakdowns</span>
+                    <div className="w-2 h-2 bg-[#BD9042] rounded-full mt-2 mr-4 flex-shrink-0"></div>
+                    <span className="text-base">Advanced fix & flip analysis calculator with detailed breakdowns</span>
                   </li>
                   <li className="flex items-start">
-                    <div className="w-2 h-2 bg-amber-700 rounded-full mt-2 mr-3 flex-shrink-0"></div>
-                    <span>Market comps and ARV analysis tools</span>
+                    <div className="w-2 h-2 bg-[#BD9042] rounded-full mt-2 mr-4 flex-shrink-0"></div>
+                    <span className="text-base">Market comps and ARV analysis tools</span>
                   </li>
                   <li className="flex items-start">
-                    <div className="w-2 h-2 bg-amber-700 rounded-full mt-2 mr-3 flex-shrink-0"></div>
-                    <span>Deal advisory based on 70% rule and ROI metrics</span>
+                    <div className="w-2 h-2 bg-[#BD9042] rounded-full mt-2 mr-4 flex-shrink-0"></div>
+                    <span className="text-base">Deal advisory based on 70% rule and ROI metrics</span>
                   </li>
                   <li className="flex items-start">
-                    <div className="w-2 h-2 bg-amber-700 rounded-full mt-2 mr-3 flex-shrink-0"></div>
-                    <span>Access to investment-focused agents with proven track records</span>
+                    <div className="w-2 h-2 bg-[#BD9042] rounded-full mt-2 mr-4 flex-shrink-0"></div>
+                    <span className="text-base">Access to investment-focused agents with proven track records</span>
                   </li>
                 </ul>
               </CardContent>
