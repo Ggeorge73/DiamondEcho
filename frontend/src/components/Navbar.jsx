@@ -9,21 +9,21 @@ const Navbar = () => {
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-white/98 backdrop-blur-md shadow-md border-b border-gray-100">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-20">
-          {/* Logo */}
+      <div className="w-full px-6 lg:px-12">
+        <div className="flex justify-between items-center h-24">
+          {/* Logo - Extreme Left */}
           <Link to="/" className="flex items-center space-x-3 group">
-            <div className="bg-[#002349] p-2.5 rounded-lg transform group-hover:scale-105 transition-transform duration-300 shadow-md">
-              <Diamond className="h-6 w-6 text-[#BD9042]" />
+            <div className="bg-[#002349] p-3 rounded-lg transform group-hover:scale-105 transition-transform duration-300 shadow-xl">
+              <Diamond className="h-7 w-7 text-[#BD9042]" />
             </div>
             <div className="flex flex-col">
-              <span className="text-xl font-bold text-[#002349] tracking-tight">DiamondEcho</span>
-              <span className="text-xs text-gray-600 -mt-1 tracking-wide">REALTY</span>
+              <span className="text-2xl font-bold text-[#002349] tracking-tight">DiamondEcho</span>
+              <span className="text-xs text-[#BD9042] -mt-1 tracking-widest font-semibold">REALTY</span>
             </div>
           </Link>
 
-          {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center space-x-8">
+          {/* Desktop Navigation - Center */}
+          <div className="hidden lg:flex items-center space-x-10 flex-1 justify-center">
             <Link to="/search" className="text-[#002349] hover:text-[#BD9042] font-bold transition-colors duration-200 text-base tracking-wider">
               BUY
             </Link>
@@ -41,13 +41,13 @@ const Navbar = () => {
             </Link>
           </div>
 
-          {/* CTA Buttons */}
-          <div className="hidden md:flex items-center space-x-3">
+          {/* CTA Buttons - Extreme Right */}
+          <div className="hidden lg:flex items-center space-x-4">
             <Button variant="ghost" onClick={() => navigate('/search')} className="text-[#002349] hover:text-[#BD9042] hover:bg-transparent font-bold text-base tracking-wider">
               <Search className="h-5 w-5 mr-2" />
               SEARCH
             </Button>
-            <Button className="bg-[#002349] hover:bg-[#003366] text-white shadow-md font-bold text-base tracking-wide">
+            <Button className="bg-[#002349] hover:bg-[#003366] text-white shadow-lg font-bold text-base tracking-wide px-8 py-5">
               CONTACT US
             </Button>
           </div>
@@ -55,7 +55,7 @@ const Navbar = () => {
           {/* Mobile Menu Button */}
           <button
             onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className="md:hidden text-[#002349] hover:text-[#BD9042] transition-colors"
+            className="lg:hidden text-[#002349] hover:text-[#BD9042] transition-colors"
           >
             {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
           </button>
