@@ -35,36 +35,39 @@ const Home = () => {
 
   return (
     <div className="min-h-screen">
-      {/* Hero Section with Video-like Slideshow */}
-      <section className="relative h-[700px] flex items-center justify-center overflow-hidden">
-        {/* Image Slideshow Background */}
+      {/* Hero Section with Cinematic Video-like Slideshow */}
+      <section className="relative h-[calc(100vh+200px)] min-h-[900px] flex items-center justify-center overflow-hidden">
+        {/* Image Slideshow Background with Cinematic Movement */}
         {heroImages.map((image, index) => (
           <div
             key={index}
-            className={`absolute inset-0 bg-cover bg-center transition-opacity duration-2000 ease-in-out ${
+            className={`absolute inset-0 transition-opacity duration-[2500ms] ease-in-out ${
               index === currentSlide ? 'opacity-100' : 'opacity-0'
             }`}
             style={{
               backgroundImage: `url(${image})`,
-              transform: index === currentSlide ? 'scale(1.1)' : 'scale(1)',
-              transition: 'opacity 2s ease-in-out, transform 20s ease-out',
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              transform: index === currentSlide ? 'scale(1.15)' : 'scale(1.05)',
+              transition: 'opacity 2.5s ease-in-out, transform 25s ease-out',
+              animation: index === currentSlide ? 'cinematicZoomPan 25s ease-out forwards' : 'none',
             }}
           >
-            <div className="absolute inset-0 bg-gradient-to-b from-[#002349]/70 via-[#002349]/50 to-[#002349]/80"></div>
+            <div className="absolute inset-0 bg-gradient-to-b from-[#002349]/60 via-[#002349]/40 to-[#002349]/75"></div>
           </div>
         ))}
         
         <div className="relative z-10 max-w-5xl mx-auto px-4 text-center">
-          <h1 className="text-6xl md:text-7xl font-bold text-white mb-6 leading-tight animate-fade-in tracking-tight">
+          <h1 className="text-6xl md:text-8xl font-bold text-white mb-6 leading-tight animate-fade-in tracking-tight">
             Discover Exceptional Properties
           </h1>
-          <p className="text-xl md:text-2xl text-gray-100 animate-fade-in font-light tracking-wide">
+          <p className="text-xl md:text-3xl text-gray-100 animate-fade-in font-light tracking-wide">
             Where luxury real estate meets investment excellence
           </p>
         </div>
 
         {/* Slideshow Indicators */}
-        <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 flex space-x-2 z-20">
+        <div className="absolute bottom-12 left-1/2 transform -translate-x-1/2 flex space-x-2 z-20">
           {heroImages.map((_, index) => (
             <button
               key={index}
@@ -76,6 +79,13 @@ const Home = () => {
               }`}
             />
           ))}
+        </div>
+
+        {/* Scroll Indicator */}
+        <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 z-20 animate-bounce">
+          <div className="w-6 h-10 border-2 border-white/50 rounded-full flex items-start justify-center p-2">
+            <div className="w-1 h-3 bg-white/70 rounded-full animate-pulse"></div>
+          </div>
         </div>
       </section>
 
