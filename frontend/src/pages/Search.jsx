@@ -197,35 +197,35 @@ const Search = () => {
         </div>
 
         {/* Results Header */}
-        <div className="mb-6">
-          <h2 className="text-2xl font-bold text-gray-900">
+        <div className="mb-8">
+          <h2 className="text-3xl font-bold text-[#002349] tracking-tight">
             {filteredProperties.length} Properties Found
           </h2>
-          <p className="text-gray-600 mt-1">
+          <p className="text-gray-600 mt-2 text-lg">
             {searchTerm && `Results for "${searchTerm}"`}
           </p>
         </div>
 
         {/* Property Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {filteredProperties.map((property) => (
             <Card 
               key={property.id} 
-              className="cursor-pointer border-none shadow-md hover:shadow-xl transition-all duration-300 hover:-translate-y-1 overflow-hidden"
+              className="cursor-pointer border border-gray-200 shadow-md hover:shadow-2xl transition-all duration-500 hover:-translate-y-2 overflow-hidden group"
               onClick={() => navigate(`/property/${property.id}`)}
             >
-              <div className="relative h-56 overflow-hidden">
+              <div className="relative h-64 overflow-hidden">
                 <img 
                   src={property.images[0]} 
                   alt={property.title}
-                  className="w-full h-full object-cover hover:scale-110 transition-transform duration-500"
+                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
                 />
-                <div className="absolute top-3 right-3 bg-amber-700 text-white px-3 py-1 rounded-full text-sm font-semibold">
+                <div className="absolute top-4 right-4 bg-[#002349] text-white px-4 py-1.5 rounded text-xs font-bold tracking-wide">
                   {property.status}
                 </div>
               </div>
-              <CardContent className="p-5">
-                <h3 className="text-2xl font-bold text-amber-700 mb-2">
+              <CardContent className="p-6">
+                <h3 className="text-2xl font-bold text-[#BD9042] mb-3">
                   {formatPrice(property.price)}
                 </h3>
                 <div className="flex items-center text-gray-600 mb-3">
