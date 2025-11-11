@@ -131,52 +131,52 @@ const PropertyDetail = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2">
             {/* Header */}
-            <div className="bg-white rounded-xl shadow-md p-8 mb-6">
-              <div className="flex justify-between items-start mb-4">
+            <div className="bg-white rounded-lg shadow-xl p-10 mb-8 border border-gray-100">
+              <div className="flex justify-between items-start mb-6">
                 <div>
-                  <h1 className="text-4xl font-bold text-gray-900 mb-2">
+                  <h1 className="text-5xl font-bold text-[#BD9042] mb-3">
                     {formatPrice(property.price)}
                   </h1>
                   <div className="flex items-center text-gray-600">
-                    <MapPin className="h-5 w-5 mr-2" />
-                    <span className="text-lg">
+                    <MapPin className="h-6 w-6 mr-2 text-[#002349]" />
+                    <span className="text-xl">
                       {property.address}, {property.city}, {property.state} {property.zip}
                     </span>
                   </div>
                 </div>
-                <div className="bg-amber-100 text-amber-800 px-4 py-2 rounded-full font-semibold">
+                <div className="bg-[#002349] text-white px-6 py-2 rounded text-sm font-bold tracking-wide">
                   {property.status}
                 </div>
               </div>
 
-              <div className="grid grid-cols-4 gap-6 mt-6 pt-6 border-t border-gray-200">
+              <div className="grid grid-cols-4 gap-8 mt-8 pt-8 border-t border-gray-200">
                 <div className="text-center">
-                  <div className="flex justify-center items-center mb-2">
-                    <Bed className="h-6 w-6 text-amber-700" />
+                  <div className="w-14 h-14 bg-[#002349] rounded-full flex justify-center items-center mb-3 mx-auto">
+                    <Bed className="h-7 w-7 text-[#BD9042]" />
                   </div>
-                  <div className="text-2xl font-bold text-gray-900">{property.beds}</div>
-                  <div className="text-sm text-gray-600">Bedrooms</div>
+                  <div className="text-3xl font-bold text-[#002349]">{property.beds}</div>
+                  <div className="text-sm text-gray-600 font-medium">Bedrooms</div>
                 </div>
                 <div className="text-center">
-                  <div className="flex justify-center items-center mb-2">
-                    <Bath className="h-6 w-6 text-amber-700" />
+                  <div className="w-14 h-14 bg-[#002349] rounded-full flex justify-center items-center mb-3 mx-auto">
+                    <Bath className="h-7 w-7 text-[#BD9042]" />
                   </div>
-                  <div className="text-2xl font-bold text-gray-900">{property.baths}</div>
-                  <div className="text-sm text-gray-600">Bathrooms</div>
+                  <div className="text-3xl font-bold text-[#002349]">{property.baths}</div>
+                  <div className="text-sm text-gray-600 font-medium">Bathrooms</div>
                 </div>
                 <div className="text-center">
-                  <div className="flex justify-center items-center mb-2">
-                    <Square className="h-6 w-6 text-amber-700" />
+                  <div className="w-14 h-14 bg-[#002349] rounded-full flex justify-center items-center mb-3 mx-auto">
+                    <Square className="h-7 w-7 text-[#BD9042]" />
                   </div>
-                  <div className="text-2xl font-bold text-gray-900">{property.sqft.toLocaleString()}</div>
-                  <div className="text-sm text-gray-600">Sqft</div>
+                  <div className="text-3xl font-bold text-[#002349]">{property.sqft.toLocaleString()}</div>
+                  <div className="text-sm text-gray-600 font-medium">Sqft</div>
                 </div>
                 <div className="text-center">
-                  <div className="flex justify-center items-center mb-2">
-                    <Calendar className="h-6 w-6 text-amber-700" />
+                  <div className="w-14 h-14 bg-[#002349] rounded-full flex justify-center items-center mb-3 mx-auto">
+                    <Calendar className="h-7 w-7 text-[#BD9042]" />
                   </div>
-                  <div className="text-2xl font-bold text-gray-900">{property.yearBuilt}</div>
-                  <div className="text-sm text-gray-600">Year Built</div>
+                  <div className="text-3xl font-bold text-[#002349]">{property.yearBuilt}</div>
+                  <div className="text-sm text-gray-600 font-medium">Year Built</div>
                 </div>
               </div>
             </div>
