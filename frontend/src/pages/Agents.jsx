@@ -32,26 +32,26 @@ const Agents = () => {
                 <p className="text-[#BD9042] font-semibold mb-4 tracking-wide">{agent.title}</p>
                 <p className="text-gray-600 mb-6">{agent.bio}</p>
                 
-                <div className="space-y-2 mb-6">
+                <div className="space-y-3 mb-8">
                   <div className="flex items-center justify-center text-gray-700">
-                    <Phone className="h-4 w-4 mr-2 text-amber-700" />
+                    <Phone className="h-5 w-5 mr-2 text-[#BD9042]" />
                     <span className="text-sm">{agent.phone}</span>
                   </div>
                   <div className="flex items-center justify-center text-gray-700">
-                    <Mail className="h-4 w-4 mr-2 text-amber-700" />
+                    <Mail className="h-5 w-5 mr-2 text-[#BD9042]" />
                     <span className="text-sm">{agent.email}</span>
                   </div>
                   <div className="flex items-center justify-center text-gray-700">
-                    <Building className="h-4 w-4 mr-2 text-amber-700" />
-                    <span className="text-sm">{agent.listings} Active Listings</span>
+                    <Building className="h-5 w-5 mr-2 text-[#BD9042]" />
+                    <span className="text-sm font-semibold">{agent.listings} Active Listings</span>
                   </div>
                 </div>
 
-                <div className="flex flex-col space-y-2">
-                  <Button className="bg-amber-700 hover:bg-amber-800">
-                    Contact Agent
+                <div className="flex flex-col space-y-3">
+                  <Button className="bg-[#002349] hover:bg-[#003366] text-white font-bold tracking-wide py-6">
+                    CONTACT AGENT
                   </Button>
-                  <Button variant="outline" className="border-amber-700 text-amber-700 hover:bg-amber-50">
+                  <Button variant="outline" className="border-[#002349] text-[#002349] hover:bg-[#002349] hover:text-white font-semibold py-6">
                     View Listings
                   </Button>
                 </div>
