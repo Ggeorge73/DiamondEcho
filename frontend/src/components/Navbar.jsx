@@ -66,19 +66,19 @@ const Navbar = () => {
       {isMenuOpen && (
         <div className="md:hidden bg-white border-t border-gray-200">
           <div className="px-4 py-6 space-y-4">
-            <Link to="/search" className="block text-[#002349] hover:text-[#BD9042] font-medium py-2" onClick={() => setIsMenuOpen(false)}>
+            <Link to="/search" className="block text-[#002349] hover:text-[#BD9042] font-bold py-2 text-base tracking-wider" onClick={() => setIsMenuOpen(false)}>
               BUY
             </Link>
-            <Link to="/search?status=rent" className="block text-[#002349] hover:text-[#BD9042] font-medium py-2" onClick={() => setIsMenuOpen(false)}>
+            <Link to="/search?status=rent" className="block text-[#002349] hover:text-[#BD9042] font-bold py-2 text-base tracking-wider" onClick={() => setIsMenuOpen(false)}>
               RENT
             </Link>
-            <Link to="/investment-calculator" className="block text-[#002349] hover:text-[#BD9042] font-medium py-2" onClick={() => setIsMenuOpen(false)}>
+            <Link to="/investment-calculator" className="block text-[#002349] hover:text-[#BD9042] font-bold py-2 text-base tracking-wider" onClick={() => setIsMenuOpen(false)}>
               INVEST
             </Link>
-            <Link to="/agents" className="block text-[#002349] hover:text-[#BD9042] font-medium py-2" onClick={() => setIsMenuOpen(false)}>
+            <Link to="/agents" className="block text-[#002349] hover:text-[#BD9042] font-bold py-2 text-base tracking-wider" onClick={() => setIsMenuOpen(false)}>
               AGENTS
             </Link>
-            <Link to="/about" className="block text-[#002349] hover:text-[#BD9042] font-medium py-2" onClick={() => setIsMenuOpen(false)}>
+            <Link to="/about" className="block text-[#002349] hover:text-[#BD9042] font-bold py-2 text-base tracking-wider" onClick={() => setIsMenuOpen(false)}>
               ABOUT
             </Link>
             <div className="flex flex-col space-y-2 pt-4">
