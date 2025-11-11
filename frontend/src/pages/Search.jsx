@@ -228,14 +228,16 @@ const Search = () => {
                 <h3 className="text-2xl font-bold text-[#BD9042] mb-3">
                   {formatPrice(property.price)}
                 </h3>
-                <div className="flex items-center text-gray-600 mb-3">
-                  <span className="mr-4">{property.beds} bd</span>
-                  <span className="mr-4">{property.baths} ba</span>
+                <p className="text-sm text-gray-600 mb-3 flex items-center space-x-4">
+                  <span>{property.beds} bd</span>
+                  <span>•</span>
+                  <span>{property.baths} ba</span>
+                  <span>•</span>
                   <span>{property.sqft.toLocaleString()} sqft</span>
-                </div>
-                <p className="text-gray-800 font-medium mb-2">{property.title}</p>
-                <div className="flex items-start text-gray-600">
-                  <MapPin className="h-4 w-4 mr-1 mt-1 flex-shrink-0" />
+                </p>
+                <p className="text-sm text-[#002349] font-semibold mb-2 line-clamp-2">{property.title}</p>
+                <div className="flex items-start text-gray-500">
+                  <MapPin className="h-4 w-4 mr-1 mt-0.5 flex-shrink-0" />
                   <span className="text-sm">
                     {property.address}, {property.city}, {property.state} {property.zip}
                   </span>
