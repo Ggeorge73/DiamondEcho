@@ -115,11 +115,11 @@ const About = () => {
         </section>
 
         {/* Mission Section */}
-        <section className="mb-16">
-          <Card className="border-none shadow-lg bg-gradient-to-br from-amber-600 to-amber-700 text-white">
-            <CardContent className="p-12 text-center">
-              <h2 className="text-4xl font-bold mb-6">Our Mission</h2>
-              <p className="text-xl text-amber-50 max-w-3xl mx-auto leading-relaxed">
+        <section className="mb-20">
+          <Card className="border-none shadow-2xl bg-[#002349] text-white">
+            <CardContent className="p-16 text-center">
+              <h2 className="text-5xl font-bold mb-8 tracking-tight">Our Mission</h2>
+              <p className="text-2xl text-gray-200 max-w-4xl mx-auto leading-relaxed font-light">
                 To empower our clients with the tools, knowledge, and expertise they need to make confident real estate decisions—whether they're finding their dream home or building wealth through strategic investments.
               </p>
             </CardContent>
