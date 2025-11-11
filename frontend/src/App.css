@@ -55,3 +55,30 @@ html {
     transform: scale(1.1);
   }
 }
+
+/* Cinematic zoom and pan animation - dramatic movie-like movement */
+@keyframes cinematicZoomPan {
+  0% {
+    transform: scale(1.05) translate(0, 0);
+  }
+  50% {
+    transform: scale(1.12) translate(-2%, -1%);
+  }
+  100% {
+    transform: scale(1.15) translate(-3%, -2%);
+  }
+}
+
+/* Smooth bounce animation for scroll indicator */
+@keyframes bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.animate-bounce {
+  animation: bounce 2s infinite;
+}
