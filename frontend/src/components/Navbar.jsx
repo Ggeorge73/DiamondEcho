@@ -23,20 +23,20 @@ const Navbar = () => {
           </Link>
 
           {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center space-x-10">
-            <Link to="/search" className="text-[#002349] hover:text-[#BD9042] font-medium transition-colors duration-200 text-sm tracking-wide">
+          <div className="hidden md:flex items-center space-x-8">
+            <Link to="/search" className="text-[#002349] hover:text-[#BD9042] font-bold transition-colors duration-200 text-base tracking-wider">
               BUY
             </Link>
-            <Link to="/search?status=rent" className="text-[#002349] hover:text-[#BD9042] font-medium transition-colors duration-200 text-sm tracking-wide">
+            <Link to="/search?status=rent" className="text-[#002349] hover:text-[#BD9042] font-bold transition-colors duration-200 text-base tracking-wider">
               RENT
             </Link>
-            <Link to="/investment-calculator" className="text-[#002349] hover:text-[#BD9042] font-medium transition-colors duration-200 text-sm tracking-wide">
+            <Link to="/investment-calculator" className="text-[#002349] hover:text-[#BD9042] font-bold transition-colors duration-200 text-base tracking-wider">
               INVEST
             </Link>
-            <Link to="/agents" className="text-[#002349] hover:text-[#BD9042] font-medium transition-colors duration-200 text-sm tracking-wide">
+            <Link to="/agents" className="text-[#002349] hover:text-[#BD9042] font-bold transition-colors duration-200 text-base tracking-wider">
               AGENTS
             </Link>
-            <Link to="/about" className="text-[#002349] hover:text-[#BD9042] font-medium transition-colors duration-200 text-sm tracking-wide">
+            <Link to="/about" className="text-[#002349] hover:text-[#BD9042] font-bold transition-colors duration-200 text-base tracking-wider">
               ABOUT
             </Link>
           </div>
