@@ -251,3 +251,71 @@ class SensitivityAnalysisResponse(StrictModel):
     x_field: SensitivityField
     y_field: Optional[SensitivityField] = None
     cells: List[SensitivityCell]
+
+
+class MonteCarloDriver(str, Enum):
+    RENT_CHANGE = "rent_change"
+    VACANCY_RATE = "vacancy_rate"
+    OPERATING_EXPENSE_CHANGE = "operating_expense_change"
+    EXIT_CAP_RATE = "exit_cap_rate"
+    INTEREST_RATE = "interest_rate"
+    AFTER_REPAIR_VALUE_CHANGE = "after_repair_value_change"
+    REHAB_COST_CHANGE = "rehab_cost_change"
+
+
+class TriangularDistribution(StrictModel):
+    minimum: float
+    mode: float
+    maximum: float
+
+    @model_validator(mode="after")
+    def ordered_values(self) -> "TriangularDistribution":
+        if not self.minimum <= self.mode <= self.maximum:
+            raise ValueError("distribution values must satisfy minimum <= mode <= maximum")
+        return self
+
+
+class MonteCarloScenario(StrictModel):
+    name: str = Field(min_length=1, max_length=80)
+    iterations: int = Field(default=5000, ge=250, le=20000)
+    seed: int = Field(default=2026, ge=0, le=2_147_483_647)
+    drivers: Dict[MonteCarloDriver, TriangularDistribution] = Field(min_length=1, max_length=12)
+
+
+class MonteCarloRequest(StrictModel):
+    deal: DealAnalysisRequest
+    scenarios: List[MonteCarloScenario] = Field(min_length=1, max_length=6)
+
+    @model_validator(mode="after")
+    def cap_total_iterations(self) -> "MonteCarloRequest":
+        if sum(item.iterations for item in self.scenarios) > 50_000:
+            raise ValueError("total Monte Carlo iterations cannot exceed 50,000")
+        return self
+
+
+class MonteCarloMetricSummary(StrictModel):
+    mean: float
+    minimum: float
+    p10: float
+    p25: float
+    p50: float
+    p75: float
+    p90: float
+    maximum: float
+    probability_above_zero: float
+    probability_below_one: float
+
+
+class MonteCarloScenarioResult(StrictModel):
+    name: str
+    iterations_requested: int
+    iterations_completed: int
+    failed_iterations: int
+    seed: int
+    summaries: Dict[str, MonteCarloMetricSummary]
+    warnings: List[str]
+
+
+class MonteCarloResponse(StrictModel):
+    formula_version: str
+    scenarios: List[MonteCarloScenarioResult]

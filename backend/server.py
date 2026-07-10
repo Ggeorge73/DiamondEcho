@@ -11,6 +11,7 @@ import uuid
 from datetime import datetime, timezone
 from deal_intelligence.router import router as deal_intelligence_router
 from routes.assistant import router as assistant_router
+from property_data.router import router as property_data_router
 
 
 ROOT_DIR = Path(__file__).parent
@@ -71,6 +72,7 @@ async def get_status_checks():
 # Register product modules before mounting the shared /api router.
 api_router.include_router(deal_intelligence_router)
 api_router.include_router(assistant_router)
+api_router.include_router(property_data_router)
 
 # Include the router in the main app
 app.include_router(api_router)

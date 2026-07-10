@@ -5,7 +5,7 @@ import { ArrowUpRight, Diamond, Menu, Search, X } from 'lucide-react';
 const navItems = [
   { label: 'Residences', to: '/search' },
   { label: 'Rentals', to: '/search?status=rent' },
-  { label: 'Intelligence', to: '/investment-calculator' },
+  { label: 'Deal Analysis', to: '/investment-calculator' },
   { label: 'Advisors', to: '/agents' },
   { label: 'Maison', to: '/about' },
 ];

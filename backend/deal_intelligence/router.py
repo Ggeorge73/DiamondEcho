@@ -3,6 +3,7 @@
 from fastapi import APIRouter, HTTPException
 
 from .engine import analyze_deal
+from .monte_carlo import run_monte_carlo
 from .models import (
     DealAnalysisRequest,
     DealAnalysisResponse,
@@ -10,6 +11,8 @@ from .models import (
     ScenarioAnalysisResponse,
     SensitivityAnalysisRequest,
     SensitivityAnalysisResponse,
+    MonteCarloRequest,
+    MonteCarloResponse,
 )
 from .scenarios import analyze_scenarios, analyze_sensitivity
 
@@ -37,6 +40,14 @@ async def scenarios(request: ScenarioAnalysisRequest) -> ScenarioAnalysisRespons
 async def sensitivity(request: SensitivityAnalysisRequest) -> SensitivityAnalysisResponse:
     try:
         return analyze_sensitivity(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/monte-carlo", response_model=MonteCarloResponse)
+async def monte_carlo(request: MonteCarloRequest) -> MonteCarloResponse:
+    try:
+        return run_monte_carlo(request)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
