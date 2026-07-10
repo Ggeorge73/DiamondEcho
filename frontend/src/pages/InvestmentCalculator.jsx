@@ -3,7 +3,7 @@ import axios from 'axios';
 import {
   AlertCircle, ArrowRight, BarChart3, Building2, CheckCircle2, ChevronDown,
   CircleDollarSign, Database, Download, FileSpreadsheet, Home, Loader2,
-  MapPin, RotateCcw, ShieldCheck, Sparkles, TrendingUp
+  LandPlot, MapPin, RotateCcw, ShieldCheck, Sparkles, TrendingUp
 } from 'lucide-react';
 import { properties } from '../data/mockData';
 import { analyzeDealLocally, runMonteCarloLocally } from '../lib/dealAnalysis';
@@ -34,6 +34,15 @@ const initialForm = {
   explicitSalePrice: '',
   arv: '4200000', rehabCost: '450000', rehabContingency: '10', monthlyHolding: '7500',
   otherProjectCosts: '50000', sellingCosts: '6', discountRate: '10', mcIterations: '2500',
+  developmentType: 'single_family_subdivision', dispositionStrategy: 'build_and_sell',
+  siteAcres: '2.5', parcelCount: '1', currentZoning: '', proposedZoning: '',
+  entitlementStatus: 'unentitled', utilityStatus: 'verify', accessStatus: 'verify',
+  environmentalStatus: 'phase_i_required', geotechnicalStatus: 'not_started', floodZone: '',
+  wetlandsAcres: '0', developmentMonths: '24', absorptionMonths: '12', siteWorkCost: '300000',
+  hardConstructionCost: '1500000', softCosts: '200000', permitsImpactFees: '100000',
+  environmentalRemediation: '0', developerFee: '100000', landContingency: '10',
+  annualCarryingCosts: '30000', expectedTerminalValue: '4500000', stabilizedNoi: '0',
+  stabilizedExitCap: '0', targetProfitMargin: '20',
   mcRentMin: '-10', mcRentMode: '2', mcRentMax: '10', mcVacancyMin: '3',
   mcVacancyMode: '6', mcVacancyMax: '14', mcExpenseMin: '-3', mcExpenseMode: '3',
   mcExpenseMax: '15', mcExitCapMin: '5.75', mcExitCapMode: '6.75', mcExitCapMax: '8',
@@ -122,7 +131,7 @@ const InvestmentCalculator = () => {
 
   const update = (event) => {
     const { name, value } = event.target;
-    setForm((current) => ({ ...current, [name]: value }));
+    setForm((current) => ({ ...current, [name]: value, ...(name === 'propertyType' && value === 'land' ? { strategy: 'land' } : {}) }));
   };
 
   const propertyTypeValue = (value = '') => {
@@ -133,6 +142,7 @@ const InvestmentCalculator = () => {
     if (normalized.includes('retail')) return 'retail';
     if (normalized.includes('industrial')) return 'industrial';
     if (normalized.includes('mixed')) return 'mixed_use';
+    if (normalized.includes('land') || normalized.includes('lot') || normalized.includes('vacant')) return 'land';
     return 'single_family';
   };
 
@@ -217,6 +227,39 @@ const InvestmentCalculator = () => {
         },
       };
     }
+    if (form.strategy === 'land') {
+      const developmentCosts = n(form.siteWorkCost) + n(form.hardConstructionCost) + n(form.softCosts)
+        + n(form.permitsImpactFees) + n(form.environmentalRemediation) + n(form.developerFee)
+        + (n(form.siteWorkCost) + n(form.hardConstructionCost)) * rate(form.landContingency);
+      const totalProjectCost = n(form.purchasePrice) + n(form.closingCosts) + n(form.dueDiligenceCosts) + n(form.initialCapex) + developmentCosts;
+      return {
+        ...common,
+        property: { ...common.property, property_type: 'land' },
+        debt: n(form.ltv) > 0 ? [{
+          name: 'Construction / development facility', principal: totalProjectCost * rate(form.ltv),
+          annual_interest_rate: rate(form.interestRate), amortization_years: Math.max(1, n(form.amortizationYears)),
+          interest_only_months: Math.max(0, n(form.interestOnlyMonths)),
+          term_months: Math.max(12, n(form.loanTermYears) * 12), origination_fee_rate: rate(form.originationFee),
+        }] : [],
+        land: {
+          development_type: form.developmentType, disposition_strategy: form.dispositionStrategy,
+          site_acres: n(form.siteAcres), parcel_count: Math.max(1, n(form.parcelCount)),
+          current_zoning: form.currentZoning, proposed_zoning: form.proposedZoning,
+          entitlement_status: form.entitlementStatus, utility_status: form.utilityStatus,
+          access_status: form.accessStatus, environmental_status: form.environmentalStatus,
+          geotechnical_status: form.geotechnicalStatus, flood_zone: form.floodZone,
+          wetlands_acres: n(form.wetlandsAcres), planned_units: n(form.units),
+          buildable_square_feet: n(form.rentableSquareFeet), development_months: Math.max(1, n(form.developmentMonths)),
+          absorption_months: Math.max(0, n(form.absorptionMonths)),
+          site_work_cost: n(form.siteWorkCost), hard_construction_cost: n(form.hardConstructionCost),
+          soft_costs: n(form.softCosts), permits_impact_fees: n(form.permitsImpactFees),
+          environmental_remediation: n(form.environmentalRemediation), developer_fee: n(form.developerFee),
+          contingency_rate: rate(form.landContingency), annual_carrying_costs: n(form.annualCarryingCosts),
+          expected_terminal_value: n(form.expectedTerminalValue), stabilized_noi: n(form.stabilizedNoi),
+          stabilized_exit_cap_rate: rate(form.stabilizedExitCap), target_profit_margin: rate(form.targetProfitMargin),
+        },
+      };
+    }
     return {
       ...common,
       flip: {
@@ -257,6 +300,11 @@ const InvestmentCalculator = () => {
       exit_cap_rate: { minimum: rate(form.mcExitCapMin), mode: rate(n(form.mcExitCapMode) * (downside ? 1.05 : 1)), maximum: rate(n(form.mcExitCapMax) * scale) },
       interest_rate: { minimum: rate(form.mcInterestMin), mode: rate(form.mcInterestMode), maximum: rate(n(form.mcInterestMax) * scale) },
     };
+    if (form.strategy === 'land') return {
+      terminal_value_change: { minimum: rate(n(form.mcArvMin) * scale), mode: rate(form.mcArvMode), maximum: rate(form.mcArvMax) },
+      development_cost_change: { minimum: rate(form.mcRehabMin), mode: rate(form.mcRehabMode), maximum: rate(n(form.mcRehabMax) * scale) },
+      interest_rate: { minimum: rate(form.mcInterestMin), mode: rate(form.mcInterestMode), maximum: rate(n(form.mcInterestMax) * scale) },
+    };
     return {
       after_repair_value_change: { minimum: rate(n(form.mcArvMin) * scale), mode: rate(form.mcArvMode), maximum: rate(form.mcArvMax) },
       rehab_cost_change: { minimum: rate(form.mcRehabMin), mode: rate(form.mcRehabMode), maximum: rate(n(form.mcRehabMax) * scale) },
@@ -291,11 +339,16 @@ const InvestmentCalculator = () => {
 
   const metricKeys = form.strategy === 'rental'
     ? ['irr', 'cash_on_cash', 'cap_rate', 'dscr', 'noi', 'npv', 'equity_multiple', 'break_even_occupancy']
-    : ['flip_profit', 'flip_roi', 'irr', 'npv', 'equity_multiple', 'ltv', 'ltc', 'max_offer_70_rule'];
+    : form.strategy === 'land'
+      ? ['development_profit', 'development_roi', 'irr', 'npv', 'development_margin', 'total_development_cost', 'residual_land_value', 'break_even_terminal_value', 'cost_per_acre', 'cost_per_unit', 'cost_per_buildable_sf', 'ltc']
+      : ['flip_profit', 'flip_roi', 'irr', 'npv', 'equity_multiple', 'ltv', 'ltc', 'max_offer_70_rule'];
 
   const displayMetric = (metric) => {
     if (!metric || metric.value === null) return '—';
-    if (metric.unit === 'USD') return money.format(metric.value);
+    if (metric.unit?.startsWith('USD')) {
+      const suffix = metric.unit.includes('/') ? ` / ${metric.unit.split('/')[1]}` : '';
+      return `${money.format(metric.value)}${suffix}`;
+    }
     if (metric.unit === 'decimal_rate') return `${number.format(metric.value * 100)}%`;
     if (metric.unit === 'multiple') return `${number.format(metric.value)}×`;
     return number.format(metric.value);
@@ -306,9 +359,13 @@ const InvestmentCalculator = () => {
     noi: 'Year-one NOI', npv: 'Net present value', equity_multiple: 'Equity multiple',
     break_even_occupancy: 'Break-even occupancy', flip_profit: 'Projected profit', flip_roi: 'Flip ROI',
     ltv: 'Loan-to-value', ltc: 'Loan-to-cost', max_offer_70_rule: '70% screening threshold',
+    development_profit: 'Development profit', development_roi: 'Development ROI',
+    development_margin: 'Development margin', total_development_cost: 'Total development cost',
+    residual_land_value: 'Residual land value', break_even_terminal_value: 'Break-even terminal value',
+    cost_per_acre: 'Cost per acre', cost_per_unit: 'Cost per planned unit', cost_per_buildable_sf: 'Cost per buildable sf',
   };
 
-  const summaryFormat = (key, value) => value == null ? 'Not defined' : key === 'npv' || key === 'flip_profit' ? money.format(value) : key === 'equity_multiple' || key === 'dscr' ? `${number.format(value)}×` : `${number.format(value * 100)}%`;
+  const summaryFormat = (key, value) => value == null ? 'Not defined' : key === 'npv' || key === 'flip_profit' || key === 'development_profit' ? money.format(value) : key === 'equity_multiple' || key === 'dscr' ? `${number.format(value)}×` : `${number.format(value * 100)}%`;
 
   return (
     <main className="deal-studio-page">
@@ -316,7 +373,7 @@ const InvestmentCalculator = () => {
         <div>
           <p className="eyebrow eyebrow--light"><span /> DIAMOND ECHO DEAL ANALYSIS</p>
           <h1>Underwrite with<br /><em>absolute clarity.</em></h1>
-          <p>Address-enriched, institutional-grade analysis for a single residence, rental portfolio, multifamily acquisition, commercial asset, or fix-and-flip.</p>
+          <p>Address-enriched, institutional-grade analysis for residences, income property, commercial assets, fix-and-flips, lots, and ground-up development.</p>
         </div>
         <div className="deal-studio-hero__seal"><BarChart3 /><span>FORMULA VERSION<br />1.1 · MONTE CARLO</span></div>
       </header>
@@ -326,6 +383,7 @@ const InvestmentCalculator = () => {
           <div className="studio-strategy" role="group" aria-label="Investment strategy">
             <button type="button" className={form.strategy === 'rental' ? 'is-active' : ''} onClick={() => setForm((f) => ({ ...f, strategy: 'rental' }))}><Building2 /> Rental & commercial</button>
             <button type="button" className={form.strategy === 'flip' ? 'is-active' : ''} onClick={() => setForm((f) => ({ ...f, strategy: 'flip', propertyType: f.propertyType === 'multifamily' ? 'single_family' : f.propertyType }))}><Home /> Fix & flip</button>
+            <button type="button" className={form.strategy === 'land' ? 'is-active' : ''} onClick={() => setForm((f) => ({ ...f, strategy: 'land', propertyType: 'land' }))}><LandPlot /> Land development</button>
           </div>
 
           <fieldset>
@@ -352,10 +410,11 @@ const InvestmentCalculator = () => {
                 <option value="multifamily">Multifamily</option><option value="office">Office</option>
                 <option value="retail">Retail</option><option value="industrial">Industrial</option>
                 <option value="mixed_use">Mixed-use</option><option value="hospitality">Hospitality</option>
+                <option value="land">Lot / land</option>
               </SelectField>
               <AutocompleteField label="Market" name="market" value={form.market} onChange={update} suggestions={marketSuggestions} onSelect={(item) => { setForm((current) => ({ ...current, market: item.label })); setMarketSuggestions([]); }} placeholder="Type one letter" />
-              <Field label="Units" name="units" value={form.units} onChange={update} step="1" />
-              <Field label="Rentable square feet" name="rentableSquareFeet" value={form.rentableSquareFeet} onChange={update} suffix="sf" />
+              <Field label={form.strategy === 'land' ? 'Planned units / lots' : 'Units'} name="units" value={form.units} onChange={update} step="1" />
+              <Field label={form.strategy === 'land' ? 'Buildable square feet' : 'Rentable square feet'} name="rentableSquareFeet" value={form.rentableSquareFeet} onChange={update} suffix="sf" />
               <Field label="Purchase price" name="purchasePrice" value={form.purchasePrice} onChange={update} prefix="$" />
               <Field label="Closing costs" name="closingCosts" value={form.closingCosts} onChange={update} prefix="$" />
               <Field label="Due diligence" name="dueDiligenceCosts" value={form.dueDiligenceCosts} onChange={update} prefix="$" />
@@ -367,7 +426,7 @@ const InvestmentCalculator = () => {
           <fieldset>
             <legend><span>02</span> Capital structure</legend>
             <div className="studio-field-grid">
-              <Field label="Loan-to-value" name="ltv" value={form.ltv} onChange={update} suffix="%" />
+              <Field label={form.strategy === 'land' ? 'Construction loan-to-cost' : 'Loan-to-value'} name="ltv" value={form.ltv} onChange={update} suffix="%" />
               <Field label="Interest rate" name="interestRate" value={form.interestRate} onChange={update} suffix="%" />
               <Field label="Amortization" name="amortizationYears" value={form.amortizationYears} onChange={update} suffix="years" step="1" />
               <Field label="Interest-only period" name="interestOnlyMonths" value={form.interestOnlyMonths} onChange={update} suffix="months" step="1" />
@@ -398,6 +457,66 @@ const InvestmentCalculator = () => {
                 <Field label="Exit cap rate" name="exitCap" value={form.exitCap} onChange={update} suffix="%" />
                 <Field label="Expected sale price / terminal value" name="explicitSalePrice" value={form.explicitSalePrice} onChange={update} prefix="$" />
               </div>
+            </fieldset>
+          ) : form.strategy === 'land' ? (
+            <fieldset>
+              <legend><span>03</span> Land development program & feasibility</legend>
+              <div className="studio-field-grid">
+                <SelectField label="Development type" name="developmentType" value={form.developmentType} onChange={update}>
+                  <option value="sell_entitled_land">Entitle and sell land</option><option value="finished_lots">Finished-lot development</option>
+                  <option value="single_family_subdivision">Single-family subdivision</option><option value="multifamily">Multifamily</option>
+                  <option value="mixed_use">Mixed-use</option><option value="retail">Retail</option><option value="office">Office</option>
+                  <option value="industrial_logistics">Industrial / logistics</option><option value="hospitality">Hospitality</option>
+                  <option value="self_storage">Self-storage</option><option value="data_center">Data center</option><option value="other">Other</option>
+                </SelectField>
+                <SelectField label="Disposition strategy" name="dispositionStrategy" value={form.dispositionStrategy} onChange={update}>
+                  <option value="sell_entitled">Sell entitled land</option><option value="sell_finished_lots">Sell finished lots</option>
+                  <option value="build_and_sell">Build and sell</option><option value="stabilize_and_sell">Stabilize and sell</option>
+                  <option value="stabilize_and_hold">Stabilize and hold / refinance</option>
+                </SelectField>
+                <Field label="Site area" name="siteAcres" value={form.siteAcres} onChange={update} suffix="acres" />
+                <Field label="Parcel count" name="parcelCount" value={form.parcelCount} onChange={update} step="1" />
+                <Field label="Current zoning" name="currentZoning" value={form.currentZoning} onChange={update} type="text" min={undefined} />
+                <Field label="Proposed zoning" name="proposedZoning" value={form.proposedZoning} onChange={update} type="text" min={undefined} />
+                <SelectField label="Entitlement status" name="entitlementStatus" value={form.entitlementStatus} onChange={update}>
+                  <option value="unentitled">Unentitled</option><option value="rezoning_required">Rezoning required</option>
+                  <option value="application_pending">Application pending</option><option value="approved_with_conditions">Approved with conditions</option>
+                  <option value="fully_entitled">Fully entitled</option><option value="shovel_ready">Shovel-ready / permitted</option>
+                </SelectField>
+                <SelectField label="Utility availability" name="utilityStatus" value={form.utilityStatus} onChange={update}>
+                  <option value="verify">Not verified</option><option value="available">Capacity confirmed at site</option>
+                  <option value="extension_required">Extension / upgrade required</option><option value="unavailable">Unavailable</option>
+                </SelectField>
+                <SelectField label="Legal access" name="accessStatus" value={form.accessStatus} onChange={update}>
+                  <option value="verify">Not verified</option><option value="legal_confirmed">Legal access confirmed</option>
+                  <option value="easement_required">Easement required</option><option value="access_unavailable">No confirmed access</option>
+                </SelectField>
+                <SelectField label="Environmental diligence" name="environmentalStatus" value={form.environmentalStatus} onChange={update}>
+                  <option value="phase_i_required">Phase I required</option><option value="clear">Phase I / environmental clear</option>
+                  <option value="recognized_condition">Recognized environmental condition</option><option value="remediation_required">Remediation required</option>
+                </SelectField>
+                <SelectField label="Geotechnical diligence" name="geotechnicalStatus" value={form.geotechnicalStatus} onChange={update}>
+                  <option value="not_started">Not started</option><option value="in_progress">In progress</option>
+                  <option value="complete_suitable">Complete / suitable</option><option value="mitigation_required">Mitigation required</option>
+                </SelectField>
+                <Field label="FEMA flood zone" name="floodZone" value={form.floodZone} onChange={update} type="text" min={undefined} />
+                <Field label="Wetlands area" name="wetlandsAcres" value={form.wetlandsAcres} onChange={update} suffix="acres" />
+                <Field label="Development schedule" name="developmentMonths" value={form.developmentMonths} onChange={update} suffix="months" step="1" />
+                <Field label="Sales / lease-up absorption" name="absorptionMonths" value={form.absorptionMonths} onChange={update} suffix="months" step="1" />
+                <Field label="Site work & infrastructure" name="siteWorkCost" value={form.siteWorkCost} onChange={update} prefix="$" />
+                <Field label="Hard construction cost" name="hardConstructionCost" value={form.hardConstructionCost} onChange={update} prefix="$" />
+                <Field label="Soft costs / A&E" name="softCosts" value={form.softCosts} onChange={update} prefix="$" />
+                <Field label="Permits & impact fees" name="permitsImpactFees" value={form.permitsImpactFees} onChange={update} prefix="$" />
+                <Field label="Environmental / remediation" name="environmentalRemediation" value={form.environmentalRemediation} onChange={update} prefix="$" />
+                <Field label="Developer fee" name="developerFee" value={form.developerFee} onChange={update} prefix="$" />
+                <Field label="Construction contingency" name="landContingency" value={form.landContingency} onChange={update} suffix="%" />
+                <Field label="Annual taxes & carrying" name="annualCarryingCosts" value={form.annualCarryingCosts} onChange={update} prefix="$" />
+                <Field label="Expected gross terminal value" name="expectedTerminalValue" value={form.expectedTerminalValue} onChange={update} prefix="$" />
+                <Field label="Stabilized NOI (alternative)" name="stabilizedNoi" value={form.stabilizedNoi} onChange={update} prefix="$" />
+                <Field label="Stabilized exit cap" name="stabilizedExitCap" value={form.stabilizedExitCap} onChange={update} suffix="%" />
+                <Field label="Target development margin" name="targetProfitMargin" value={form.targetProfitMargin} onChange={update} suffix="%" />
+              </div>
+              <p className="studio-provider-note"><ShieldCheck /> Terminal value uses the explicit gross exit value first; otherwise it capitalizes stabilized NOI. Residual land value is tested against the target development margin.</p>
             </fieldset>
           ) : (
             <fieldset>
@@ -432,12 +551,12 @@ const InvestmentCalculator = () => {
                 <Field label="Exit cap · mode" name="mcExitCapMode" value={form.mcExitCapMode} onChange={update} suffix="%" />
                 <Field label="Exit cap · high" name="mcExitCapMax" value={form.mcExitCapMax} onChange={update} suffix="%" />
               </> : <>
-                <Field label="ARV change · low" name="mcArvMin" value={form.mcArvMin} onChange={update} suffix="%" min="-90" />
-                <Field label="ARV change · mode" name="mcArvMode" value={form.mcArvMode} onChange={update} suffix="%" min="-90" />
-                <Field label="ARV change · high" name="mcArvMax" value={form.mcArvMax} onChange={update} suffix="%" min="-90" />
-                <Field label="Rehab overrun · low" name="mcRehabMin" value={form.mcRehabMin} onChange={update} suffix="%" />
-                <Field label="Rehab overrun · mode" name="mcRehabMode" value={form.mcRehabMode} onChange={update} suffix="%" />
-                <Field label="Rehab overrun · high" name="mcRehabMax" value={form.mcRehabMax} onChange={update} suffix="%" />
+                <Field label={`${form.strategy === 'land' ? 'Terminal value' : 'ARV'} change · low`} name="mcArvMin" value={form.mcArvMin} onChange={update} suffix="%" min="-90" />
+                <Field label={`${form.strategy === 'land' ? 'Terminal value' : 'ARV'} change · mode`} name="mcArvMode" value={form.mcArvMode} onChange={update} suffix="%" min="-90" />
+                <Field label={`${form.strategy === 'land' ? 'Terminal value' : 'ARV'} change · high`} name="mcArvMax" value={form.mcArvMax} onChange={update} suffix="%" min="-90" />
+                <Field label={`${form.strategy === 'land' ? 'Development cost' : 'Rehab'} overrun · low`} name="mcRehabMin" value={form.mcRehabMin} onChange={update} suffix="%" />
+                <Field label={`${form.strategy === 'land' ? 'Development cost' : 'Rehab'} overrun · mode`} name="mcRehabMode" value={form.mcRehabMode} onChange={update} suffix="%" />
+                <Field label={`${form.strategy === 'land' ? 'Development cost' : 'Rehab'} overrun · high`} name="mcRehabMax" value={form.mcRehabMax} onChange={update} suffix="%" />
               </>}
             </div>
             <div className="studio-risk-actions">
@@ -478,7 +597,7 @@ const InvestmentCalculator = () => {
           {resultMode === 'risk' && !monteCarlo && !riskError && <div className="studio-empty"><BarChart3 /><h2>Distribution before decision</h2><p>Select multiple cases and run Monte Carlo to see percentile returns, downside frequency, and the range of plausible outcomes.</p></div>}
           {resultMode === 'risk' && monteCarlo && <div className="studio-risk-results">
             {monteCarlo.scenarios.map((scenario) => {
-              const primaryKey = form.strategy === 'rental' ? 'irr' : 'flip_profit';
+              const primaryKey = form.strategy === 'rental' ? 'irr' : form.strategy === 'land' ? 'development_profit' : 'flip_profit';
               const summary = scenario.summaries[primaryKey];
               return <article key={scenario.name}><span>{scenario.name.toUpperCase()}</span><h3>{summaryFormat(primaryKey, summary.p50)}</h3><p>Median {labels[primaryKey] || primaryKey} · {number.format(summary.probability_above_zero * 100)}% probability above zero</p><dl><div><dt>P10</dt><dd>{summaryFormat(primaryKey, summary.p10)}</dd></div><div><dt>P50</dt><dd>{summaryFormat(primaryKey, summary.p50)}</dd></div><div><dt>P90</dt><dd>{summaryFormat(primaryKey, summary.p90)}</dd></div></dl><small>{scenario.iterations_completed.toLocaleString()} valid iterations · seed {scenario.seed}</small></article>;
             })}
