@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link, NavLink, useNavigate } from 'react-router-dom';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowUpRight, Diamond, Menu, Search, X } from 'lucide-react';
 
 const navItems = [
@@ -13,14 +13,21 @@ const navItems = [
 const Navbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+  const { pathname } = useLocation();
   const navigate = useNavigate();
+  const isHomePage = pathname === '/';
 
   useEffect(() => {
-    const onScroll = () => setIsScrolled(window.scrollY > 24);
+    if (!isHomePage) {
+      setIsScrolled(false);
+      return undefined;
+    }
+
+    const onScroll = () => setIsScrolled(window.scrollY > 48);
     onScroll();
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
-  }, []);
+  }, [isHomePage]);
 
   useEffect(() => {
     document.body.style.overflow = isMenuOpen ? 'hidden' : '';
@@ -33,7 +40,7 @@ const Navbar = () => {
   };
 
   return (
-    <header className={`luxury-nav ${isScrolled || isMenuOpen ? 'luxury-nav--solid' : ''}`}>
+    <header className={`luxury-nav ${!isHomePage || isScrolled || isMenuOpen ? 'luxury-nav--solid' : ''}`}>
       <div className="luxury-nav__inner">
         <Link to="/" className="luxury-wordmark" aria-label="DiamondEcho home">
           <span className="luxury-wordmark__mark"><Diamond aria-hidden="true" /></span>
