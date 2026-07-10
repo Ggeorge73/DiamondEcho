@@ -319,6 +319,8 @@
 .studio-submit-actions { display: flex; align-items: stretch; gap: 9px; }
 .studio-submit-actions > a { min-height: 52px; padding: 0 18px; display: flex; align-items: center; gap: 9px; border: 1px solid var(--forest); color: var(--forest); text-decoration: none; font-size: 8px; font-weight: 600; letter-spacing: .11em; text-transform: uppercase; }
 .studio-submit-actions > a svg { width: 14px; }
+.studio-submit-actions > .studio-download-button { border: 1px solid var(--forest); background: transparent; color: var(--forest); }
+.studio-submit-actions > .studio-download-button:hover { background: var(--ivory); }
 .studio-result-tabs { margin-top: 20px; display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid rgba(255,255,255,.15); }
 .studio-result-tabs button { padding: 14px; border: 0; border-bottom: 1px solid transparent; background: transparent; color: rgba(255,255,255,.38); font-size: 8px; letter-spacing: .15em; text-transform: uppercase; }
 .studio-result-tabs button.is-active { border-color: var(--champagne); color: var(--champagne-light); }
