@@ -6,6 +6,7 @@ import {
   MapPin, RotateCcw, ShieldCheck, Sparkles, TrendingUp
 } from 'lucide-react';
 import { properties } from '../data/mockData';
+import { analyzeDealLocally, runMonteCarloLocally } from '../lib/dealAnalysis';
 
 const MARKET_OPTIONS = [
   'Atlanta, GA', 'Austin, TX', 'Boston, MA', 'Charlotte, NC', 'Chicago, IL',
@@ -30,6 +31,7 @@ const initialForm = {
   vacancy: '5', propertyTaxes: '54000', insurance: '24000', repairsMaintenance: '18000',
   utilities: '12000', payrollAdmin: '18000', managementFee: '4', reserves: '30000',
   annualBelowNoiCosts: '10000', incomeGrowth: '3', expenseGrowth: '3', exitCap: '6.5',
+  explicitSalePrice: '',
   arv: '4200000', rehabCost: '450000', rehabContingency: '10', monthlyHolding: '7500',
   otherProjectCosts: '50000', sellingCosts: '6', discountRate: '10', mcIterations: '2500',
   mcRentMin: '-10', mcRentMode: '2', mcRentMax: '10', mcVacancyMin: '3',
@@ -207,7 +209,12 @@ const InvestmentCalculator = () => {
           annual_below_noi_costs: n(form.annualBelowNoiCosts),
           annual_income_growth_rate: rate(form.incomeGrowth), annual_expense_growth_rate: rate(form.expenseGrowth),
         },
-        exit: { ...common.exit, exit_cap_rate: rate(form.exitCap) },
+        exit: {
+          ...common.exit,
+          ...(n(form.explicitSalePrice) > 0
+            ? { explicit_sale_price: n(form.explicitSalePrice) }
+            : n(form.exitCap) > 0 ? { exit_cap_rate: rate(form.exitCap) } : {}),
+        },
       };
     }
     return {
@@ -223,12 +230,19 @@ const InvestmentCalculator = () => {
   const analyze = async (event) => {
     event.preventDefault();
     setLoading(true); setError(''); setResult(null); setResultMode('base');
+    const request = buildRequest();
     try {
-      const { data } = await axios.post(`${backendUrl}/api/v1/deals/analyze`, buildRequest());
-      setResult(data);
+      if (!backendUrl) setResult(analyzeDealLocally(request));
+      else {
+        const { data } = await axios.post(`${backendUrl}/api/v1/deals/analyze`, request);
+        setResult(data);
+      }
     } catch (requestError) {
-      const detail = requestError.response?.data?.detail;
-      setError(typeof detail === 'string' ? detail : 'The analysis service is unavailable in this static review. Connect the backend to run live calculations.');
+      try { setResult(analyzeDealLocally(request)); }
+      catch (calculationError) {
+        const detail = requestError.response?.data?.detail;
+        setError(calculationError.message || (typeof detail === 'string' ? detail : 'The analysis could not be completed. Review the assumptions and try again.'));
+      }
     } finally { setLoading(false); }
   };
 
@@ -260,10 +274,16 @@ const InvestmentCalculator = () => {
           name, iterations: n(form.mcIterations), seed: 2026 + index * 97, drivers: scenarioDrivers(name),
         })),
       };
-      const { data } = await axios.post(`${backendUrl}/api/v1/deals/monte-carlo`, payload);
-      setMonteCarlo(data);
+      if (!backendUrl) setMonteCarlo(runMonteCarloLocally(payload));
+      else {
+        const { data } = await axios.post(`${backendUrl}/api/v1/deals/monte-carlo`, payload);
+        setMonteCarlo(data);
+      }
     } catch (requestError) {
-      setRiskError(requestError.response?.data?.detail || 'Monte Carlo is ready in the production backend but is unavailable in this static review deployment.');
+      try {
+        const payload = { deal: buildRequest(), scenarios: selectedCases.map((name, index) => ({ name, iterations: n(form.mcIterations), seed: 2026 + index * 97, drivers: scenarioDrivers(name) })) };
+        setMonteCarlo(runMonteCarloLocally(payload));
+      } catch (calculationError) { setRiskError(calculationError.message || requestError.response?.data?.detail || 'Risk analysis could not be completed.'); }
     } finally { setRiskLoading(false); }
   };
 
@@ -288,7 +308,7 @@ const InvestmentCalculator = () => {
     ltv: 'Loan-to-value', ltc: 'Loan-to-cost', max_offer_70_rule: '70% screening threshold',
   };
 
-  const summaryFormat = (key, value) => key === 'npv' || key === 'flip_profit' ? money.format(value) : key === 'equity_multiple' || key === 'dscr' ? `${number.format(value)}×` : `${number.format(value * 100)}%`;
+  const summaryFormat = (key, value) => value == null ? 'Not defined' : key === 'npv' || key === 'flip_profit' ? money.format(value) : key === 'equity_multiple' || key === 'dscr' ? `${number.format(value)}×` : `${number.format(value * 100)}%`;
 
   return (
     <main className="deal-studio-page">
@@ -376,6 +396,7 @@ const InvestmentCalculator = () => {
                 <Field label="Income growth" name="incomeGrowth" value={form.incomeGrowth} onChange={update} suffix="%" />
                 <Field label="Expense growth" name="expenseGrowth" value={form.expenseGrowth} onChange={update} suffix="%" />
                 <Field label="Exit cap rate" name="exitCap" value={form.exitCap} onChange={update} suffix="%" />
+                <Field label="Expected sale price / terminal value" name="explicitSalePrice" value={form.explicitSalePrice} onChange={update} prefix="$" />
               </div>
             </fieldset>
           ) : (
@@ -443,7 +464,7 @@ const InvestmentCalculator = () => {
           {resultMode === 'base' && error && <div className="studio-error"><AlertCircle /><h2>Analysis needs attention</h2><p>{error}</p><button onClick={() => setError('')}><RotateCcw /> Review inputs</button></div>}
           {resultMode === 'base' && result && (
             <div className="studio-result">
-              <div className="studio-result__verdict"><span>MODEL STATUS</span><strong>Analysis complete</strong><p>{result.strategy === 'rental' ? 'Income, financing, and exit assumptions have been modeled.' : 'Acquisition, project, holding, and disposition costs have been modeled.'}</p></div>
+              <div className="studio-result__verdict"><span>MODEL STATUS</span><strong>Analysis complete</strong><p>{result.calculation_mode === 'browser' ? 'Calculated on this device with the same transparent underwriting conventions.' : result.strategy === 'rental' ? 'Income, financing, and exit assumptions have been modeled.' : 'Acquisition, project, holding, and disposition costs have been modeled.'}</p></div>
               <div className="studio-metrics">
                 {metricKeys.map((key) => {
                   const metric = result.metrics[key];
