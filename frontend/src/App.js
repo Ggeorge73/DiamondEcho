@@ -9,6 +9,7 @@ import PropertyDetail from "./pages/PropertyDetail";
 import InvestmentCalculator from "./pages/InvestmentCalculator";
 import Agents from "./pages/Agents";
 import About from "./pages/About";
+import RealEstateAssistant from "./components/assistant/RealEstateAssistant";
 
 function App() {
   return (
@@ -24,6 +25,7 @@ function App() {
           <Route path="/about" element={<About />} />
         </Routes>
         <Footer />
+        <RealEstateAssistant />
       </BrowserRouter>
     </div>
   );

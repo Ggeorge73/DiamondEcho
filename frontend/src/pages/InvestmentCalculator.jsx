@@ -1,457 +1,236 @@
-import React, { useState, useMemo } from 'react';
-import { Calculator, TrendingUp, AlertCircle, CheckCircle2, AlertTriangle, DollarSign } from 'lucide-react';
-import { Button } from '../components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
-import { Input } from '../components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { Label } from '../components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
+import React, { useMemo, useState } from 'react';
+import axios from 'axios';
+import {
+  AlertCircle, ArrowRight, BarChart3, Building2, CheckCircle2,
+  ChevronDown, CircleDollarSign, Home, Loader2, RotateCcw, Sparkles
+} from 'lucide-react';
+
+const initialForm = {
+  strategy: 'rental', propertyType: 'multifamily', market: 'Austin, TX', units: '12',
+  purchasePrice: '3000000', closingCosts: '75000', initialCapex: '125000', holdMonths: '60',
+  ltv: '65', interestRate: '6.75', amortizationYears: '30', originationFee: '1',
+  annualRent: '360000', otherIncome: '18000', vacancy: '5', operatingExpenses: '126000',
+  managementFee: '4', reserves: '30000', incomeGrowth: '3', expenseGrowth: '3', exitCap: '6.5',
+  arv: '4200000', rehabCost: '450000', rehabContingency: '10', monthlyHolding: '7500',
+  otherProjectCosts: '50000', sellingCosts: '6', discountRate: '10',
+};
+
+const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+const number = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });
+
+const Field = ({ label, name, value, onChange, prefix, suffix, type = 'number', min = '0', step = 'any' }) => (
+  <label className="studio-field">
+    <span>{label}</span>
+    <div>{prefix && <i>{prefix}</i>}<input name={name} value={value} onChange={onChange} type={type} min={min} step={step} />{suffix && <i>{suffix}</i>}</div>
+  </label>
+);
+
+const SelectField = ({ label, name, value, onChange, children }) => (
+  <label className="studio-field">
+    <span>{label}</span>
+    <div><select name={name} value={value} onChange={onChange}>{children}</select><ChevronDown /></div>
+  </label>
+);
 
 const InvestmentCalculator = () => {
-  const [inputs, setInputs] = useState({
-    purchasePrice: 250000,
-    downPaymentPercent: 20,
-    interestRate: 9.5,
-    loanTerm: 12,
-    closingCosts: 3,
-    rehabBudget: 50000,
-    arv: 350000,
-    holdingMonths: 6,
-    sellingCosts: 6,
-  });
+  const [form, setForm] = useState(initialForm);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const backendUrl = useMemo(() => (process.env.REACT_APP_BACKEND_URL || '').replace(/\/$/, ''), []);
 
-  const [rehabDetails, setRehabDetails] = useState({
-    roof: 0,
-    foundation: 0,
-    hvac: 0,
-    plumbing: 0,
-    electrical: 0,
-    kitchen: 15000,
-    bathrooms: 10000,
-    flooring: 8000,
-    paint: 5000,
-    landscaping: 3000,
-    permits: 2000,
-    other: 7000,
-  });
-
-  const formatCurrency = (value) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-    }).format(value);
+  const update = (event) => {
+    const { name, value } = event.target;
+    setForm((current) => ({ ...current, [name]: value }));
   };
+  const n = (value) => Number(value || 0);
+  const rate = (value) => n(value) / 100;
 
-  const formatPercent = (value) => {
-    return `${value.toFixed(2)}%`;
-  };
-
-  // Calculate totals
-  const calculations = useMemo(() => {
-    const downPayment = inputs.purchasePrice * (inputs.downPaymentPercent / 100);
-    const loanAmount = inputs.purchasePrice - downPayment;
-    const closingCostsAmount = inputs.purchasePrice * (inputs.closingCosts / 100);
-    
-    // Total rehab from detailed items
-    const totalRehabDetailed = Object.values(rehabDetails).reduce((sum, val) => sum + val, 0);
-    const rehabCost = totalRehabDetailed > 0 ? totalRehabDetailed : inputs.rehabBudget;
-    
-    // Monthly loan payment (interest only for hard money)
-    const monthlyInterest = (loanAmount * (inputs.interestRate / 100)) / 12;
-    const monthlyLoanPayment = monthlyInterest;
-    
-    // Holding costs
-    const monthlyPropertyTax = (inputs.purchasePrice * 0.012) / 12; // Estimate 1.2% annual
-    const monthlyInsurance = 150; // Estimate
-    const monthlyUtilities = 200; // Estimate
-    const totalMonthlyHolding = monthlyLoanPayment + monthlyPropertyTax + monthlyInsurance + monthlyUtilities;
-    const totalHoldingCosts = totalMonthlyHolding * inputs.holdingMonths;
-    
-    // Selling costs
-    const sellingCostsAmount = inputs.arv * (inputs.sellingCosts / 100);
-    
-    // Total investment
-    const totalInvestment = downPayment + closingCostsAmount + rehabCost + totalHoldingCosts + sellingCostsAmount;
-    
-    // Net profit
-    const netProfit = inputs.arv - totalInvestment - loanAmount;
-    
-    // ROI
-    const cashInvested = downPayment + closingCostsAmount + rehabCost + totalHoldingCosts;
-    const roi = (netProfit / cashInvested) * 100;
-    
-    // 70% Rule
-    const maxOffer70Rule = (inputs.arv * 0.70) - rehabCost;
-    const meets70Rule = inputs.purchasePrice <= maxOffer70Rule;
-    
-    // Deal quality
-    let dealQuality = 'poor';
-    let dealColor = 'red';
-    let dealIcon = AlertCircle;
-    
-    if (roi >= 20 && meets70Rule) {
-      dealQuality = 'excellent';
-      dealColor = 'green';
-      dealIcon = CheckCircle2;
-    } else if (roi >= 15 || meets70Rule) {
-      dealQuality = 'good';
-      dealColor = 'amber';
-      dealIcon = AlertTriangle;
-    } else if (roi >= 10) {
-      dealQuality = 'marginal';
-      dealColor = 'yellow';
-      dealIcon = AlertTriangle;
-    }
-    
-    return {
-      downPayment,
-      loanAmount,
-      closingCostsAmount,
-      rehabCost,
-      monthlyLoanPayment,
-      totalHoldingCosts,
-      sellingCostsAmount,
-      totalInvestment,
-      netProfit,
-      cashInvested,
-      roi,
-      maxOffer70Rule,
-      meets70Rule,
-      dealQuality,
-      dealColor,
-      dealIcon,
+  const buildRequest = () => {
+    const common = {
+      strategy: form.strategy,
+      property: {
+        property_type: form.propertyType,
+        unit_count: Math.max(1, n(form.units)),
+        market: form.market || null,
+        currency: 'USD',
+      },
+      acquisition: {
+        purchase_price: n(form.purchasePrice),
+        closing_costs: n(form.closingCosts),
+        initial_capex: n(form.initialCapex),
+        hold_months: Math.max(1, n(form.holdMonths)),
+      },
+      debt: n(form.ltv) > 0 ? [{
+        name: 'Senior acquisition loan',
+        loan_to_value: rate(form.ltv),
+        annual_interest_rate: rate(form.interestRate),
+        amortization_years: Math.max(1, n(form.amortizationYears)),
+        interest_only_months: 0,
+        term_months: 360,
+        origination_fee_rate: rate(form.originationFee),
+      }] : [],
+      exit: { selling_cost_rate: rate(form.sellingCosts) },
+      assumptions: { annual_discount_rate: rate(form.discountRate) },
     };
-  }, [inputs, rehabDetails]);
 
-  const updateInput = (key, value) => {
-    setInputs({ ...inputs, [key]: parseFloat(value) || 0 });
+    if (form.strategy === 'rental') {
+      return {
+        ...common,
+        operating: {
+          gross_scheduled_rent: n(form.annualRent), other_income: n(form.otherIncome),
+          vacancy_rate: rate(form.vacancy), operating_expenses: n(form.operatingExpenses),
+          management_fee_rate: rate(form.managementFee), replacement_reserves: n(form.reserves),
+          annual_income_growth_rate: rate(form.incomeGrowth), annual_expense_growth_rate: rate(form.expenseGrowth),
+        },
+        exit: { ...common.exit, exit_cap_rate: rate(form.exitCap) },
+      };
+    }
+    return {
+      ...common,
+      flip: {
+        after_repair_value: n(form.arv), rehab_cost: n(form.rehabCost),
+        rehab_contingency_rate: rate(form.rehabContingency), monthly_holding_costs: n(form.monthlyHolding),
+        other_project_costs: n(form.otherProjectCosts),
+      },
+    };
   };
 
-  const updateRehabDetail = (key, value) => {
-    setRehabDetails({ ...rehabDetails, [key]: parseFloat(value) || 0 });
+  const analyze = async (event) => {
+    event.preventDefault();
+    setLoading(true); setError(''); setResult(null);
+    try {
+      const { data } = await axios.post(`${backendUrl}/api/v1/deals/analyze`, buildRequest());
+      setResult(data);
+    } catch (requestError) {
+      const detail = requestError.response?.data?.detail;
+      setError(typeof detail === 'string' ? detail : 'The analysis service is unavailable. Confirm the backend is running and try again.');
+    } finally { setLoading(false); }
+  };
+
+  const metricKeys = form.strategy === 'rental'
+    ? ['irr', 'cash_on_cash', 'cap_rate', 'dscr', 'noi', 'npv', 'equity_multiple', 'break_even_occupancy']
+    : ['flip_profit', 'flip_roi', 'irr', 'npv', 'equity_multiple', 'ltv', 'ltc', 'max_offer_70_rule'];
+
+  const displayMetric = (key, metric) => {
+    if (!metric || metric.value === null) return '—';
+    if (metric.unit === 'USD') return money.format(metric.value);
+    if (metric.unit === 'decimal_rate') return `${number.format(metric.value * 100)}%`;
+    if (metric.unit === 'multiple') return `${number.format(metric.value)}×`;
+    return number.format(metric.value);
+  };
+
+  const labels = {
+    irr: 'Projected IRR', cash_on_cash: 'Cash-on-cash', cap_rate: 'Going-in cap rate', dscr: 'DSCR',
+    noi: 'Year-one NOI', npv: 'Net present value', equity_multiple: 'Equity multiple',
+    break_even_occupancy: 'Break-even occupancy', flip_profit: 'Projected profit', flip_roi: 'Flip ROI',
+    ltv: 'Loan-to-value', ltc: 'Loan-to-cost', max_offer_70_rule: '70% screening threshold',
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-24">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        {/* Header */}
-        <div className="mb-12">
-          <div className="flex items-center space-x-4 mb-4">
-            <div className="bg-[#002349] p-4 rounded-xl shadow-lg">
-              <Calculator className="h-10 w-10 text-[#BD9042]" />
-            </div>
-            <div>
-              <h1 className="text-5xl font-bold text-[#002349] tracking-tight">Fix & Flip Investment Calculator</h1>
-              <p className="text-gray-600 mt-2 text-lg">Analyze your real estate investment deals with precision</p>
-            </div>
-          </div>
+    <main className="deal-studio-page">
+      <header className="deal-studio-hero">
+        <div>
+          <p className="eyebrow eyebrow--light"><span /> DIAMOND ECHO INTELLIGENCE</p>
+          <h1>Underwrite with<br /><em>absolute clarity.</em></h1>
+          <p>Institutional-grade analysis for a single residence, rental portfolio, multifamily acquisition, commercial asset, or fix-and-flip.</p>
         </div>
+        <div className="deal-studio-hero__seal"><BarChart3 /><span>FORMULA VERSION<br />1.0 · EXPLAINABLE</span></div>
+      </header>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Input Section */}
-          <div className="lg:col-span-2 space-y-6">
-            <Card className="border border-gray-200 shadow-lg">
-              <CardHeader>
-                <CardTitle className="flex items-center text-2xl text-[#002349]">
-                  <DollarSign className="h-6 w-6 mr-2 text-[#BD9042]" />
-                  Purchase & Financing
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="purchasePrice">Purchase Price</Label>
-                    <Input
-                      id="purchasePrice"
-                      type="number"
-                      value={inputs.purchasePrice}
-                      onChange={(e) => updateInput('purchasePrice', e.target.value)}
-                      className="mt-1"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="downPayment">Down Payment (%)</Label>
-                    <Input
-                      id="downPayment"
-                      type="number"
-                      value={inputs.downPaymentPercent}
-                      onChange={(e) => updateInput('downPaymentPercent', e.target.value)}
-                      className="mt-1"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="interestRate">Interest Rate (%)</Label>
-                    <Input
-                      id="interestRate"
-                      type="number"
-                      step="0.1"
-                      value={inputs.interestRate}
-                      onChange={(e) => updateInput('interestRate', e.target.value)}
-                      className="mt-1"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="loanTerm">Loan Term (months)</Label>
-                    <Input
-                      id="loanTerm"
-                      type="number"
-                      value={inputs.loanTerm}
-                      onChange={(e) => updateInput('loanTerm', e.target.value)}
-                      className="mt-1"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="closingCosts">Closing Costs (%)</Label>
-                    <Input
-                      id="closingCosts"
-                      type="number"
-                      step="0.1"
-                      value={inputs.closingCosts}
-                      onChange={(e) => updateInput('closingCosts', e.target.value)}
-                      className="mt-1"
-                    />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-none shadow-lg">
-              <CardHeader>
-                <CardTitle>Rehabilitation Costs</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Tabs defaultValue="simple">
-                  <TabsList className="grid w-full grid-cols-2 mb-4">
-                    <TabsTrigger value="simple">Simple Mode</TabsTrigger>
-                    <TabsTrigger value="detailed">Detailed Mode</TabsTrigger>
-                  </TabsList>
-
-                  <TabsContent value="simple">
-                    <div>
-                      <Label htmlFor="rehabBudget">Total Rehab Budget</Label>
-                      <Input
-                        id="rehabBudget"
-                        type="number"
-                        value={inputs.rehabBudget}
-                        onChange={(e) => updateInput('rehabBudget', e.target.value)}
-                        className="mt-1"
-                      />
-                      <p className="text-sm text-gray-500 mt-2">
-                        Quick estimate based on overall renovation scope
-                      </p>
-                    </div>
-                  </TabsContent>
-
-                  <TabsContent value="detailed" className="space-y-3">
-                    <div className="grid grid-cols-2 gap-4">
-                      {Object.keys(rehabDetails).map((key) => (
-                        <div key={key}>
-                          <Label htmlFor={key} className="capitalize">
-                            {key.replace(/([A-Z])/g, ' $1').trim()}
-                          </Label>
-                          <Input
-                            id={key}
-                            type="number"
-                            value={rehabDetails[key]}
-                            onChange={(e) => updateRehabDetail(key, e.target.value)}
-                            className="mt-1"
-                          />
-                        </div>
-                      ))}
-                    </div>
-                    <div className="pt-4 border-t border-gray-200">
-                      <div className="flex justify-between items-center">
-                        <span className="font-semibold text-gray-900">Total Rehab Cost:</span>
-                        <span className="text-xl font-bold text-amber-700">
-                          {formatCurrency(Object.values(rehabDetails).reduce((sum, val) => sum + val, 0))}
-                        </span>
-                      </div>
-                    </div>
-                  </TabsContent>
-                </Tabs>
-              </CardContent>
-            </Card>
-
-            <Card className="border-none shadow-lg">
-              <CardHeader>
-                <CardTitle>After Repair Value & Holding</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="arv">After Repair Value (ARV)</Label>
-                    <Input
-                      id="arv"
-                      type="number"
-                      value={inputs.arv}
-                      onChange={(e) => updateInput('arv', e.target.value)}
-                      className="mt-1"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="holdingMonths">Holding Period (months)</Label>
-                    <Input
-                      id="holdingMonths"
-                      type="number"
-                      value={inputs.holdingMonths}
-                      onChange={(e) => updateInput('holdingMonths', e.target.value)}
-                      className="mt-1"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="sellingCosts">Selling Costs (%)</Label>
-                    <Input
-                      id="sellingCosts"
-                      type="number"
-                      step="0.1"
-                      value={inputs.sellingCosts}
-                      onChange={(e) => updateInput('sellingCosts', e.target.value)}
-                      className="mt-1"
-                    />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+      <section className="deal-studio-shell">
+        <form className="deal-studio-form" onSubmit={analyze}>
+          <div className="studio-strategy" role="group" aria-label="Investment strategy">
+            <button type="button" className={form.strategy === 'rental' ? 'is-active' : ''} onClick={() => setForm((f) => ({ ...f, strategy: 'rental' }))}><Building2 /> Rental & commercial</button>
+            <button type="button" className={form.strategy === 'flip' ? 'is-active' : ''} onClick={() => setForm((f) => ({ ...f, strategy: 'flip', propertyType: f.propertyType === 'multifamily' ? 'single_family' : f.propertyType }))}><Home /> Fix & flip</button>
           </div>
 
-          {/* Results Section */}
-          <div className="lg:col-span-1 space-y-6">
-            {/* Deal Advisor */}
-            <Card className={`border-none shadow-lg border-l-4 border-l-${calculations.dealColor}-500`}>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <calculations.dealIcon className={`h-6 w-6 mr-2 text-${calculations.dealColor}-600`} />
-                  Deal Advisor
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-4">
-                  <div className={`text-4xl font-bold text-${calculations.dealColor}-600 capitalize mb-2`}>
-                    {calculations.dealQuality}
-                  </div>
-                  <p className="text-gray-600 text-sm">
-                    {calculations.dealQuality === 'excellent' && 'This looks like a profitable deal!'}
-                    {calculations.dealQuality === 'good' && 'This deal has potential with careful execution.'}
-                    {calculations.dealQuality === 'marginal' && 'This deal is tight. Review your numbers carefully.'}
-                    {calculations.dealQuality === 'poor' && 'High risk. Consider negotiating or passing.'}
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
+          <fieldset>
+            <legend><span>01</span> Asset & acquisition</legend>
+            <div className="studio-field-grid">
+              <SelectField label="Asset type" name="propertyType" value={form.propertyType} onChange={update}>
+                <option value="single_family">Single-family</option><option value="condo">Condominium</option>
+                <option value="multifamily">Multifamily</option><option value="office">Office</option>
+                <option value="retail">Retail</option><option value="industrial">Industrial</option>
+                <option value="mixed_use">Mixed-use</option><option value="hospitality">Hospitality</option>
+              </SelectField>
+              <Field label="Market" name="market" value={form.market} onChange={update} type="text" min={undefined} />
+              <Field label="Units" name="units" value={form.units} onChange={update} step="1" />
+              <Field label="Purchase price" name="purchasePrice" value={form.purchasePrice} onChange={update} prefix="$" />
+              <Field label="Closing & diligence" name="closingCosts" value={form.closingCosts} onChange={update} prefix="$" />
+              <Field label="Initial capital work" name="initialCapex" value={form.initialCapex} onChange={update} prefix="$" />
+              <Field label="Hold period" name="holdMonths" value={form.holdMonths} onChange={update} suffix="months" step="1" />
+            </div>
+          </fieldset>
 
-            {/* Key Metrics */}
-            <Card className="border-none shadow-lg">
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <TrendingUp className="h-5 w-5 mr-2 text-amber-700" />
-                  Key Metrics
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex justify-between items-center py-3 border-b border-gray-200">
-                  <span className="text-gray-700">Net Profit</span>
-                  <span className={`text-xl font-bold ${calculations.netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {formatCurrency(calculations.netProfit)}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center py-3 border-b border-gray-200">
-                  <span className="text-gray-700">ROI</span>
-                  <span className={`text-xl font-bold ${calculations.roi >= 15 ? 'text-green-600' : calculations.roi >= 10 ? 'text-amber-600' : 'text-red-600'}`}>
-                    {formatPercent(calculations.roi)}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center py-3 border-b border-gray-200">
-                  <span className="text-gray-700">Total Investment</span>
-                  <span className="text-lg font-semibold text-gray-900">
-                    {formatCurrency(calculations.totalInvestment)}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center py-3">
-                  <span className="text-gray-700">Cash Invested</span>
-                  <span className="text-lg font-semibold text-gray-900">
-                    {formatCurrency(calculations.cashInvested)}
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
+          <fieldset>
+            <legend><span>02</span> Capital structure</legend>
+            <div className="studio-field-grid">
+              <Field label="Loan-to-value" name="ltv" value={form.ltv} onChange={update} suffix="%" />
+              <Field label="Interest rate" name="interestRate" value={form.interestRate} onChange={update} suffix="%" />
+              <Field label="Amortization" name="amortizationYears" value={form.amortizationYears} onChange={update} suffix="years" step="1" />
+              <Field label="Origination fee" name="originationFee" value={form.originationFee} onChange={update} suffix="%" />
+              <Field label="Discount rate" name="discountRate" value={form.discountRate} onChange={update} suffix="%" />
+              <Field label="Selling costs" name="sellingCosts" value={form.sellingCosts} onChange={update} suffix="%" />
+            </div>
+          </fieldset>
 
-            {/* 70% Rule Check */}
-            <Card className="border-none shadow-lg">
-              <CardHeader>
-                <CardTitle>70% Rule Analysis</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-700">Max Offer (70% Rule)</span>
-                    <span className="font-bold text-gray-900">
-                      {formatCurrency(calculations.maxOffer70Rule)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-700">Your Offer</span>
-                    <span className="font-bold text-gray-900">
-                      {formatCurrency(inputs.purchasePrice)}
-                    </span>
-                  </div>
-                  <div className={`flex items-center justify-center py-3 px-4 rounded-lg ${calculations.meets70Rule ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
-                    {calculations.meets70Rule ? (
-                      <>
-                        <CheckCircle2 className="h-5 w-5 mr-2" />
-                        <span className="font-semibold">Meets 70% Rule</span>
-                      </>
-                    ) : (
-                      <>
-                        <AlertCircle className="h-5 w-5 mr-2" />
-                        <span className="font-semibold">Does Not Meet 70% Rule</span>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+          {form.strategy === 'rental' ? (
+            <fieldset>
+              <legend><span>03</span> Operations & exit</legend>
+              <div className="studio-field-grid">
+                <Field label="Annual scheduled rent" name="annualRent" value={form.annualRent} onChange={update} prefix="$" />
+                <Field label="Other annual income" name="otherIncome" value={form.otherIncome} onChange={update} prefix="$" />
+                <Field label="Vacancy" name="vacancy" value={form.vacancy} onChange={update} suffix="%" />
+                <Field label="Annual operating expenses" name="operatingExpenses" value={form.operatingExpenses} onChange={update} prefix="$" />
+                <Field label="Management fee" name="managementFee" value={form.managementFee} onChange={update} suffix="%" />
+                <Field label="Annual reserves" name="reserves" value={form.reserves} onChange={update} prefix="$" />
+                <Field label="Income growth" name="incomeGrowth" value={form.incomeGrowth} onChange={update} suffix="%" />
+                <Field label="Expense growth" name="expenseGrowth" value={form.expenseGrowth} onChange={update} suffix="%" />
+                <Field label="Exit cap rate" name="exitCap" value={form.exitCap} onChange={update} suffix="%" />
+              </div>
+            </fieldset>
+          ) : (
+            <fieldset>
+              <legend><span>03</span> Project & disposition</legend>
+              <div className="studio-field-grid">
+                <Field label="After-repair value" name="arv" value={form.arv} onChange={update} prefix="$" />
+                <Field label="Rehabilitation budget" name="rehabCost" value={form.rehabCost} onChange={update} prefix="$" />
+                <Field label="Rehab contingency" name="rehabContingency" value={form.rehabContingency} onChange={update} suffix="%" />
+                <Field label="Monthly holding costs" name="monthlyHolding" value={form.monthlyHolding} onChange={update} prefix="$" />
+                <Field label="Other project costs" name="otherProjectCosts" value={form.otherProjectCosts} onChange={update} prefix="$" />
+              </div>
+            </fieldset>
+          )}
 
-            {/* Cost Breakdown */}
-            <Card className="border-none shadow-lg">
-              <CardHeader>
-                <CardTitle>Cost Breakdown</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <div className="flex justify-between py-2 border-b border-gray-200">
-                  <span className="text-gray-700">Down Payment</span>
-                  <span className="font-semibold">{formatCurrency(calculations.downPayment)}</span>
-                </div>
-                <div className="flex justify-between py-2 border-b border-gray-200">
-                  <span className="text-gray-700">Closing Costs</span>
-                  <span className="font-semibold">{formatCurrency(calculations.closingCostsAmount)}</span>
-                </div>
-                <div className="flex justify-between py-2 border-b border-gray-200">
-                  <span className="text-gray-700">Rehab Costs</span>
-                  <span className="font-semibold">{formatCurrency(calculations.rehabCost)}</span>
-                </div>
-                <div className="flex justify-between py-2 border-b border-gray-200">
-                  <span className="text-gray-700">Holding Costs</span>
-                  <span className="font-semibold">{formatCurrency(calculations.totalHoldingCosts)}</span>
-                </div>
-                <div className="flex justify-between py-2 border-b border-gray-200">
-                  <span className="text-gray-700">Selling Costs</span>
-                  <span className="font-semibold">{formatCurrency(calculations.sellingCostsAmount)}</span>
-                </div>
-                <div className="flex justify-between py-2">
-                  <span className="text-gray-700">Loan Payoff</span>
-                  <span className="font-semibold">{formatCurrency(calculations.loanAmount)}</span>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Button className="w-full bg-[#002349] hover:bg-[#003366] text-white py-6 text-lg font-bold tracking-wide shadow-lg">
-              SCHEDULE CONSULTATION
-            </Button>
+          <div className="studio-submit-row">
+            <p><CheckCircle2 /> Every metric includes its formula, components, assumptions, and warnings.</p>
+            <button type="submit" disabled={loading}>{loading ? <><Loader2 className="spin" /> Analyzing</> : <>Run analysis <ArrowRight /></>}</button>
           </div>
-        </div>
-      </div>
-    </div>
+        </form>
+
+        <aside className="deal-studio-results">
+          <div className="deal-studio-results__head"><span><Sparkles /> ANALYSIS OUTPUT</span>{result && <small>{result.formula_version}</small>}</div>
+          {!result && !error && (
+            <div className="studio-empty"><CircleDollarSign /><h2>Your decision canvas</h2><p>Complete the assumptions and run an analysis. DiamondEcho will calculate returns, debt coverage, value creation, and risk signals without hidden inputs.</p></div>
+          )}
+          {error && <div className="studio-error"><AlertCircle /><h2>Analysis needs attention</h2><p>{error}</p><button onClick={() => setError('')}><RotateCcw /> Review inputs</button></div>}
+          {result && (
+            <div className="studio-result">
+              <div className="studio-result__verdict"><span>MODEL STATUS</span><strong>Analysis complete</strong><p>{result.strategy === 'rental' ? 'Income, financing, and exit assumptions have been modeled.' : 'Acquisition, project, holding, and disposition costs have been modeled.'}</p></div>
+              <div className="studio-metrics">
+                {metricKeys.map((key) => {
+                  const metric = result.metrics[key];
+                  return <article key={key}><small>{labels[key]}</small><strong>{displayMetric(key, metric)}</strong><p>{metric?.formula}</p>{metric?.warning && <span>{metric.warning}</span>}</article>;
+                })}
+              </div>
+              {result.warnings?.length > 0 && <div className="studio-warnings"><span>ASSUMPTIONS TO VERIFY</span>{result.warnings.map((warning) => <p key={warning}>{warning}</p>)}</div>}
+              <p className="studio-disclaimer">Illustrative analysis only. Not an appraisal, credit decision, offer, tax opinion, or investment recommendation. Verify every assumption with qualified professionals.</p>
+            </div>
+          )}
+        </aside>
+      </section>
+    </main>
   );
 };
 
