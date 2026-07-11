@@ -1,333 +1,260 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Home as HomeIcon, TrendingUp, Calculator, ChevronRight, Star } from 'lucide-react';
-import { Button } from '../components/ui/button';
-import { Card, CardContent } from '../components/ui/card';
-import { featuredProperties, neighborhoods, testimonials } from '../data/mockData';
+import {
+  ArrowDown, ArrowRight, ArrowUpRight, BarChart3,
+  ChevronLeft, ChevronRight, KeyRound, Landmark,
+  MessageCircle, Search, ShieldCheck, Sparkles, TrendingUp
+} from 'lucide-react';
+import { featuredProperties, neighborhoods } from '../data/mockData';
+
+const heroSlides = [
+  {
+    image: 'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=2200&q=90',
+    location: 'Trousdale Estates · Beverly Hills',
+    title: ['Where architecture', 'becomes legacy.'],
+  },
+  {
+    image: 'https://images.unsplash.com/photo-1600566753086-00f18fb6b3ea?auto=format&fit=crop&w=2200&q=90',
+    location: 'Ocean House · Miami Beach',
+    title: ['Exceptional living,', 'privately represented.'],
+  },
+  {
+    image: 'https://images.unsplash.com/photo-1600047509807-ba8f99d2cdde?auto=format&fit=crop&w=2200&q=90',
+    location: 'Modern Estate · Austin',
+    title: ['Real estate,', 'intelligently considered.'],
+  },
+];
+
+const services = [
+  { number: '01', icon: KeyRound, title: 'Acquire', copy: 'Private access, discreet representation, and a global search tailored to how you want to live.' },
+  { number: '02', icon: Landmark, title: 'Sell', copy: 'Editorial storytelling, qualified global reach, and a strategy calibrated to protect value.' },
+  { number: '03', icon: TrendingUp, title: 'Invest', copy: 'Institutional-grade underwriting for rentals, flips, multifamily, and commercial opportunities.' },
+  { number: '04', icon: ShieldCheck, title: 'Transact', copy: 'A coordinated path through financing, diligence, negotiation, closing, and ownership.' },
+];
+
+const formatPrice = (price) => new Intl.NumberFormat('en-US', {
+  style: 'currency', currency: 'USD', maximumFractionDigits: 0,
+}).format(price);
 
 const Home = () => {
   const navigate = useNavigate();
-  const [currentSlide, setCurrentSlide] = React.useState(0);
-  
-  const heroImages = [
-    'https://images.unsplash.com/photo-1505843513577-22bb7d21e455',
-    'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9',
-    'https://images.unsplash.com/photo-1416331108676-a22ccb276e35',
-    'https://images.unsplash.com/photo-1574120582683-1adf79c5dfd5',
-    'https://images.unsplash.com/photo-1505843795480-5cfb3c03f6ff'
-  ];
+  const [slide, setSlide] = React.useState(0);
+  const [searchValue, setSearchValue] = React.useState('');
 
   React.useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentSlide((prev) => (prev + 1) % heroImages.length);
-    }, 5000);
-    
-    return () => clearInterval(interval);
+    const timer = window.setInterval(() => setSlide((current) => (current + 1) % heroSlides.length), 7000);
+    return () => window.clearInterval(timer);
   }, []);
 
-  const formatPrice = (price) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-    }).format(price);
+  const advance = (direction) => {
+    setSlide((current) => (current + direction + heroSlides.length) % heroSlides.length);
+  };
+
+  const submitSearch = (event) => {
+    event.preventDefault();
+    navigate(searchValue ? `/search?q=${encodeURIComponent(searchValue)}` : '/search');
   };
 
   return (
-    <div className="min-h-screen">
-      {/* Hero Section with Cinematic Video-like Slideshow */}
-      <section className="relative h-[calc(100vh+200px)] min-h-[900px] flex items-center justify-center overflow-hidden">
-        {/* Image Slideshow Background with Cinematic Movement */}
-        {heroImages.map((image, index) => (
+    <main className="luxury-home">
+      <section className="editorial-hero" aria-label="Featured private residences">
+        {heroSlides.map((item, index) => (
           <div
-            key={index}
-            className={`absolute inset-0 transition-opacity duration-[2500ms] ease-in-out ${
-              index === currentSlide ? 'opacity-100' : 'opacity-0'
-            }`}
-            style={{
-              backgroundImage: `url(${image})`,
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-              transform: index === currentSlide ? 'scale(1.15)' : 'scale(1.05)',
-              transition: 'opacity 2.5s ease-in-out, transform 25s ease-out',
-              animation: index === currentSlide ? 'cinematicZoomPan 25s ease-out forwards' : 'none',
-            }}
-          >
-            <div className="absolute inset-0 bg-gradient-to-b from-[#002349]/60 via-[#002349]/40 to-[#002349]/75"></div>
-          </div>
+            className={`editorial-hero__image ${index === slide ? 'is-active' : ''}`}
+            style={{ backgroundImage: `url(${item.image})` }}
+            key={item.location}
+            aria-hidden={index !== slide}
+          />
         ))}
-        
-        <div className="relative z-10 max-w-5xl mx-auto px-4 text-center">
-          <h1 className="text-6xl md:text-8xl font-bold text-white mb-6 leading-tight animate-fade-in tracking-tight">
-            Discover Exceptional Properties
+        <div className="editorial-hero__veil" />
+        <div className="editorial-hero__content">
+          <p className="eyebrow eyebrow--light"><span /> PRIVATE REAL ESTATE · GLOBAL</p>
+          <h1>
+            <span>{heroSlides[slide].title[0]}</span>
+            <em>{heroSlides[slide].title[1]}</em>
           </h1>
-          <p className="text-xl md:text-3xl text-gray-100 animate-fade-in font-light tracking-wide">
-            Where luxury real estate meets investment excellence
-          </p>
+          <div className="editorial-hero__meta">
+            <p>{heroSlides[slide].location}</p>
+            <button onClick={() => navigate('/search')}>Explore the collection <ArrowUpRight /></button>
+          </div>
         </div>
 
-        {/* Slideshow Indicators */}
-        <div className="absolute bottom-12 left-1/2 transform -translate-x-1/2 flex space-x-2 z-20">
-          {heroImages.map((_, index) => (
-            <button
-              key={index}
-              onClick={() => setCurrentSlide(index)}
-              className={`h-1 rounded-full transition-all duration-300 ${
-                index === currentSlide 
-                  ? 'bg-[#BD9042] w-12' 
-                  : 'bg-white/40 w-8 hover:bg-white/60'
-              }`}
+        <div className="editorial-hero__controls">
+          <button onClick={() => advance(-1)} aria-label="Previous residence"><ChevronLeft /></button>
+          <span>0{slide + 1} <i /> 0{heroSlides.length}</span>
+          <button onClick={() => advance(1)} aria-label="Next residence"><ChevronRight /></button>
+        </div>
+        <a className="editorial-hero__scroll" href="#discover">Discover <ArrowDown /></a>
+      </section>
+
+      <section className="property-search" id="discover">
+        <div className="property-search__intro">
+          <p className="eyebrow">PRIVATE COLLECTION</p>
+          <h2>Find a place<br /><em>without equal.</em></h2>
+        </div>
+        <form className="property-search__form" onSubmit={submitSearch}>
+          <label htmlFor="property-search">Where would you like to be?</label>
+          <div>
+            <Search />
+            <input
+              id="property-search"
+              value={searchValue}
+              onChange={(event) => setSearchValue(event.target.value)}
+              placeholder="City, neighborhood, address, or private listing ID"
             />
+            <button type="submit">Search <ArrowRight /></button>
+          </div>
+          <nav aria-label="Property search categories">
+            <button type="button" onClick={() => navigate('/search')}>Buy</button>
+            <button type="button" onClick={() => navigate('/search?status=rent')}>Rent</button>
+            <button type="button" onClick={() => navigate('/investment-calculator')}>Invest</button>
+            <button type="button" onClick={() => navigate('/agents')}>Sell with us</button>
+          </nav>
+        </form>
+      </section>
+
+      <section className="collection-section">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">THE PRIVATE COLLECTION</p>
+            <h2>Remarkable by nature.<br /><em>Rare by definition.</em></h2>
+          </div>
+          <button onClick={() => navigate('/search')}>View all residences <ArrowUpRight /></button>
+        </div>
+
+        <div className="residence-grid">
+          {featuredProperties.slice(0, 3).map((property, index) => (
+            <article
+              className={`residence-card residence-card--${index + 1}`}
+              key={property.id}
+              onClick={() => navigate(`/property/${property.id}`)}
+              onKeyDown={(event) => event.key === 'Enter' && navigate(`/property/${property.id}`)}
+              role="button"
+              tabIndex={0}
+            >
+              <img src={`${property.images[0]}?auto=format&fit=crop&w=1400&q=88`} alt={property.title} />
+              <div className="residence-card__scrim" />
+              <div className="residence-card__tag">PRIVATE LISTING · 0{index + 1}</div>
+              <div className="residence-card__content">
+                <p>{property.city}, {property.state}</p>
+                <h3>{property.title}</h3>
+                <div>
+                  <strong>{formatPrice(property.price)}</strong>
+                  <span>{property.beds} beds · {property.baths} baths · {property.sqft.toLocaleString()} sq ft</span>
+                </div>
+              </div>
+              <span className="residence-card__arrow"><ArrowUpRight /></span>
+            </article>
           ))}
         </div>
-
-        {/* Scroll Indicator */}
-        <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 z-20 animate-bounce">
-          <div className="w-6 h-10 border-2 border-white/50 rounded-full flex items-start justify-center p-2">
-            <div className="w-1 h-3 bg-white/70 rounded-full animate-pulse"></div>
-          </div>
-        </div>
       </section>
 
-      {/* Search Bar Section */}
-      <section className="bg-gray-50 py-12 -mt-24 relative z-20">
-        <div className="max-w-5xl mx-auto px-4">
-          <div className="bg-white rounded-lg shadow-2xl p-8 border border-gray-100">
-            <div className="flex flex-col md:flex-row gap-4">
-              <input
-                type="text"
-                placeholder="Search by city, neighborhood, or ZIP code"
-                className="flex-1 px-6 py-4 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002349] focus:border-transparent text-gray-900"
-              />
-              <Button 
-                onClick={() => navigate('/search')}
-                className="bg-[#002349] hover:bg-[#003366] text-white px-10 py-4 rounded-lg h-auto text-base font-medium tracking-wide shadow-md"
-              >
-                <Search className="mr-2 h-5 w-5" />
-                SEARCH
-              </Button>
+      <section className="intelligence-section">
+        <div className="intelligence-section__visual">
+          <img src="https://images.unsplash.com/photo-1556761175-b413da4baf72?auto=format&fit=crop&w=1600&q=85" alt="Advisors reviewing a real estate investment" />
+          <div className="intelligence-section__badge"><Sparkles /> DIAMOND ECHO INTELLIGENCE</div>
+        </div>
+
+        <div className="intelligence-section__content">
+          <p className="eyebrow eyebrow--light">DECISION INTELLIGENCE</p>
+          <h2>Every opportunity,<br /><em>fully illuminated.</em></h2>
+          <p className="intelligence-section__lede">
+            From a first home to a global portfolio, our intelligence layer turns complex property economics into clear, explainable decisions.
+          </p>
+
+          <div className="deal-preview">
+            <div className="deal-preview__head">
+              <span><BarChart3 /> DEAL STUDIO</span>
+              <span className="deal-preview__status">STRONG FIT</span>
             </div>
-            <div className="flex flex-wrap gap-6 mt-5 justify-center">
-              <Button variant="ghost" onClick={() => navigate('/search')} className="text-[#002349] hover:text-[#BD9042] hover:bg-transparent font-medium text-sm tracking-wide">
-                BUY
-              </Button>
-              <span className="text-gray-300">|</span>
-              <Button variant="ghost" onClick={() => navigate('/search?status=rent')} className="text-[#002349] hover:text-[#BD9042] hover:bg-transparent font-medium text-sm tracking-wide">
-                RENT
-              </Button>
-              <span className="text-gray-300">|</span>
-              <Button variant="ghost" onClick={() => navigate('/investment-calculator')} className="text-[#002349] hover:text-[#BD9042] hover:bg-transparent font-medium text-sm tracking-wide">
-                INVEST
-              </Button>
+            <div className="deal-preview__property">
+              <div><small>ASSET</small><strong>12-unit multifamily</strong></div>
+              <div><small>MARKET</small><strong>Austin, TX</strong></div>
+              <div><small>STRATEGY</small><strong>Value-add rental</strong></div>
+            </div>
+            <div className="deal-preview__metrics">
+              <div><small>PROJECTED IRR</small><strong>18.4%</strong><i style={{ '--fill': '84%' }} /></div>
+              <div><small>CASH-ON-CASH</small><strong>9.7%</strong><i style={{ '--fill': '69%' }} /></div>
+              <div><small>DSCR</small><strong>1.46×</strong><i style={{ '--fill': '74%' }} /></div>
             </div>
           </div>
+
+          <button className="text-link text-link--light" onClick={() => navigate('/investment-calculator')}>
+            Analyze an opportunity <ArrowUpRight />
+          </button>
         </div>
       </section>
 
-      {/* Features Section */}
-      <section className="py-24 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-4xl font-bold text-center text-[#002349] mb-4 tracking-tight">
-            Why Choose DiamondEcho Realty?
-          </h2>
-          <p className="text-center text-gray-600 mb-16 text-lg max-w-3xl mx-auto">
-            Experience the pinnacle of real estate services with our comprehensive platform
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
-            <Card className="border border-gray-100 shadow-lg hover:shadow-2xl transition-all duration-500 group">
-              <CardContent className="p-10 text-center">
-                <div className="w-20 h-20 bg-[#002349] rounded-full flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform duration-300">
-                  <HomeIcon className="h-10 w-10 text-[#BD9042]" />
-                </div>
-                <h3 className="text-2xl font-bold text-[#002349] mb-4">Luxury Properties</h3>
-                <p className="text-gray-600 leading-relaxed">
-                  Access exclusive listings of premium homes, estates, and investment opportunities.
-                </p>
-              </CardContent>
-            </Card>
+      <section className="journey-section">
+        <div className="section-heading section-heading--center">
+          <div>
+            <p className="eyebrow">ONE MAISON. EVERY MOVE.</p>
+            <h2>Your entire real estate journey,<br /><em>beautifully orchestrated.</em></h2>
+          </div>
+        </div>
+        <div className="journey-grid">
+          {services.map(({ number, icon: Icon, title, copy }) => (
+            <article key={title}>
+              <div><span>{number}</span><Icon /></div>
+              <h3>{title}</h3>
+              <p>{copy}</p>
+              <button onClick={() => navigate(title === 'Invest' ? '/investment-calculator' : title === 'Acquire' ? '/search' : '/agents')} aria-label={`Explore ${title}`}><ArrowUpRight /></button>
+            </article>
+          ))}
+        </div>
+      </section>
 
-            <Card className="border border-gray-100 shadow-lg hover:shadow-2xl transition-all duration-500 group">
-              <CardContent className="p-10 text-center">
-                <div className="w-20 h-20 bg-[#002349] rounded-full flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform duration-300">
-                  <Calculator className="h-10 w-10 text-[#BD9042]" />
-                </div>
-                <h3 className="text-2xl font-bold text-[#002349] mb-4">Investment Tools</h3>
-                <p className="text-gray-600 leading-relaxed">
-                  Advanced fix & flip calculator and analysis tools to maximize your ROI.
-                </p>
-              </CardContent>
-            </Card>
+      <section className="destinations-section">
+        <div className="destinations-section__intro">
+          <p className="eyebrow eyebrow--light">SIGNATURE MARKETS</p>
+          <h2>The world’s most<br /><em>considered addresses.</em></h2>
+          <p>Local knowledge, private access, and connected representation across the markets that matter.</p>
+          <button className="text-link text-link--light" onClick={() => navigate('/search')}>Explore all markets <ArrowUpRight /></button>
+        </div>
+        <div className="destinations-section__list">
+          {neighborhoods.map((place, index) => (
+            <button key={place.name} onClick={() => navigate(`/search?q=${encodeURIComponent(place.name)}`)}>
+              <span>0{index + 1}</span>
+              <strong>{place.name}</strong>
+              <small>{place.city} · {place.properties} residences</small>
+              <ArrowUpRight />
+            </button>
+          ))}
+        </div>
+      </section>
 
-            <Card className="border border-gray-100 shadow-lg hover:shadow-2xl transition-all duration-500 group">
-              <CardContent className="p-10 text-center">
-                <div className="w-20 h-20 bg-[#002349] rounded-full flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform duration-300">
-                  <TrendingUp className="h-10 w-10 text-[#BD9042]" />
-                </div>
-                <h3 className="text-2xl font-bold text-[#002349] mb-4">Expert Guidance</h3>
-                <p className="text-gray-600 leading-relaxed">
-                  Work with experienced agents who understand luxury markets and investments.
-                </p>
-              </CardContent>
-            </Card>
+      <section className="concierge-section">
+        <div className="concierge-section__content">
+          <p className="eyebrow">PRIVATE CONCIERGE</p>
+          <h2>Ask anything.<br /><em>Move with clarity.</em></h2>
+          <p>Explore buying, selling, financing, taxes, neighborhoods, and investment strategy with a real-estate intelligence partner—then connect with a human advisor when it matters.</p>
+          <div>
+            <button onClick={() => window.dispatchEvent(new CustomEvent('open-diamond-assistant'))}><MessageCircle /> Ask DiamondEcho</button>
+            <button onClick={() => navigate('/agents')}>Speak with an advisor <ArrowUpRight /></button>
+          </div>
+          <small>Educational guidance only. Legal, tax, mortgage, and investment decisions should be reviewed with qualified professionals.</small>
+        </div>
+        <div className="concierge-section__visual">
+          <img src="https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?auto=format&fit=crop&w=1600&q=88" alt="Elegant contemporary residence interior" />
+          <div className="concierge-card">
+            <span><MessageCircle /> PRIVATE ASSISTANT</span>
+            <p>“What should I know before making an offer on a historic property?”</p>
+            <div><Sparkles /><span>I’ll walk you through inspections, restrictions, insurance, financing, and negotiation considerations.</span></div>
           </div>
         </div>
       </section>
 
-      {/* Featured Properties */}
-      <section className="py-24 bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center mb-12">
-            <div>
-              <h2 className="text-4xl font-bold text-[#002349] tracking-tight">Featured Properties</h2>
-              <p className="text-gray-600 mt-2">Handpicked exceptional homes</p>
-            </div>
-            <Button 
-              variant="ghost" 
-              onClick={() => navigate('/search')}
-              className="text-[#002349] hover:text-[#BD9042] hover:bg-transparent font-medium"
-            >
-              View All
-              <ChevronRight className="ml-2 h-5 w-5" />
-            </Button>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {featuredProperties.map((property) => (
-              <Card 
-                key={property.id} 
-                className="cursor-pointer border border-gray-200 shadow-md hover:shadow-2xl transition-all duration-500 hover:-translate-y-2 overflow-hidden group"
-                onClick={() => navigate(`/property/${property.id}`)}
-              >
-                <div className="relative h-56 overflow-hidden">
-                  <img 
-                    src={property.images[0]} 
-                    alt={property.title}
-                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
-                  />
-                  <div className="absolute top-4 right-4 bg-[#002349] text-white px-4 py-1.5 rounded text-xs font-semibold tracking-wide">
-                    {property.status}
-                  </div>
-                </div>
-                <CardContent className="p-6">
-                  <h3 className="text-2xl font-bold text-[#BD9042] mb-3">
-                    {formatPrice(property.price)}
-                  </h3>
-                  <p className="text-sm text-gray-600 mb-3 flex items-center space-x-4">
-                    <span>{property.beds} bd</span>
-                    <span>•</span>
-                    <span>{property.baths} ba</span>
-                    <span>•</span>
-                    <span>{property.sqft.toLocaleString()} sqft</span>
-                  </p>
-                  <p className="text-sm text-[#002349] font-medium mb-2 line-clamp-2">{property.title}</p>
-                  <p className="text-sm text-gray-500">
-                    {property.city}, {property.state}
-                  </p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+      <section className="closing-statement">
+        <div className="closing-statement__image" />
+        <div className="closing-statement__veil" />
+        <div>
+          <p className="eyebrow eyebrow--light">YOUR NEXT CHAPTER</p>
+          <h2>Some addresses are found.<br /><em>Others find you.</em></h2>
+          <button onClick={() => navigate('/agents')}>Begin a private conversation <ArrowUpRight /></button>
         </div>
       </section>
 
-      {/* Neighborhoods */}
-      <section className="py-24 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-4xl font-bold text-center text-[#002349] mb-4 tracking-tight">
-            Explore Premium Neighborhoods
-          </h2>
-          <p className="text-center text-gray-600 mb-16 text-lg">
-            Discover the finest locations for your next home
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {neighborhoods.map((neighborhood, index) => (
-              <Card 
-                key={index}
-                className="cursor-pointer border border-gray-200 shadow-md hover:shadow-2xl transition-all duration-500 hover:-translate-y-2 overflow-hidden group"
-                onClick={() => navigate('/search')}
-              >
-                <div className="relative h-64">
-                  <img 
-                    src={neighborhood.image} 
-                    alt={neighborhood.name}
-                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#002349]/90 via-[#002349]/40 to-transparent"></div>
-                  <div className="absolute bottom-6 left-6 right-6 text-white">
-                    <h3 className="text-2xl font-bold mb-1">{neighborhood.name}</h3>
-                    <p className="text-sm text-gray-200 mb-3">{neighborhood.city}</p>
-                    <p className="text-lg font-semibold text-[#BD9042]">
-                      {formatPrice(neighborhood.avgPrice)}
-                    </p>
-                    <p className="text-sm text-gray-300">{neighborhood.properties} properties</p>
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Testimonials */}
-      <section className="py-24 bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-4xl font-bold text-center text-[#002349] mb-4 tracking-tight">
-            Client Testimonials
-          </h2>
-          <p className="text-center text-gray-600 mb-16 text-lg">
-            Hear from those who've experienced our exceptional service
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {testimonials.map((testimonial) => (
-              <Card key={testimonial.id} className="border border-gray-200 shadow-md hover:shadow-xl transition-shadow duration-300">
-                <CardContent className="p-8">
-                  <div className="flex mb-5">
-                    {[...Array(testimonial.rating)].map((_, i) => (
-                      <Star key={i} className="h-5 w-5 text-[#BD9042] fill-current" />
-                    ))}
-                  </div>
-                  <p className="text-gray-700 mb-6 italic leading-relaxed">
-                    "{testimonial.content}"
-                  </p>
-                  <div className="border-t border-gray-200 pt-6">
-                    <p className="font-bold text-[#002349]">{testimonial.name}</p>
-                    <p className="text-sm text-gray-600">{testimonial.role}</p>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* CTA Section */}
-      <section className="py-24 bg-[#002349] text-white">
-        <div className="max-w-4xl mx-auto px-4 text-center">
-          <h2 className="text-4xl md:text-5xl font-bold mb-6 tracking-tight">
-            Ready to Find Your Perfect Property?
-          </h2>
-          <p className="text-xl text-gray-300 mb-10 font-light">
-            Let our expert agents guide you through every step of your real estate journey.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button 
-              onClick={() => navigate('/search')}
-              size="lg"
-              className="bg-[#BD9042] hover:bg-[#A67C35] text-white text-base px-10 py-6 h-auto font-semibold tracking-wide shadow-lg"
-            >
-              Browse Properties
-            </Button>
-            <Button 
-              onClick={() => navigate('/investment-calculator')}
-              size="lg"
-              variant="outline"
-              className="border-2 border-white text-white hover:bg-white/10 text-base px-10 py-6 h-auto font-semibold tracking-wide"
-            >
-              Investment Calculator
-            </Button>
-          </div>
-        </div>
-      </section>
-    </div>
+    </main>
   );
 };
 

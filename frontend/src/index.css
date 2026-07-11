@@ -1,121 +1,64 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Italiana&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-body {
+@layer base {
+  :root {
+    --ink: #101713;
+    --forest: #14251d;
+    --forest-light: #20382c;
+    --ivory: #f3f0e8;
+    --paper: #faf8f3;
+    --champagne: #c6a76a;
+    --champagne-light: #d9c28f;
+    --stone: #7b7d76;
+    --line: rgba(16, 23, 19, 0.16);
+    --background: 42 33% 97%;
+    --foreground: 140 18% 8%;
+    --card: 42 33% 97%;
+    --card-foreground: 140 18% 8%;
+    --popover: 42 33% 97%;
+    --popover-foreground: 140 18% 8%;
+    --primary: 146 29% 11%;
+    --primary-foreground: 42 33% 97%;
+    --secondary: 43 26% 92%;
+    --secondary-foreground: 140 18% 8%;
+    --muted: 43 20% 92%;
+    --muted-foreground: 90 3% 45%;
+    --accent: 39 43% 60%;
+    --accent-foreground: 140 18% 8%;
+    --destructive: 0 65% 47%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 40 12% 82%;
+    --input: 40 12% 82%;
+    --ring: 39 43% 60%;
+    --radius: 0;
+  }
+
+  * { @apply border-border; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
     margin: 0;
-    font-family:
-        -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen",
-        "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
-        sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'DM Sans', Arial, sans-serif;
+    font-weight: 400;
     -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+  button, input { font: inherit; }
+  button { cursor: pointer; }
+  ::selection { background: var(--champagne); color: var(--ink); }
+  :focus-visible { outline: 2px solid var(--champagne); outline-offset: 4px; }
 }
 
-code {
-    font-family:
-        source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
-}
-
-@layer base {
-    :root {
-        /* Sotheby's inspired color palette */
-        --sothebys-navy: 210 100% 14%;
-        --sothebys-gold: 39 48% 50%;
-        --sothebys-grey: 0 0% 60%;
-        --sothebys-light-grey: 0 0% 96%;
-        
-        --background: 0 0% 100%;
-        --foreground: 210 100% 14%;
-        --card: 0 0% 100%;
-        --card-foreground: 210 100% 14%;
-        --popover: 0 0% 100%;
-        --popover-foreground: 210 100% 14%;
-        --primary: 210 100% 14%;
-        --primary-foreground: 0 0% 98%;
-        --secondary: 0 0% 96.1%;
-        --secondary-foreground: 210 100% 14%;
-        --muted: 0 0% 96.1%;
-        --muted-foreground: 0 0% 40%;
-        --accent: 39 48% 50%;
-        --accent-foreground: 0 0% 98%;
-        --destructive: 0 84.2% 60.2%;
-        --destructive-foreground: 0 0% 98%;
-        --border: 0 0% 89.8%;
-        --input: 0 0% 89.8%;
-        --ring: 210 100% 14%;
-        --chart-1: 12 76% 61%;
-        --chart-2: 173 58% 39%;
-        --chart-3: 197 37% 24%;
-        --chart-4: 43 74% 66%;
-        --chart-5: 27 87% 67%;
-        --radius: 0.5rem;
-    }
-    .dark {
-        --background: 210 100% 14%;
-        --foreground: 0 0% 98%;
-        --card: 210 100% 14%;
-        --card-foreground: 0 0% 98%;
-        --popover: 210 100% 14%;
-        --popover-foreground: 0 0% 98%;
-        --primary: 0 0% 98%;
-        --primary-foreground: 210 100% 14%;
-        --secondary: 0 0% 14.9%;
-        --secondary-foreground: 0 0% 98%;
-        --muted: 0 0% 14.9%;
-        --muted-foreground: 0 0% 63.9%;
-        --accent: 39 48% 50%;
-        --accent-foreground: 0 0% 98%;
-        --destructive: 0 62.8% 30.6%;
-        --destructive-foreground: 0 0% 98%;
-        --border: 0 0% 14.9%;
-        --input: 0 0% 14.9%;
-        --ring: 0 0% 83.1%;
-        --chart-1: 220 70% 50%;
-        --chart-2: 160 60% 45%;
-        --chart-3: 30 80% 55%;
-        --chart-4: 280 65% 60%;
-        --chart-5: 340 75% 55%;
-    }
-}
-
-@layer base {
-    * {
-        @apply border-border;
-    }
-    body {
-        @apply bg-background text-foreground;
-    }
-}
-
-@layer base {
-    [data-debug-wrapper="true"] {
-        display: contents !important;
-    }
-
-    [data-debug-wrapper="true"] > * {
-        margin-left: inherit;
-        margin-right: inherit;
-        margin-top: inherit;
-        margin-bottom: inherit;
-        padding-left: inherit;
-        padding-right: inherit;
-        padding-top: inherit;
-        padding-bottom: inherit;
-        column-gap: inherit;
-        row-gap: inherit;
-        gap: inherit;
-        border-left-width: inherit;
-        border-right-width: inherit;
-        border-top-width: inherit;
-        border-bottom-width: inherit;
-        border-left-style: inherit;
-        border-right-style: inherit;
-        border-top-style: inherit;
-        border-bottom-style: inherit;
-        border-left-color: inherit;
-        border-right-color: inherit;
-        border-top-color: inherit;
-        border-bottom-color: inherit;
-    }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }

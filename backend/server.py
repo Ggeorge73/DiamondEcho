@@ -9,6 +9,9 @@ from pydantic import BaseModel, Field, ConfigDict
 from typing import List
 import uuid
 from datetime import datetime, timezone
+from deal_intelligence.router import router as deal_intelligence_router
+from routes.assistant import router as assistant_router
+from property_data.router import router as property_data_router
 
 
 ROOT_DIR = Path(__file__).parent
@@ -66,13 +69,22 @@ async def get_status_checks():
     
     return status_checks
 
+# Register product modules before mounting the shared /api router.
+api_router.include_router(deal_intelligence_router)
+api_router.include_router(assistant_router)
+api_router.include_router(property_data_router)
+
 # Include the router in the main app
 app.include_router(api_router)
 
+cors_origins = [origin.strip() for origin in os.environ.get(
+    'CORS_ORIGINS', 'http://localhost:3000,http://127.0.0.1:3000'
+).split(',') if origin.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_credentials='*' not in cors_origins,
+    allow_origins=cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
