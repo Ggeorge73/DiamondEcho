@@ -9,6 +9,7 @@ import { properties } from '../data/mockData';
 import { analyzeDealLocally, runMonteCarloLocally } from '../lib/dealAnalysis';
 import { downloadDealWorkbook } from '../lib/dealWorkbook';
 import { buildDealRequest } from '../lib/dealRequest';
+import { buildMonteCarloScenarios, MONTE_CARLO_CASES } from '../lib/monteCarloCases';
 
 const MARKET_OPTIONS = [
   'Atlanta, GA', 'Austin, TX', 'Boston, MA', 'Charlotte, NC', 'Chicago, IL',
@@ -98,7 +99,6 @@ const InvestmentCalculator = () => {
   const [propertyRecord, setPropertyRecord] = useState(null);
   const [addressSuggestions, setAddressSuggestions] = useState([]);
   const [marketSuggestions, setMarketSuggestions] = useState([]);
-  const [selectedCases, setSelectedCases] = useState(['Committee case', 'Downside case']);
   const [resultMode, setResultMode] = useState('base');
   const backendUrl = useMemo(() => (process.env.REACT_APP_BACKEND_URL || '').replace(/\/$/, ''), []);
   const sessionToken = useMemo(() => globalThis.crypto?.randomUUID?.() || `session-${Date.now()}`, []);
@@ -232,15 +232,10 @@ const InvestmentCalculator = () => {
   };
 
   const runRiskAnalysis = async () => {
-    if (!selectedCases.length) { setRiskError('Select at least one Monte Carlo case.'); return; }
     setRiskLoading(true); setRiskError(''); setMonteCarlo(null); setResultMode('risk');
+    const scenarios = buildMonteCarloScenarios({ iterations: form.mcIterations, driversForCase: scenarioDrivers });
+    const payload = { deal: buildRequest(), scenarios };
     try {
-      const payload = {
-        deal: buildRequest(),
-        scenarios: selectedCases.map((name, index) => ({
-          name, iterations: n(form.mcIterations), seed: 2026 + index * 97, drivers: scenarioDrivers(name),
-        })),
-      };
       if (!backendUrl) setMonteCarlo(runMonteCarloLocally(payload));
       else {
         const { data } = await axios.post(`${backendUrl}/api/v1/deals/monte-carlo`, payload);
@@ -248,7 +243,6 @@ const InvestmentCalculator = () => {
       }
     } catch (requestError) {
       try {
-        const payload = { deal: buildRequest(), scenarios: selectedCases.map((name, index) => ({ name, iterations: n(form.mcIterations), seed: 2026 + index * 97, drivers: scenarioDrivers(name) })) };
         setMonteCarlo(runMonteCarloLocally(payload));
       } catch (calculationError) { setRiskError(calculationError.message || requestError.response?.data?.detail || 'Risk analysis could not be completed.'); }
     } finally { setRiskLoading(false); }
@@ -266,8 +260,6 @@ const InvestmentCalculator = () => {
       setResultMode('base');
     }
   };
-
-  const toggleCase = (caseName) => setSelectedCases((current) => current.includes(caseName) ? current.filter((item) => item !== caseName) : [...current, caseName]);
 
   const metricKeys = form.strategy === 'rental'
     ? ['irr', 'cash_on_cash', 'cap_rate', 'dscr', 'noi', 'npv', 'equity_multiple', 'break_even_occupancy']
@@ -466,10 +458,11 @@ const InvestmentCalculator = () => {
           <fieldset className="studio-monte-carlo">
             <legend><span>04</span> Monte Carlo risk laboratory</legend>
             <div className="studio-case-picker">
-              {['Committee case', 'Downside case', 'Severe stress'].map((caseName) => (
-                <button type="button" key={caseName} className={selectedCases.includes(caseName) ? 'is-active' : ''} onClick={() => toggleCase(caseName)}><CheckCircle2 /> {caseName}</button>
+              {MONTE_CARLO_CASES.map((caseName) => (
+                <div key={caseName} className="is-active"><CheckCircle2 /> {caseName}</div>
               ))}
             </div>
+            <p className="studio-case-note">Every run includes all three cases so the committee view is complete regardless of the result tab in focus.</p>
             <div className="studio-field-grid">
               <SelectField label="Iterations per case" name="mcIterations" value={form.mcIterations} onChange={update}><option value="1000">1,000</option><option value="2500">2,500</option><option value="5000">5,000</option><option value="10000">10,000</option></SelectField>
               {form.strategy === 'rental' ? <>

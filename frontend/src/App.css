@@ -306,10 +306,10 @@
 .studio-property-card dd { margin: 5px 0 0; font-size: 11px; }
 .studio-monte-carlo { padding: 30px !important; border: 1px solid rgba(139,113,63,.25) !important; background: rgba(198,167,106,.055); }
 .studio-case-picker { margin: 0 0 26px; display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--line); }
-.studio-case-picker button { min-height: 44px; display: flex; justify-content: center; align-items: center; gap: 8px; border: 0; border-right: 1px solid var(--line); background: white; color: #787a73; font-size: 8px; font-weight: 600; letter-spacing: .11em; text-transform: uppercase; }
-.studio-case-picker button:last-child { border-right: 0; }
-.studio-case-picker button.is-active { background: var(--forest); color: white; }
+.studio-case-picker > div { min-height: 44px; display: flex; justify-content: center; align-items: center; gap: 8px; border-right: 1px solid var(--line); background: var(--forest); color: white; font-size: 8px; font-weight: 600; letter-spacing: .11em; text-transform: uppercase; }
+.studio-case-picker > div:last-child { border-right: 0; }
 .studio-case-picker svg { width: 14px; }
+.studio-case-note { margin: -14px 0 24px; color: #787a73; font-size: 11px; line-height: 1.55; }
 .studio-risk-actions { margin-top: 26px; padding-top: 22px; display: flex; justify-content: space-between; align-items: center; gap: 20px; border-top: 1px solid var(--line); }
 .studio-risk-actions p { max-width: 470px; margin: 0; display: flex; gap: 9px; color: #767870; font-size: 8px; line-height: 1.6; }
 .studio-risk-actions p svg { width: 14px; flex: none; color: #8b713f; }
@@ -407,8 +407,8 @@
   .studio-submit-actions > a { justify-content: center; }
   .studio-property-card { grid-template-columns: 1fr; }
   .studio-case-picker { grid-template-columns: 1fr; }
-  .studio-case-picker button { border-right: 0; border-bottom: 1px solid var(--line); }
-  .studio-case-picker button:last-child { border-bottom: 0; }
+  .studio-case-picker > div { border-right: 0; border-bottom: 1px solid var(--line); }
+  .studio-case-picker > div:last-child { border-bottom: 0; }
   .studio-risk-actions { align-items: stretch; flex-direction: column; }
   .studio-risk-actions button { justify-content: center; }
   .deal-studio-results { min-height: 620px; padding: 45px 20px; }
