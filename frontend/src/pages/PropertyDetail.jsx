@@ -1,325 +1,209 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Bed, Bath, Square, Calendar, MapPin, Heart, Share2, Phone, Mail, Calculator as CalcIcon } from 'lucide-react';
-import { Button } from '../components/ui/button';
-import { Card, CardContent } from '../components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
+import {
+  ArrowLeft, Bath, Bed, Calculator as CalcIcon, Calendar, Heart,
+  MapPin, Mail, Phone, Share2, Square,
+} from 'lucide-react';
 import { properties, agents } from '../data/mockData';
+
+const formatPrice = (price) => new Intl.NumberFormat('en-US', {
+  style: 'currency', currency: 'USD', maximumFractionDigits: 0,
+}).format(price);
+
+const tabs = ['Overview', 'Features', 'Neighborhood', 'History'];
 
 const PropertyDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [selectedImage, setSelectedImage] = useState(0);
-  const property = properties.find(p => p.id === parseInt(id));
-  const agent = agents[0]; // Assign first agent as listing agent
+  const [activeTab, setActiveTab] = useState('Overview');
+  const property = properties.find((p) => p.id === parseInt(id, 10));
+  const agent = agents[0];
 
   if (!property) {
     return (
-      <div className="min-h-screen bg-gray-50 pt-20 flex items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">Property Not Found</h2>
-          <Button onClick={() => navigate('/search')} className="bg-amber-700 hover:bg-amber-800">
-            Back to Search
-          </Button>
+      <div className="mf-page">
+        <div className="mf-empty" style={{ paddingTop: 220 }}>
+          <h3>Residence not found</h3>
+          <p>This listing may have been withdrawn or privately placed.</p>
+          <button className="mf-btn mf-btn--solid" onClick={() => navigate('/search')}>Back to the collection</button>
         </div>
       </div>
     );
   }
 
-  const formatPrice = (price) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-    }).format(price);
-  };
+  const monthly = (property.price * 0.8 * (0.075 / 12)) / (1 - Math.pow(1 + 0.075 / 12, -360));
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-24">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        {/* Back Button */}
-        <Button 
-          variant="ghost" 
-          onClick={() => navigate('/search')}
-          className="mb-8 hover:bg-gray-100 text-[#002349] hover:text-[#BD9042] font-semibold"
-        >
-          <ArrowLeft className="h-5 w-5 mr-2" />
-          Back to Search
-        </Button>
+    <div className="mf-page">
+      <div className="mf-detail">
+        <button className="mf-back" onClick={() => navigate('/search')}>
+          <ArrowLeft /> Back to the collection
+        </button>
 
-        {/* Image Gallery */}
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-8">
-          <div className="lg:col-span-3">
-            <div className="relative h-[500px] rounded-xl overflow-hidden shadow-lg">
-              <img 
-                src={property.images[selectedImage]} 
-                alt={property.title}
-                className="w-full h-full object-cover"
-              />
+        <div className="mf-detail__layout">
+          <div>
+            {/* Gallery */}
+            <div className="mf-gallery__main">
+              <img src={`${property.images[selectedImage]}?auto=format&fit=crop&w=1800&q=86`} alt={property.title} />
+              <span className="mf-gallery__status">{property.status}</span>
             </div>
-            <div className="grid grid-cols-3 gap-4 mt-4">
+            <div className="mf-gallery__thumbs">
               {property.images.map((image, index) => (
-                <div 
-                  key={index}
+                <button
+                  key={image}
+                  className={selectedImage === index ? 'is-active' : ''}
                   onClick={() => setSelectedImage(index)}
-                  className={`relative h-32 rounded-lg overflow-hidden cursor-pointer border-2 transition-all ${
-                    selectedImage === index ? 'border-amber-700' : 'border-transparent hover:border-gray-300'
-                  }`}
+                  aria-label={`View image ${index + 1}`}
                 >
-                  <img 
-                    src={image} 
-                    alt={`View ${index + 1}`}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
+                  <img src={`${image}?auto=format&fit=crop&w=600&q=70`} alt={`View ${index + 1}`} loading="lazy" />
+                </button>
               ))}
             </div>
-          </div>
 
-          {/* Agent Card */}
-          <div className="lg:col-span-1">
-            <Card className="border border-gray-200 shadow-xl sticky top-28">
-              <CardContent className="p-8">
-                <div className="text-center mb-6">
-                  <img 
-                    src={agent.photo} 
-                    alt={agent.name}
-                    className="w-28 h-28 rounded-full mx-auto mb-4 object-cover border-4 border-[#BD9042]"
-                  />
-                  <h3 className="font-bold text-xl text-[#002349]">{agent.name}</h3>
-                  <p className="text-sm text-[#BD9042] mb-4 font-medium">{agent.title}</p>
-                </div>
-
-                <div className="space-y-3 mb-6">
-                  <Button className="w-full bg-[#002349] hover:bg-[#003366] text-white font-bold tracking-wide py-6">
-                    <Phone className="h-5 w-5 mr-2" />
-                    CALL AGENT
-                  </Button>
-                  <Button variant="outline" className="w-full border-[#002349] text-[#002349] hover:bg-[#002349] hover:text-white font-semibold py-6">
-                    <Mail className="h-5 w-5 mr-2" />
-                    Send Email
-                  </Button>
-                  <Button variant="outline" className="w-full border-[#002349] text-[#002349] hover:bg-[#002349] hover:text-white font-semibold py-6">
-                    Schedule Tour
-                  </Button>
-                </div>
-
-                <div className="pt-6 border-t border-gray-200">
-                  <Button 
-                    variant="ghost" 
-                    className="w-full justify-start text-[#002349] hover:text-[#BD9042] hover:bg-transparent font-semibold"
-                    onClick={() => navigate('/investment-calculator')}
-                  >
-                    <CalcIcon className="h-5 w-5 mr-2" />
-                    Analyze Investment
-                  </Button>
-                  <Button variant="ghost" className="w-full justify-start text-[#002349] hover:text-[#BD9042] hover:bg-transparent font-semibold">
-                    <Heart className="h-5 w-5 mr-2" />
-                    Save Property
-                  </Button>
-                  <Button variant="ghost" className="w-full justify-start text-[#002349] hover:text-[#BD9042] hover:bg-transparent font-semibold">
-                    <Share2 className="h-5 w-5 mr-2" />
-                    Share
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-
-        {/* Property Details */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2">
             {/* Header */}
-            <div className="bg-white rounded-lg shadow-xl p-10 mb-8 border border-gray-100">
-              <div className="flex justify-between items-start mb-6">
-                <div>
-                  <h1 className="text-5xl font-bold text-[#BD9042] mb-3">
-                    {formatPrice(property.price)}
-                  </h1>
-                  <div className="flex items-center text-gray-600">
-                    <MapPin className="h-6 w-6 mr-2 text-[#002349]" />
-                    <span className="text-xl">
-                      {property.address}, {property.city}, {property.state} {property.zip}
-                    </span>
-                  </div>
-                </div>
-                <div className="bg-[#002349] text-white px-6 py-2 rounded text-sm font-bold tracking-wide">
-                  {property.status}
-                </div>
+            <div className="mf-detail__header">
+              <div>
+                <p className="eyebrow eyebrow--bare">{property.propertyType} — {property.city}, {property.state}</p>
+                <h1>{formatPrice(property.price)}</h1>
+                <p><MapPin /> {property.address}, {property.city}, {property.state} {property.zip}</p>
               </div>
+            </div>
 
-              <div className="grid grid-cols-4 gap-8 mt-8 pt-8 border-t border-gray-200">
-                <div className="text-center">
-                  <div className="w-14 h-14 bg-[#002349] rounded-full flex justify-center items-center mb-3 mx-auto">
-                    <Bed className="h-7 w-7 text-[#BD9042]" />
-                  </div>
-                  <div className="text-3xl font-bold text-[#002349]">{property.beds}</div>
-                  <div className="text-sm text-gray-600 font-medium">Bedrooms</div>
-                </div>
-                <div className="text-center">
-                  <div className="w-14 h-14 bg-[#002349] rounded-full flex justify-center items-center mb-3 mx-auto">
-                    <Bath className="h-7 w-7 text-[#BD9042]" />
-                  </div>
-                  <div className="text-3xl font-bold text-[#002349]">{property.baths}</div>
-                  <div className="text-sm text-gray-600 font-medium">Bathrooms</div>
-                </div>
-                <div className="text-center">
-                  <div className="w-14 h-14 bg-[#002349] rounded-full flex justify-center items-center mb-3 mx-auto">
-                    <Square className="h-7 w-7 text-[#BD9042]" />
-                  </div>
-                  <div className="text-3xl font-bold text-[#002349]">{property.sqft.toLocaleString()}</div>
-                  <div className="text-sm text-gray-600 font-medium">Sqft</div>
-                </div>
-                <div className="text-center">
-                  <div className="w-14 h-14 bg-[#002349] rounded-full flex justify-center items-center mb-3 mx-auto">
-                    <Calendar className="h-7 w-7 text-[#BD9042]" />
-                  </div>
-                  <div className="text-3xl font-bold text-[#002349]">{property.yearBuilt}</div>
-                  <div className="text-sm text-gray-600 font-medium">Year Built</div>
-                </div>
-              </div>
+            {/* Specs */}
+            <div className="mf-specs">
+              <div><Bed /><strong>{property.beds}</strong><span>Bedrooms</span></div>
+              <div><Bath /><strong>{property.baths}</strong><span>Bathrooms</span></div>
+              <div><Square /><strong>{property.sqft.toLocaleString()}</strong><span>Sq ft</span></div>
+              <div><Calendar /><strong>{property.yearBuilt}</strong><span>Year built</span></div>
             </div>
 
             {/* Tabs */}
-            <Tabs defaultValue="overview" className="bg-white rounded-xl shadow-md p-8">
-              <TabsList className="grid w-full grid-cols-4 mb-6">
-                <TabsTrigger value="overview">Overview</TabsTrigger>
-                <TabsTrigger value="features">Features</TabsTrigger>
-                <TabsTrigger value="neighborhood">Neighborhood</TabsTrigger>
-                <TabsTrigger value="history">History</TabsTrigger>
-              </TabsList>
+            <div className="mf-tabs">
+              <div className="mf-tabs__list" role="tablist">
+                {tabs.map((tab) => (
+                  <button
+                    key={tab}
+                    role="tab"
+                    aria-selected={activeTab === tab}
+                    className={activeTab === tab ? 'is-active' : ''}
+                    onClick={() => setActiveTab(tab)}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
 
-              <TabsContent value="overview" className="space-y-6">
-                <div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-4">Description</h3>
-                  <p className="text-gray-700 leading-relaxed">{property.description}</p>
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-4">Property Details</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="flex justify-between py-2 border-b border-gray-200">
-                      <span className="text-gray-600">Property Type:</span>
-                      <span className="font-semibold text-gray-900">{property.propertyType}</span>
+              <div className="mf-tabs__panel">
+                {activeTab === 'Overview' && (
+                  <>
+                    <h3>Description</h3>
+                    <p>{property.description}</p>
+                    <h3>Property details</h3>
+                    <div className="mf-kv">
+                      <div><span>Property type</span><strong>{property.propertyType}</strong></div>
+                      <div><span>Year built</span><strong>{property.yearBuilt}</strong></div>
+                      {property.lotSize && (
+                        <div><span>Lot size</span><strong>{property.lotSize.toLocaleString()} sqft</strong></div>
+                      )}
+                      <div><span>Price / sqft</span><strong>${Math.round(property.price / property.sqft)}</strong></div>
                     </div>
-                    <div className="flex justify-between py-2 border-b border-gray-200">
-                      <span className="text-gray-600">Year Built:</span>
-                      <span className="font-semibold text-gray-900">{property.yearBuilt}</span>
-                    </div>
-                    {property.lotSize && (
-                      <div className="flex justify-between py-2 border-b border-gray-200">
-                        <span className="text-gray-600">Lot Size:</span>
-                        <span className="font-semibold text-gray-900">{property.lotSize.toLocaleString()} sqft</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between py-2 border-b border-gray-200">
-                      <span className="text-gray-600">Price/Sqft:</span>
-                      <span className="font-semibold text-gray-900">${Math.round(property.price / property.sqft)}</span>
-                    </div>
-                  </div>
-                </div>
-              </TabsContent>
+                  </>
+                )}
 
-              <TabsContent value="features" className="space-y-4">
-                <h3 className="text-xl font-bold text-gray-900 mb-4">Property Features</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  {property.features.map((feature, index) => (
-                    <div key={index} className="flex items-center space-x-2">
-                      <div className="w-2 h-2 bg-amber-700 rounded-full"></div>
-                      <span className="text-gray-700">{feature}</span>
-                    </div>
-                  ))}
-                </div>
-              </TabsContent>
+                {activeTab === 'Features' && (
+                  <>
+                    <h3>Property features</h3>
+                    <ul className="mf-features">
+                      {property.features.map((feature) => <li key={feature}>{feature}</li>)}
+                    </ul>
+                  </>
+                )}
 
-              <TabsContent value="neighborhood" className="space-y-6">
-                <div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-4">Neighborhood Info</h3>
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-center py-3 border-b border-gray-200">
-                      <span className="text-gray-700">School Rating</span>
-                      <span className="font-semibold text-gray-900">{property.schoolRating}/10</span>
+                {activeTab === 'Neighborhood' && (
+                  <>
+                    <h3>Neighborhood intelligence</h3>
+                    <div className="mf-kv">
+                      <div><span>School rating</span><strong>{property.schoolRating}/10</strong></div>
+                      <div><span>Walk score</span><strong>{property.walkScore}/100</strong></div>
                     </div>
-                    <div className="flex justify-between items-center py-3 border-b border-gray-200">
-                      <span className="text-gray-700">Walk Score</span>
-                      <span className="font-semibold text-gray-900">{property.walkScore}/100</span>
-                    </div>
-                  </div>
-                </div>
-              </TabsContent>
+                  </>
+                )}
 
-              <TabsContent value="history" className="space-y-6">
-                <div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-4">Price History</h3>
-                  <div className="space-y-3">
-                    {property.priceHistory.map((entry, index) => (
-                      <div key={index} className="flex justify-between py-2 border-b border-gray-200">
-                        <span className="text-gray-700">{entry.date} - {entry.event}</span>
-                        <span className="font-semibold text-gray-900">{formatPrice(entry.price)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-4">Tax History</h3>
-                  <div className="space-y-3">
-                    {property.taxHistory.map((entry, index) => (
-                      <div key={index} className="flex justify-between py-2 border-b border-gray-200">
-                        <span className="text-gray-700">{entry.year}</span>
-                        <span className="font-semibold text-gray-900">{formatPrice(entry.amount)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </TabsContent>
-            </Tabs>
+                {activeTab === 'History' && (
+                  <>
+                    <h3>Price history</h3>
+                    <div className="mf-kv">
+                      {property.priceHistory.map((entry) => (
+                        <div key={entry.date}><span>{entry.date} — {entry.event}</span><strong>{formatPrice(entry.price)}</strong></div>
+                      ))}
+                    </div>
+                    <h3 style={{ marginTop: 30 }}>Tax history</h3>
+                    <div className="mf-kv">
+                      {property.taxHistory.map((entry) => (
+                        <div key={entry.year}><span>{entry.year}</span><strong>{formatPrice(entry.amount)}</strong></div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Sidebar */}
-          <div className="lg:col-span-1">
-            <Card className="border-none shadow-lg mb-6">
-              <CardContent className="p-6">
-                <h3 className="text-lg font-bold text-gray-900 mb-4">Mortgage Calculator</h3>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Purchase Price</label>
-                    <input 
-                      type="text" 
-                      value={formatPrice(property.price)}
-                      readOnly
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-900"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Down Payment (20%)</label>
-                    <input 
-                      type="text" 
-                      value={formatPrice(property.price * 0.2)}
-                      readOnly
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-900"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Interest Rate</label>
-                    <input 
-                      type="text" 
-                      value="7.5%"
-                      readOnly
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-900"
-                    />
-                  </div>
-                  <div className="pt-4 border-t border-gray-200">
-                    <div className="flex justify-between mb-2">
-                      <span className="text-gray-700">Est. Monthly Payment</span>
-                      <span className="text-xl font-bold text-amber-700">
-                        {formatPrice((property.price * 0.8 * 0.075 / 12) / (1 - Math.pow(1 + 0.075/12, -360)))}
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-500">Principal & Interest only</p>
-                  </div>
+          <div>
+            <div className="mf-agent-panel">
+              <div className="mf-agent-panel__head">
+                <img src={agent.photo} alt={agent.name} />
+                <div>
+                  <strong>{agent.name}</strong>
+                  <small>{agent.title}</small>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+              <div className="mf-agent-panel__actions">
+                <a className="mf-btn mf-btn--solid" href={`tel:${agent.phone.replace(/[^\d+]/g, '')}`} style={{ justifyContent: 'center' }}>
+                  <Phone size={15} /> Call advisor
+                </a>
+                <a className="mf-btn" href={`mailto:${agent.email}`} style={{ justifyContent: 'center' }}>
+                  <Mail size={15} /> Send email
+                </a>
+                <button className="mf-btn" style={{ justifyContent: 'center' }}>
+                  <Calendar size={15} /> Schedule tour
+                </button>
+              </div>
+              <div className="mf-agent-panel__links">
+                <button onClick={() => navigate('/investment-calculator')}>
+                  <CalcIcon /> Analyze as investment
+                </button>
+                <button><Heart /> Save residence</button>
+                <button><Share2 /> Share</button>
+              </div>
+            </div>
+
+            <div className="mf-mortgage">
+              <h3><CalcIcon /> Mortgage estimate</h3>
+              <div className="mf-mortgage__body">
+                <label>
+                  <span>Purchase price</span>
+                  <input type="text" value={formatPrice(property.price)} readOnly />
+                </label>
+                <label>
+                  <span>Down payment (20%)</span>
+                  <input type="text" value={formatPrice(property.price * 0.2)} readOnly />
+                </label>
+                <label>
+                  <span>Interest rate</span>
+                  <input type="text" value="7.5%" readOnly />
+                </label>
+              </div>
+              <div className="mf-mortgage__total">
+                <div>
+                  <span>Est. monthly payment</span>
+                  <strong>{formatPrice(monthly)}</strong>
+                </div>
+                <small>Principal &amp; interest only. Model the full deal in the Deal Studio.</small>
+              </div>
+            </div>
           </div>
         </div>
       </div>

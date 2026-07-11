@@ -1,13 +1,21 @@
 import React, { useEffect, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowUpRight, Diamond, Menu, Search, X } from 'lucide-react';
+import { ArrowUpRight, Diamond, LayoutGrid, Menu, X } from 'lucide-react';
 
 const navItems = [
   { label: 'Residences', to: '/search' },
   { label: 'Rentals', to: '/search?status=rent' },
-  { label: 'Deal Analysis', to: '/investment-calculator' },
+  { label: 'Intelligence', to: '/investment-calculator' },
   { label: 'Advisors', to: '/agents' },
-  { label: 'Maison', to: '/about' },
+  { label: 'The Firm', to: '/about' },
+];
+
+const menuItems = [
+  { index: '01', label: 'Residences', to: '/search' },
+  { index: '02', label: 'Rentals', to: '/search?status=rent' },
+  { index: '03', label: 'Deal Intelligence', to: '/investment-calculator' },
+  { index: '04', label: 'Advisors', to: '/agents' },
+  { index: '05', label: 'The Firm', to: '/about' },
 ];
 
 const Navbar = () => {
@@ -19,11 +27,10 @@ const Navbar = () => {
 
   useEffect(() => {
     if (!isHomePage) {
-      setIsScrolled(false);
+      setIsScrolled(true);
       return undefined;
     }
-
-    const onScroll = () => setIsScrolled(window.scrollY > 48);
+    const onScroll = () => setIsScrolled(window.scrollY > 40);
     onScroll();
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
@@ -34,64 +41,83 @@ const Navbar = () => {
     return () => { document.body.style.overflow = ''; };
   }, [isMenuOpen]);
 
+  useEffect(() => { setIsMenuOpen(false); }, [pathname]);
+
   const closeAndNavigate = (to) => {
     setIsMenuOpen(false);
     navigate(to);
   };
 
   return (
-    <header className={`luxury-nav ${!isHomePage || isScrolled || isMenuOpen ? 'luxury-nav--solid' : ''}`}>
-      <div className="luxury-nav__inner">
-        <Link to="/" className="luxury-wordmark" aria-label="DiamondEcho home">
-          <span className="luxury-wordmark__mark"><Diamond aria-hidden="true" /></span>
-          <span>
-            <strong>DIAMOND ECHO</strong>
-            <small>PRIVATE REAL ESTATE</small>
-          </span>
-        </Link>
+    <>
+      <header className={`mf-nav ${isScrolled || isMenuOpen ? 'mf-nav--solid' : ''}`}>
+        <div className="mf-nav__inner">
+          <Link to="/" className="mf-wordmark" aria-label="DiamondEcho home" onClick={() => setIsMenuOpen(false)}>
+            <span className="mf-wordmark__mark"><Diamond aria-hidden="true" /></span>
+            <span>
+              <strong>DIAMOND ECHO</strong>
+              <small>PRIVATE REAL ESTATE</small>
+            </span>
+          </Link>
 
-        <nav className="luxury-nav__links" aria-label="Primary navigation">
-          {navItems.map((item) => (
-            <NavLink key={item.label} to={item.to}>{item.label}</NavLink>
-          ))}
-        </nav>
-
-        <div className="luxury-nav__actions">
-          <button className="icon-button" onClick={() => navigate('/search')} aria-label="Search properties">
-            <Search size={18} />
-          </button>
-          <button className="nav-consultation" onClick={() => navigate('/agents')}>
-            Private consultation <ArrowUpRight size={15} />
-          </button>
-        </div>
-
-        <button
-          className="luxury-nav__menu"
-          onClick={() => setIsMenuOpen((open) => !open)}
-          aria-expanded={isMenuOpen}
-          aria-controls="mobile-navigation"
-          aria-label={isMenuOpen ? 'Close menu' : 'Open menu'}
-        >
-          {isMenuOpen ? <X /> : <Menu />}
-        </button>
-      </div>
-
-      {isMenuOpen && (
-        <div id="mobile-navigation" className="mobile-luxury-menu">
-          <p>Private real estate, precisely considered.</p>
-          <nav aria-label="Mobile navigation">
-            {navItems.map((item, index) => (
-              <button key={item.label} onClick={() => closeAndNavigate(item.to)}>
-                <span>0{index + 1}</span>{item.label}<ArrowUpRight />
-              </button>
+          <nav className="mf-nav__links" aria-label="Primary navigation">
+            {navItems.map((item) => (
+              <NavLink key={item.label} to={item.to}>{item.label}</NavLink>
             ))}
           </nav>
-          <button className="mobile-luxury-menu__cta" onClick={() => closeAndNavigate('/agents')}>
-            Request a private consultation
-          </button>
+
+          <div className="mf-nav__actions">
+            <button className="mf-nav__portal" onClick={() => navigate('/search')}>
+              <LayoutGrid size={14} /> Client portal
+            </button>
+            <button
+              className="mf-nav__burger"
+              onClick={() => setIsMenuOpen((open) => !open)}
+              aria-expanded={isMenuOpen}
+              aria-controls="mf-overlay-menu"
+              aria-label={isMenuOpen ? 'Close menu' : 'Open menu'}
+            >
+              {isMenuOpen ? <X /> : <Menu />} {isMenuOpen ? 'Close' : 'Menu'}
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {isMenuOpen && (
+        <div id="mf-overlay-menu" className="mf-menu" role="dialog" aria-label="Site menu">
+          <div className="mf-menu__primary">
+            {menuItems.map((item) => (
+              <a
+                key={item.label}
+                href={item.to}
+                onClick={(event) => { event.preventDefault(); closeAndNavigate(item.to); }}
+              >
+                <span>{item.index}</span>{item.label}<ArrowUpRight />
+              </a>
+            ))}
+          </div>
+          <div className="mf-menu__secondary">
+            <div>
+              <h4>Self-service portal</h4>
+              <nav>
+                <button onClick={() => closeAndNavigate('/search')}>Search the collection</button>
+                <button onClick={() => closeAndNavigate('/investment-calculator')}>Run a deal analysis</button>
+                <button onClick={() => { setIsMenuOpen(false); window.dispatchEvent(new CustomEvent('open-diamond-assistant')); }}>
+                  Ask the concierge
+                </button>
+                <button onClick={() => closeAndNavigate('/agents')}>Request representation</button>
+              </nav>
+            </div>
+            <div className="mf-menu__contact">
+              <h4>Contact</h4>
+              <p><a href="mailto:concierge@diamondecho.com">concierge@diamondecho.com</a></p>
+              <p><a href="tel:+12125550188">+1 212 555 0188</a></p>
+              <p>New York · Miami · Los Angeles</p>
+            </div>
+          </div>
         </div>
       )}
-    </header>
+    </>
   );
 };
 

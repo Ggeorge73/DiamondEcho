@@ -1,269 +1,175 @@
-import React, { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Search as SearchIcon, SlidersHorizontal, MapPin, X } from 'lucide-react';
-import { Button } from '../components/ui/button';
-import { Card, CardContent } from '../components/ui/card';
-import { Input } from '../components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { ArrowUpRight, Search as SearchIcon, SlidersHorizontal, X } from 'lucide-react';
 import { properties } from '../data/mockData';
+
+const formatPrice = (price) => new Intl.NumberFormat('en-US', {
+  style: 'currency', currency: 'USD', maximumFractionDigits: 0,
+}).format(price);
+
+const emptyFilters = {
+  propertyType: 'all', minPrice: '', maxPrice: '', beds: '', baths: '', minSqft: '', maxSqft: '',
+};
 
 const Search = () => {
   const navigate = useNavigate();
-  const [searchTerm, setSearchTerm] = useState('');
+  const [params] = useSearchParams();
+  const isRentals = params.get('status') === 'rent';
+  const [searchTerm, setSearchTerm] = useState(params.get('q') || '');
   const [showFilters, setShowFilters] = useState(false);
-  const [filters, setFilters] = useState({
-    propertyType: 'all',
-    minPrice: '',
-    maxPrice: '',
-    beds: '',
-    baths: '',
-    minSqft: '',
-    maxSqft: ''
-  });
+  const [filters, setFilters] = useState(emptyFilters);
 
-  const formatPrice = (price) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-    }).format(price);
-  };
+  useEffect(() => { setSearchTerm(params.get('q') || ''); }, [params]);
 
-  const filteredProperties = useMemo(() => {
-    return properties.filter(property => {
-      const matchesSearch = searchTerm === '' || 
-        property.city.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        property.state.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        property.zip.includes(searchTerm) ||
-        property.title.toLowerCase().includes(searchTerm.toLowerCase());
+  const filteredProperties = useMemo(() => properties.filter((property) => {
+    const term = searchTerm.toLowerCase();
+    const matchesSearch = term === ''
+      || property.city.toLowerCase().includes(term)
+      || property.state.toLowerCase().includes(term)
+      || property.zip.includes(searchTerm)
+      || property.title.toLowerCase().includes(term)
+      || property.features.some((feature) => feature.toLowerCase().includes(term));
 
-      const matchesType = filters.propertyType === 'all' || property.propertyType === filters.propertyType;
-      const matchesMinPrice = !filters.minPrice || property.price >= parseInt(filters.minPrice);
-      const matchesMaxPrice = !filters.maxPrice || property.price <= parseInt(filters.maxPrice);
-      const matchesBeds = !filters.beds || property.beds >= parseInt(filters.beds);
-      const matchesBaths = !filters.baths || property.baths >= parseFloat(filters.baths);
-      const matchesMinSqft = !filters.minSqft || property.sqft >= parseInt(filters.minSqft);
-      const matchesMaxSqft = !filters.maxSqft || property.sqft <= parseInt(filters.maxSqft);
+    const matchesType = filters.propertyType === 'all' || property.propertyType === filters.propertyType;
+    const matchesMinPrice = !filters.minPrice || property.price >= parseInt(filters.minPrice, 10);
+    const matchesMaxPrice = !filters.maxPrice || property.price <= parseInt(filters.maxPrice, 10);
+    const matchesBeds = !filters.beds || property.beds >= parseInt(filters.beds, 10);
+    const matchesBaths = !filters.baths || property.baths >= parseFloat(filters.baths);
+    const matchesMinSqft = !filters.minSqft || property.sqft >= parseInt(filters.minSqft, 10);
+    const matchesMaxSqft = !filters.maxSqft || property.sqft <= parseInt(filters.maxSqft, 10);
 
-      return matchesSearch && matchesType && matchesMinPrice && matchesMaxPrice && 
-             matchesBeds && matchesBaths && matchesMinSqft && matchesMaxSqft;
-    });
-  }, [searchTerm, filters]);
+    return matchesSearch && matchesType && matchesMinPrice && matchesMaxPrice
+      && matchesBeds && matchesBaths && matchesMinSqft && matchesMaxSqft;
+  }), [searchTerm, filters]);
 
-  const clearFilters = () => {
-    setFilters({
-      propertyType: 'all',
-      minPrice: '',
-      maxPrice: '',
-      beds: '',
-      baths: '',
-      minSqft: '',
-      maxSqft: ''
-    });
-    setSearchTerm('');
-  };
+  const clearFilters = () => { setFilters(emptyFilters); setSearchTerm(''); };
+  const setFilter = (key) => (event) => setFilters({ ...filters, [key]: event.target.value });
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-24">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        {/* Search Header */}
-        <div className="bg-white rounded-lg shadow-lg p-8 mb-8">
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="flex-1 relative">
-              <SearchIcon className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-              <Input
-                type="text"
-                placeholder="Search by city, zip code, or address..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-12 py-6 text-lg border-gray-300 focus:ring-[#002349] focus:border-[#002349]"
-              />
-            </div>
-            <Button 
-              onClick={() => setShowFilters(!showFilters)}
-              variant="outline"
-              className="border-[#002349] text-[#002349] hover:bg-[#002349] hover:text-white py-6 px-8 font-bold tracking-wide"
-            >
-              <SlidersHorizontal className="h-5 w-5 mr-2" />
-              FILTERS
-            </Button>
-          </div>
-
-          {/* Filters Panel */}
-          {showFilters && (
-            <div className="mt-6 pt-6 border-t border-gray-200">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Property Type</label>
-                  <Select value={filters.propertyType} onValueChange={(value) => setFilters({...filters, propertyType: value})}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Types</SelectItem>
-                      <SelectItem value="Single Family">Single Family</SelectItem>
-                      <SelectItem value="Condo">Condo</SelectItem>
-                      <SelectItem value="Townhouse">Townhouse</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Min Price</label>
-                  <Input
-                    type="number"
-                    placeholder="No min"
-                    value={filters.minPrice}
-                    onChange={(e) => setFilters({...filters, minPrice: e.target.value})}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Max Price</label>
-                  <Input
-                    type="number"
-                    placeholder="No max"
-                    value={filters.maxPrice}
-                    onChange={(e) => setFilters({...filters, maxPrice: e.target.value})}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Bedrooms</label>
-                  <Select value={filters.beds} onValueChange={(value) => setFilters({...filters, beds: value})}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Any" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">Any</SelectItem>
-                      <SelectItem value="1">1+</SelectItem>
-                      <SelectItem value="2">2+</SelectItem>
-                      <SelectItem value="3">3+</SelectItem>
-                      <SelectItem value="4">4+</SelectItem>
-                      <SelectItem value="5">5+</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Bathrooms</label>
-                  <Select value={filters.baths} onValueChange={(value) => setFilters({...filters, baths: value})}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Any" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">Any</SelectItem>
-                      <SelectItem value="1">1+</SelectItem>
-                      <SelectItem value="2">2+</SelectItem>
-                      <SelectItem value="3">3+</SelectItem>
-                      <SelectItem value="4">4+</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Min Sqft</label>
-                  <Input
-                    type="number"
-                    placeholder="No min"
-                    value={filters.minSqft}
-                    onChange={(e) => setFilters({...filters, minSqft: e.target.value})}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Max Sqft</label>
-                  <Input
-                    type="number"
-                    placeholder="No max"
-                    value={filters.maxSqft}
-                    onChange={(e) => setFilters({...filters, maxSqft: e.target.value})}
-                  />
-                </div>
-
-                <div className="flex items-end">
-                  <Button 
-                    onClick={clearFilters}
-                    variant="outline"
-                    className="w-full border-gray-300 hover:border-red-500 hover:text-red-500"
-                  >
-                    <X className="h-4 w-4 mr-2" />
-                    Clear All
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Results Header */}
-        <div className="mb-8">
-          <h2 className="text-3xl font-bold text-[#002349] tracking-tight">
-            {filteredProperties.length} Properties Found
-          </h2>
-          <p className="text-gray-600 mt-2 text-lg">
-            {searchTerm && `Results for "${searchTerm}"`}
-          </p>
-        </div>
-
-        {/* Property Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {filteredProperties.map((property) => (
-            <Card 
-              key={property.id} 
-              className="cursor-pointer border border-gray-200 shadow-md hover:shadow-2xl transition-all duration-500 hover:-translate-y-2 overflow-hidden group"
-              onClick={() => navigate(`/property/${property.id}`)}
-            >
-              <div className="relative h-64 overflow-hidden">
-                <img 
-                  src={property.images[0]} 
-                  alt={property.title}
-                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
-                />
-                <div className="absolute top-4 right-4 bg-[#002349] text-white px-4 py-1.5 rounded text-xs font-bold tracking-wide">
-                  {property.status}
-                </div>
-              </div>
-              <CardContent className="p-6">
-                <h3 className="text-2xl font-bold text-[#BD9042] mb-3">
-                  {formatPrice(property.price)}
-                </h3>
-                <p className="text-sm text-gray-600 mb-3 flex items-center space-x-4">
-                  <span>{property.beds} bd</span>
-                  <span>•</span>
-                  <span>{property.baths} ba</span>
-                  <span>•</span>
-                  <span>{property.sqft.toLocaleString()} sqft</span>
-                </p>
-                <p className="text-sm text-[#002349] font-semibold mb-2 line-clamp-2">{property.title}</p>
-                <div className="flex items-start text-gray-500">
-                  <MapPin className="h-4 w-4 mr-1 mt-0.5 flex-shrink-0" />
-                  <span className="text-sm">
-                    {property.address}, {property.city}, {property.state} {property.zip}
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
-        {filteredProperties.length === 0 && (
-          <div className="text-center py-16">
-            <div className="text-gray-400 mb-4">
-              <SearchIcon className="h-16 w-16 mx-auto" />
-            </div>
-            <h3 className="text-2xl font-bold text-[#002349] mb-2">
-              No properties found
-            </h3>
-            <p className="text-gray-600 mb-8 text-lg">
-              Try adjusting your search criteria or filters
+    <div className="mf-page">
+      <section className="mf-page-hero">
+        <div className="mf-page-hero__inner">
+          <div>
+            <p className="eyebrow">{isRentals ? '02 — Rentals' : '01 — Residences'}</p>
+            <h1>{isRentals ? <>Curated <em>rentals.</em></> : <>The private <em>collection.</em></>}</h1>
+            <p className="mf-page-hero__lede">
+              {isRentals
+                ? 'Furnished residences and executive leases held to sale-grade standards — inspected, managed, and represented end to end.'
+                : 'Every residence in the collection, searchable on your own terms. Filter by market, price, size, and character — no registration required.'}
             </p>
-            <Button onClick={clearFilters} className="bg-[#002349] hover:bg-[#003366] text-white font-bold tracking-wide px-8 py-6">
-              Clear Filters
-            </Button>
           </div>
-        )}
+          <div className="mf-page-hero__meta">
+            <strong>{properties.length}</strong>
+            <span>Listings live</span>
+          </div>
+        </div>
+      </section>
+
+      <div className="mf-searchbar">
+        <div>
+          <SearchIcon />
+          <input
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            placeholder="City, state, zip, feature, or listing name…"
+            aria-label="Search properties"
+          />
+        </div>
+        <button className={showFilters ? 'is-active' : ''} onClick={() => setShowFilters(!showFilters)}>
+          <SlidersHorizontal /> Filters
+        </button>
+        <button onClick={() => setShowFilters(false)}>
+          Search <ArrowUpRight />
+        </button>
       </div>
+
+      {showFilters && (
+        <div className="mf-filters">
+          <label>
+            <span>Property type</span>
+            <select value={filters.propertyType} onChange={setFilter('propertyType')}>
+              <option value="all">All types</option>
+              <option value="Single Family">Single family</option>
+              <option value="Condo">Condo</option>
+              <option value="Townhouse">Townhouse</option>
+            </select>
+          </label>
+          <label>
+            <span>Min price</span>
+            <input type="number" placeholder="No min" value={filters.minPrice} onChange={setFilter('minPrice')} />
+          </label>
+          <label>
+            <span>Max price</span>
+            <input type="number" placeholder="No max" value={filters.maxPrice} onChange={setFilter('maxPrice')} />
+          </label>
+          <label>
+            <span>Bedrooms</span>
+            <select value={filters.beds} onChange={setFilter('beds')}>
+              <option value="">Any</option>
+              {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}+</option>)}
+            </select>
+          </label>
+          <label>
+            <span>Bathrooms</span>
+            <select value={filters.baths} onChange={setFilter('baths')}>
+              <option value="">Any</option>
+              {[1, 2, 3, 4].map((n) => <option key={n} value={n}>{n}+</option>)}
+            </select>
+          </label>
+          <label>
+            <span>Min sqft</span>
+            <input type="number" placeholder="No min" value={filters.minSqft} onChange={setFilter('minSqft')} />
+          </label>
+          <label>
+            <span>Max sqft</span>
+            <input type="number" placeholder="No max" value={filters.maxSqft} onChange={setFilter('maxSqft')} />
+          </label>
+          <button className="mf-filters__clear" onClick={clearFilters}>
+            <X /> Clear all
+          </button>
+        </div>
+      )}
+
+      <div className="mf-results-head">
+        <h2><i>{filteredProperties.length}</i> {filteredProperties.length === 1 ? 'residence' : 'residences'} found</h2>
+        {searchTerm && <p>Results for “{searchTerm}”</p>}
+      </div>
+
+      <div className="mf-grid">
+        {filteredProperties.map((property, index) => (
+          <article
+            key={property.id}
+            className="mf-prop-card"
+            style={{ animationDelay: `${index * 0.05}s` }}
+            onClick={() => navigate(`/property/${property.id}`)}
+            onKeyDown={(event) => event.key === 'Enter' && navigate(`/property/${property.id}`)}
+            role="button"
+            tabIndex={0}
+          >
+            <div className="mf-prop-card__media">
+              <img src={`${property.images[0]}?auto=format&fit=crop&w=1200&q=82`} alt={property.title} loading="lazy" />
+              <span className="mf-prop-card__status">{property.status}</span>
+            </div>
+            <div className="mf-prop-card__body">
+              <small>{property.address}, {property.city}, {property.state} {property.zip}</small>
+              <h3>{property.title}</h3>
+              <div className="mf-prop-card__meta">
+                <strong>{formatPrice(property.price)}</strong>
+                <span>{property.beds} bd · {property.baths} ba · {property.sqft.toLocaleString()} sf</span>
+              </div>
+            </div>
+          </article>
+        ))}
+      </div>
+
+      {filteredProperties.length === 0 && (
+        <div className="mf-empty">
+          <SearchIcon />
+          <h3>No residences found</h3>
+          <p>Try adjusting your search criteria or filters.</p>
+          <button className="mf-btn mf-btn--solid" onClick={clearFilters}>Clear filters</button>
+        </div>
+      )}
     </div>
   );
 };

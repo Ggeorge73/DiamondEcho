@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Italiana&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@200;300;400;500;600&family=Inter:wght@300;400;500;600&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,34 +6,38 @@
 
 @layer base {
   :root {
-    --ink: #101713;
-    --forest: #14251d;
-    --forest-light: #20382c;
-    --ivory: #f3f0e8;
-    --paper: #faf8f3;
-    --champagne: #c6a76a;
-    --champagne-light: #d9c28f;
-    --stone: #7b7d76;
-    --line: rgba(16, 23, 19, 0.16);
-    --background: 42 33% 97%;
-    --foreground: 140 18% 8%;
-    --card: 42 33% 97%;
-    --card-foreground: 140 18% 8%;
-    --popover: 42 33% 97%;
-    --popover-foreground: 140 18% 8%;
-    --primary: 146 29% 11%;
-    --primary-foreground: 42 33% 97%;
-    --secondary: 43 26% 92%;
-    --secondary-foreground: 140 18% 8%;
-    --muted: 43 20% 92%;
-    --muted-foreground: 90 3% 45%;
-    --accent: 39 43% 60%;
-    --accent-foreground: 140 18% 8%;
-    --destructive: 0 65% 47%;
+    /* DiamondEcho -- Montfort-inspired steel & abyss system */
+    --abyss: #060c13;
+    --navy: #0a141f;
+    --panel: #0f1c2a;
+    --panel-raised: #142434;
+    --steel: #2d628c;
+    --steel-bright: #5e9cd0;
+    --steel-soft: #a9c7e0;
+    --ice: #e5edf5;
+    --mist: #8ba0b3;
+    --line: rgba(229, 237, 245, 0.13);
+    --line-strong: rgba(229, 237, 245, 0.28);
+
+    --background: 211 41% 8%;
+    --foreground: 210 33% 93%;
+    --card: 209 47% 11%;
+    --card-foreground: 210 33% 93%;
+    --popover: 209 47% 11%;
+    --popover-foreground: 210 33% 93%;
+    --primary: 207 51% 36%;
+    --primary-foreground: 210 33% 96%;
+    --secondary: 209 44% 14%;
+    --secondary-foreground: 210 33% 93%;
+    --muted: 209 44% 14%;
+    --muted-foreground: 209 21% 62%;
+    --accent: 208 54% 59%;
+    --accent-foreground: 211 41% 8%;
+    --destructive: 0 62% 52%;
     --destructive-foreground: 0 0% 98%;
-    --border: 40 12% 82%;
-    --input: 40 12% 82%;
-    --ring: 39 43% 60%;
+    --border: 210 30% 20%;
+    --input: 210 30% 20%;
+    --ring: 208 54% 59%;
     --radius: 0;
   }
 
@@ -41,17 +45,21 @@
   html { scroll-behavior: smooth; }
   body {
     margin: 0;
-    background: var(--paper);
-    color: var(--ink);
-    font-family: 'DM Sans', Arial, sans-serif;
+    background: var(--navy);
+    color: var(--ice);
+    font-family: 'Inter', Arial, sans-serif;
     font-weight: 400;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
-  button, input { font: inherit; }
+  button, input, select, textarea { font: inherit; }
   button { cursor: pointer; }
-  ::selection { background: var(--champagne); color: var(--ink); }
-  :focus-visible { outline: 2px solid var(--champagne); outline-offset: 4px; }
+  ::selection { background: var(--steel); color: var(--ice); }
+  :focus-visible { outline: 2px solid var(--steel-bright); outline-offset: 4px; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--abyss); }
+  ::-webkit-scrollbar-thumb { background: #1d3a52; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--steel); }
 }
 
 @media (prefers-reduced-motion: reduce) {

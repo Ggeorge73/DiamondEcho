@@ -1,259 +1,605 @@
-import React from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ArrowDown, ArrowRight, ArrowUpRight, BarChart3,
-  ChevronLeft, ChevronRight, KeyRound, Landmark,
-  MessageCircle, Search, ShieldCheck, Sparkles, TrendingUp
+  ArrowRight, ArrowUpRight, BarChart3, Building2, ChevronLeft, ChevronRight,
+  LineChart, MessageCircle, Plus, Search, Users,
 } from 'lucide-react';
-import { featuredProperties, neighborhoods } from '../data/mockData';
+import { featuredProperties, neighborhoods, properties } from '../data/mockData';
 
-const heroSlides = [
+/* ------------------------------------------------------------------ */
+/* Content                                                             */
+/* ------------------------------------------------------------------ */
+
+const divisions = [
   {
-    image: 'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=2200&q=90',
-    location: 'Trousdale Estates · Beverly Hills',
-    title: ['Where architecture', 'becomes legacy.'],
+    index: '01',
+    name: 'Residences',
+    to: '/search',
+    cta: 'Explore the collection',
+    copy: 'A private collection of exceptional homes — waterfront estates, penthouses, and architectural landmarks across America’s signature markets.',
+    image: 'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=2200&q=88',
   },
   {
-    image: 'https://images.unsplash.com/photo-1600566753086-00f18fb6b3ea?auto=format&fit=crop&w=2200&q=90',
-    location: 'Ocean House · Miami Beach',
-    title: ['Exceptional living,', 'privately represented.'],
+    index: '02',
+    name: 'Rentals',
+    to: '/search?status=rent',
+    cta: 'View curated rentals',
+    copy: 'Curated leases managed with the same discretion as our sales portfolio — furnished residences, seasonal homes, and executive placements.',
+    image: 'https://images.unsplash.com/photo-1600566753086-00f18fb6b3ea?auto=format&fit=crop&w=2200&q=88',
   },
   {
-    image: 'https://images.unsplash.com/photo-1600047509807-ba8f99d2cdde?auto=format&fit=crop&w=2200&q=90',
-    location: 'Modern Estate · Austin',
-    title: ['Real estate,', 'intelligently considered.'],
+    index: '03',
+    name: 'Investments',
+    to: '/investment-calculator',
+    cta: 'Open the deal studio',
+    copy: 'Institutional-grade underwriting for rentals, flips, multifamily, and commercial assets — modeled, stress-tested, and explained in plain language.',
+    image: 'https://images.unsplash.com/photo-1600047509807-ba8f99d2cdde?auto=format&fit=crop&w=2200&q=88',
+  },
+  {
+    index: '04',
+    name: 'Advisory',
+    to: '/agents',
+    cta: 'Meet the advisors',
+    copy: 'Senior advisors coordinating financing, diligence, negotiation, and closing — one relationship across your entire real estate life.',
+    image: 'https://images.unsplash.com/photo-1600607688969-a5bfcd646154?auto=format&fit=crop&w=2200&q=88',
   },
 ];
 
-const services = [
-  { number: '01', icon: KeyRound, title: 'Acquire', copy: 'Private access, discreet representation, and a global search tailored to how you want to live.' },
-  { number: '02', icon: Landmark, title: 'Sell', copy: 'Editorial storytelling, qualified global reach, and a strategy calibrated to protect value.' },
-  { number: '03', icon: TrendingUp, title: 'Invest', copy: 'Institutional-grade underwriting for rentals, flips, multifamily, and commercial opportunities.' },
-  { number: '04', icon: ShieldCheck, title: 'Transact', copy: 'A coordinated path through financing, diligence, negotiation, closing, and ownership.' },
+const sections = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'portfolio', label: 'Portfolio' },
+  { id: 'collection', label: 'Collection' },
+  { id: 'intelligence', label: 'Intelligence' },
+  { id: 'markets', label: 'Markets' },
+  { id: 'portal', label: 'Portal' },
+  { id: 'contact', label: 'Contact' },
+];
+
+const stats = [
+  { value: 2500, suffix: '+', label: 'Residences represented' },
+  { value: 12, suffix: '', label: 'Signature markets' },
+  { value: 4.2, suffix: 'B', prefix: '$', decimals: 1, label: 'Assets under advisement' },
+  { value: 98, suffix: '%', label: 'Client retention' },
+];
+
+const explorerData = {
+  Residences: [
+    {
+      title: 'Waterfront Estates',
+      copy: 'Oceanfront, lakefront, and dockside estates where land is finite and provenance matters. Privately marketed, precisely valued, and quietly transacted.',
+      facts: [{ k: 'From', v: '$3.8M' }, { k: 'Markets', v: 'Miami · Chicago · Malibu' }],
+      to: '/search?q=waterfront',
+    },
+    {
+      title: 'Penthouses & Skyline',
+      copy: 'Full-floor residences and towers-in-the-sky across New York, Chicago, and San Francisco — engineered views, private elevators, hotel-grade service.',
+      facts: [{ k: 'From', v: '$2.1M' }, { k: 'Markets', v: 'New York · SF · Chicago' }],
+      to: '/search?q=penthouse',
+    },
+    {
+      title: 'Architectural Estates',
+      copy: 'Signature homes by name architects — Trousdale moderns, Mediterranean landmarks, and new builds of consequence, documented like the assets they are.',
+      facts: [{ k: 'From', v: '$4.5M' }, { k: 'Markets', v: 'Beverly Hills · Austin' }],
+      to: '/search',
+    },
+    {
+      title: 'Curated Rentals',
+      copy: 'Furnished residences and executive leases held to sale-grade standards — inspected, managed, and represented end to end.',
+      facts: [{ k: 'From', v: '$8K/mo' }, { k: 'Terms', v: 'Seasonal · Annual' }],
+      to: '/search?status=rent',
+    },
+  ],
+  Investments: [
+    {
+      title: 'Multifamily',
+      copy: 'Value-add and stabilized multifamily underwritten on real rent rolls — IRR, cash-on-cash, and DSCR modeled before you ever tour the asset.',
+      facts: [{ k: 'Typical hold', v: '5–10 yrs' }, { k: 'Modeled in', v: 'Deal Studio' }],
+      to: '/investment-calculator',
+    },
+    {
+      title: 'Fix & Flip',
+      copy: 'Acquisition, rehab budget, carry, and resale modeled with Monte Carlo ranges — so the downside is known before the offer goes in.',
+      facts: [{ k: 'Cycle', v: '6–12 mo' }, { k: 'Modeled in', v: 'Deal Studio' }],
+      to: '/investment-calculator',
+    },
+    {
+      title: 'Commercial',
+      copy: 'Office, retail, and mixed-use opportunities evaluated on tenancy, credit, and basis — with clear-eyed views on repositioning risk.',
+      facts: [{ k: 'Focus', v: 'Core · Value-add' }, { k: 'Coverage', v: 'National' }],
+      to: '/agents',
+    },
+    {
+      title: 'New Development',
+      copy: 'Ground-up projects from land assembly to sell-out — entitlement guidance, construction finance, and pre-sale strategy under one roof.',
+      facts: [{ k: 'Stage', v: 'Land → Sell-out' }, { k: 'Coverage', v: 'Sunbelt · Coasts' }],
+      to: '/agents',
+    },
+  ],
+};
+
+const portalTiles = [
+  {
+    index: '01', icon: Search, title: 'Search the collection',
+    copy: 'Filter every residence by market, price, size, and character — no registration required.',
+    action: 'search',
+  },
+  {
+    index: '02', icon: LineChart, title: 'Deal Studio',
+    copy: 'Underwrite any address yourself: rentals, flips, and multifamily with instant verdicts and downloadable workbooks.',
+    action: 'studio',
+  },
+  {
+    index: '03', icon: MessageCircle, title: 'Ask the concierge',
+    copy: 'A real-estate intelligence partner for financing, taxes, neighborhoods, and negotiation — available on every page.',
+    action: 'assistant',
+  },
+  {
+    index: '04', icon: Users, title: 'Private advisors',
+    copy: 'When it matters, move from self-service to full representation with a senior advisor in one step.',
+    action: 'advisors',
+  },
 ];
 
 const formatPrice = (price) => new Intl.NumberFormat('en-US', {
   style: 'currency', currency: 'USD', maximumFractionDigits: 0,
 }).format(price);
 
+/* ------------------------------------------------------------------ */
+/* Hooks                                                               */
+/* ------------------------------------------------------------------ */
+
+const useReveal = () => {
+  useEffect(() => {
+    const nodes = document.querySelectorAll('[data-reveal]');
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-revealed');
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.14 });
+    nodes.forEach((node) => observer.observe(node));
+    return () => observer.disconnect();
+  }, []);
+};
+
+const Counter = ({ value, prefix = '', suffix = '', decimals = 0 }) => {
+  const ref = useRef(null);
+  const [display, setDisplay] = useState(0);
+  const started = useRef(false);
+
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return undefined;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!entry.isIntersecting || started.current) return;
+      started.current = true;
+      const duration = 1800;
+      const t0 = performance.now();
+      const tick = (now) => {
+        const p = Math.min((now - t0) / duration, 1);
+        const eased = 1 - Math.pow(1 - p, 3);
+        setDisplay(value * eased);
+        if (p < 1) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    }, { threshold: 0.4 });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [value]);
+
+  return (
+    <strong ref={ref}>
+      {prefix && <i>{prefix}</i>}
+      {display.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}
+      {suffix && <i>{suffix}</i>}
+    </strong>
+  );
+};
+
+/* ------------------------------------------------------------------ */
+/* Page                                                                */
+/* ------------------------------------------------------------------ */
+
 const Home = () => {
   const navigate = useNavigate();
-  const [slide, setSlide] = React.useState(0);
-  const [searchValue, setSearchValue] = React.useState('');
+  useReveal();
 
-  React.useEffect(() => {
-    const timer = window.setInterval(() => setSlide((current) => (current + 1) % heroSlides.length), 7000);
+  /* Hero division switcher */
+  const [division, setDivision] = useState(0);
+  const [paused, setPaused] = useState(false);
+  useEffect(() => {
+    if (paused) return undefined;
+    const timer = window.setInterval(() => setDivision((d) => (d + 1) % divisions.length), 6000);
     return () => window.clearInterval(timer);
+  }, [paused]);
+  const active = divisions[division];
+
+  /* Section rail */
+  const [activeSection, setActiveSection] = useState('overview');
+  useEffect(() => {
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) setActiveSection(entry.target.id);
+      });
+    }, { rootMargin: '-45% 0px -45% 0px' });
+    sections.forEach(({ id }) => {
+      const node = document.getElementById(id);
+      if (node) observer.observe(node);
+    });
+    return () => observer.disconnect();
   }, []);
 
-  const advance = (direction) => {
-    setSlide((current) => (current + direction + heroSlides.length) % heroSlides.length);
+  /* Explorer accordion */
+  const [explorerTab, setExplorerTab] = useState('Residences');
+  const [openItem, setOpenItem] = useState(0);
+
+  /* Collection strip */
+  const stripRef = useRef(null);
+  const [stripProgress, setStripProgress] = useState(0.2);
+  const onStripScroll = useCallback(() => {
+    const node = stripRef.current;
+    if (!node) return;
+    const max = node.scrollWidth - node.clientWidth;
+    setStripProgress(max > 0 ? Math.max(0.08, node.scrollLeft / max) : 1);
+  }, []);
+  const nudgeStrip = (direction) => {
+    const node = stripRef.current;
+    if (!node) return;
+    node.scrollBy({ left: direction * Math.min(500, node.clientWidth * 0.85), behavior: 'smooth' });
   };
 
-  const submitSearch = (event) => {
-    event.preventDefault();
-    navigate(searchValue ? `/search?q=${encodeURIComponent(searchValue)}` : '/search');
+  /* Markets hover preview */
+  const [marketIndex, setMarketIndex] = useState(0);
+  const marketImages = useMemo(
+    () => neighborhoods.map((n) => `${n.image}?auto=format&fit=crop&w=1400&q=82`),
+    []
+  );
+
+  /* Deal card metric animation on view */
+  const dealRef = useRef(null);
+  const [dealLive, setDealLive] = useState(false);
+  useEffect(() => {
+    const node = dealRef.current;
+    if (!node) return undefined;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) setDealLive(true);
+    }, { threshold: 0.4 });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  const collection = featuredProperties.length >= 4 ? properties.slice(0, 6) : featuredProperties;
+
+  const onPortalTile = (action) => {
+    if (action === 'search') navigate('/search');
+    else if (action === 'studio') navigate('/investment-calculator');
+    else if (action === 'advisors') navigate('/agents');
+    else window.dispatchEvent(new CustomEvent('open-diamond-assistant'));
   };
 
   return (
-    <main className="luxury-home">
-      <section className="editorial-hero" aria-label="Featured private residences">
-        {heroSlides.map((item, index) => (
+    <main>
+      {/* Section rail */}
+      <nav className="mf-rail" aria-label="Page sections">
+        {sections.map(({ id, label }) => (
+          <button
+            key={id}
+            className={activeSection === id ? 'is-active' : ''}
+            onClick={() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })}
+            aria-label={`Go to ${label}`}
+          >
+            <span>{label}</span>
+          </button>
+        ))}
+      </nav>
+
+      {/* Hero */}
+      <section className="mf-hero" aria-label="DiamondEcho divisions">
+        {divisions.map((item, index) => (
           <div
-            className={`editorial-hero__image ${index === slide ? 'is-active' : ''}`}
+            key={item.name}
+            className={`mf-hero__image ${index === division ? 'is-active' : ''}`}
             style={{ backgroundImage: `url(${item.image})` }}
-            key={item.location}
-            aria-hidden={index !== slide}
+            aria-hidden={index !== division}
           />
         ))}
-        <div className="editorial-hero__veil" />
-        <div className="editorial-hero__content">
-          <p className="eyebrow eyebrow--light"><span /> PRIVATE REAL ESTATE · GLOBAL</p>
-          <h1>
-            <span>{heroSlides[slide].title[0]}</span>
-            <em>{heroSlides[slide].title[1]}</em>
-          </h1>
-          <div className="editorial-hero__meta">
-            <p>{heroSlides[slide].location}</p>
-            <button onClick={() => navigate('/search')}>Explore the collection <ArrowUpRight /></button>
+        <div className="mf-hero__veil" />
+        <div className="mf-hero__grid" />
+
+        <div className="mf-hero__content">
+          <div className="mf-hero__brand">
+            <p>Private real estate · Global standards</p>
+            <h1>Diamond Echo</h1>
+          </div>
+          <div
+            className="mf-divisions"
+            onMouseEnter={() => setPaused(true)}
+            onMouseLeave={() => setPaused(false)}
+          >
+            {divisions.map((item, index) => (
+              <button
+                key={item.name}
+                className={index === division ? 'is-active' : ''}
+                onClick={() => (index === division ? navigate(item.to) : setDivision(index))}
+                aria-pressed={index === division}
+              >
+                <span>{item.index}</span>{item.name}
+              </button>
+            ))}
           </div>
         </div>
 
-        <div className="editorial-hero__controls">
-          <button onClick={() => advance(-1)} aria-label="Previous residence"><ChevronLeft /></button>
-          <span>0{slide + 1} <i /> 0{heroSlides.length}</span>
-          <button onClick={() => advance(1)} aria-label="Next residence"><ChevronRight /></button>
+        <aside className="mf-hero__panel" key={active.name}>
+          <small>{active.index} — {active.name}</small>
+          <p>{active.copy}</p>
+          <a href={active.to} onClick={(event) => { event.preventDefault(); navigate(active.to); }}>
+            {active.cta} <ArrowUpRight />
+          </a>
+        </aside>
+
+        <span className="mf-hero__side">Diamond Echo — Private Real Estate</span>
+
+        <a className="mf-hero__scroll" href="#overview">Scroll down to discover</a>
+
+        <div className="mf-hero__index">
+          <span>0{division + 1}</span>
+          <i style={{ '--progress': `${((division + 1) / divisions.length) * 100}%` }} />
+          <span>0{divisions.length}</span>
         </div>
-        <a className="editorial-hero__scroll" href="#discover">Discover <ArrowDown /></a>
       </section>
 
-      <section className="property-search" id="discover">
-        <div className="property-search__intro">
-          <p className="eyebrow">PRIVATE COLLECTION</p>
-          <h2>Find a place<br /><em>without equal.</em></h2>
-        </div>
-        <form className="property-search__form" onSubmit={submitSearch}>
-          <label htmlFor="property-search">Where would you like to be?</label>
-          <div>
-            <Search />
-            <input
-              id="property-search"
-              value={searchValue}
-              onChange={(event) => setSearchValue(event.target.value)}
-              placeholder="City, neighborhood, address, or private listing ID"
-            />
-            <button type="submit">Search <ArrowRight /></button>
+      {/* Overview / statement */}
+      <section className="mf-statement" id="overview">
+        <div className="mf-statement__inner">
+          <p className="eyebrow" data-reveal>The Firm</p>
+          <h2 data-reveal>
+            Operating privately.<br />
+            <em>Leading with intelligence.</em>
+          </h2>
+          <p data-reveal style={{ '--reveal-delay': '.12s' }}>
+            DiamondEcho manages a portfolio of exceptional residences and investment assets across
+            America&apos;s signature markets. With deep local expertise and an institutional intelligence
+            layer, we turn complex property economics into clear, explainable decisions — for first
+            homes and for global portfolios alike.
+          </p>
+          <div className="mf-counters" data-reveal style={{ '--reveal-delay': '.2s' }}>
+            {stats.map((stat) => (
+              <article key={stat.label}>
+                <Counter value={stat.value} prefix={stat.prefix} suffix={stat.suffix} decimals={stat.decimals || 0} />
+                <span>{stat.label}</span>
+              </article>
+            ))}
           </div>
-          <nav aria-label="Property search categories">
-            <button type="button" onClick={() => navigate('/search')}>Buy</button>
-            <button type="button" onClick={() => navigate('/search?status=rent')}>Rent</button>
-            <button type="button" onClick={() => navigate('/investment-calculator')}>Invest</button>
-            <button type="button" onClick={() => navigate('/agents')}>Sell with us</button>
-          </nav>
-        </form>
+        </div>
       </section>
 
-      <section className="collection-section">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">THE PRIVATE COLLECTION</p>
-            <h2>Remarkable by nature.<br /><em>Rare by definition.</em></h2>
+      {/* Portfolio explorer */}
+      <section className="mf-explorer" id="portfolio">
+        <div className="mf-explorer__inner">
+          <div className="mf-explorer__intro">
+            <p className="eyebrow" data-reveal>Explore our portfolio</p>
+            <h2 data-reveal>Every asset class,<br /><em>one standard.</em></h2>
+            <p data-reveal style={{ '--reveal-delay': '.1s' }}>
+              From landmark residences to income-producing assets, each vertical is run with the same
+              discipline: private access, rigorous underwriting, and representation without compromise.
+            </p>
+            <div className="mf-explorer__tabs" data-reveal style={{ '--reveal-delay': '.15s' }} role="tablist">
+              {Object.keys(explorerData).map((tab) => (
+                <button
+                  key={tab}
+                  role="tab"
+                  aria-selected={explorerTab === tab}
+                  className={explorerTab === tab ? 'is-active' : ''}
+                  onClick={() => { setExplorerTab(tab); setOpenItem(0); }}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
           </div>
-          <button onClick={() => navigate('/search')}>View all residences <ArrowUpRight /></button>
+
+          <div className="mf-accordion" data-reveal style={{ '--reveal-delay': '.1s' }}>
+            {explorerData[explorerTab].map((item, index) => (
+              <div key={item.title} className={`mf-accordion__item ${openItem === index ? 'is-open' : ''}`}>
+                <button
+                  className="mf-accordion__head"
+                  onClick={() => setOpenItem(openItem === index ? -1 : index)}
+                  aria-expanded={openItem === index}
+                >
+                  <span>0{index + 1}</span>
+                  <strong>{item.title}</strong>
+                  <Plus />
+                </button>
+                <div className="mf-accordion__body">
+                  <div>
+                    <div className="mf-accordion__content">
+                      <div>
+                        <p>{item.copy}</p>
+                        <dl>
+                          {item.facts.map((fact) => (
+                            <div key={fact.k}><dt>{fact.k}</dt><dd>{fact.v}</dd></div>
+                          ))}
+                        </dl>
+                      </div>
+                      <button className="text-link" onClick={() => navigate(item.to)}>
+                        Explore <ArrowUpRight />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Collection strip */}
+      <section className="mf-collection" id="collection">
+        <div className="mf-collection__head">
+          <div>
+            <p className="eyebrow" data-reveal>The private collection</p>
+            <h2 data-reveal>Remarkable by nature.<br /><em>Rare by definition.</em></h2>
+          </div>
+          <div className="mf-collection__controls" data-reveal>
+            <button onClick={() => nudgeStrip(-1)} aria-label="Previous properties"><ChevronLeft /></button>
+            <button onClick={() => nudgeStrip(1)} aria-label="Next properties"><ChevronRight /></button>
+            <button className="mf-btn" onClick={() => navigate('/search')} style={{ marginLeft: 10 }}>
+              View all <ArrowUpRight />
+            </button>
+          </div>
         </div>
 
-        <div className="residence-grid">
-          {featuredProperties.slice(0, 3).map((property, index) => (
+        <div className="mf-strip" ref={stripRef} onScroll={onStripScroll}>
+          {collection.map((property, index) => (
             <article
-              className={`residence-card residence-card--${index + 1}`}
               key={property.id}
+              className="mf-prop-card"
+              data-reveal
+              style={{ '--reveal-delay': `${index * 0.07}s` }}
               onClick={() => navigate(`/property/${property.id}`)}
               onKeyDown={(event) => event.key === 'Enter' && navigate(`/property/${property.id}`)}
               role="button"
               tabIndex={0}
             >
-              <img src={`${property.images[0]}?auto=format&fit=crop&w=1400&q=88`} alt={property.title} />
-              <div className="residence-card__scrim" />
-              <div className="residence-card__tag">PRIVATE LISTING · 0{index + 1}</div>
-              <div className="residence-card__content">
-                <p>{property.city}, {property.state}</p>
+              <div className="mf-prop-card__media">
+                <img src={`${property.images[0]}?auto=format&fit=crop&w=1200&q=82`} alt={property.title} loading="lazy" />
+                <span className="mf-prop-card__status">{property.status}</span>
+              </div>
+              <div className="mf-prop-card__body">
+                <small>{property.city}, {property.state}</small>
                 <h3>{property.title}</h3>
-                <div>
+                <div className="mf-prop-card__meta">
                   <strong>{formatPrice(property.price)}</strong>
-                  <span>{property.beds} beds · {property.baths} baths · {property.sqft.toLocaleString()} sq ft</span>
+                  <span>{property.beds} bd · {property.baths} ba · {property.sqft.toLocaleString()} sf</span>
                 </div>
               </div>
-              <span className="residence-card__arrow"><ArrowUpRight /></span>
             </article>
           ))}
         </div>
+        <div className="mf-strip-progress"><i style={{ '--w': `${stripProgress * 100}%` }} /></div>
       </section>
 
-      <section className="intelligence-section">
-        <div className="intelligence-section__visual">
-          <img src="https://images.unsplash.com/photo-1556761175-b413da4baf72?auto=format&fit=crop&w=1600&q=85" alt="Advisors reviewing a real estate investment" />
-          <div className="intelligence-section__badge"><Sparkles /> DIAMOND ECHO INTELLIGENCE</div>
-        </div>
-
-        <div className="intelligence-section__content">
-          <p className="eyebrow eyebrow--light">DECISION INTELLIGENCE</p>
-          <h2>Every opportunity,<br /><em>fully illuminated.</em></h2>
-          <p className="intelligence-section__lede">
-            From a first home to a global portfolio, our intelligence layer turns complex property economics into clear, explainable decisions.
+      {/* Intelligence */}
+      <section className="mf-intel" id="intelligence">
+        <div className="mf-intel__content">
+          <p className="eyebrow" data-reveal>Decision intelligence</p>
+          <h2 data-reveal>Every opportunity,<br /><em>fully illuminated.</em></h2>
+          <p data-reveal style={{ '--reveal-delay': '.1s' }}>
+            Our intelligence layer underwrites rentals, flips, multifamily, and commercial deals with
+            institutional rigor — IRR, cash-on-cash, DSCR, and Monte Carlo stress tests — then explains
+            the verdict in plain language you can act on.
           </p>
-
-          <div className="deal-preview">
-            <div className="deal-preview__head">
-              <span><BarChart3 /> DEAL STUDIO</span>
-              <span className="deal-preview__status">STRONG FIT</span>
+          <button className="mf-btn mf-btn--solid" data-reveal style={{ '--reveal-delay': '.15s' }} onClick={() => navigate('/investment-calculator')}>
+            <BarChart3 size={15} /> Analyze an opportunity
+          </button>
+        </div>
+        <div className="mf-intel__visual">
+          <div ref={dealRef} className={`mf-deal-card ${dealLive ? '' : 'is-idle'}`} data-reveal>
+            <div className="mf-deal-card__head">
+              <span><BarChart3 /> Deal studio — live model</span>
+              <span className="mf-deal-card__verdict">Strong fit</span>
             </div>
-            <div className="deal-preview__property">
-              <div><small>ASSET</small><strong>12-unit multifamily</strong></div>
-              <div><small>MARKET</small><strong>Austin, TX</strong></div>
-              <div><small>STRATEGY</small><strong>Value-add rental</strong></div>
+            <div className="mf-deal-card__props">
+              <div><small>Asset</small><strong>12-unit multifamily</strong></div>
+              <div><small>Market</small><strong>Austin, TX</strong></div>
+              <div><small>Strategy</small><strong>Value-add rental</strong></div>
             </div>
-            <div className="deal-preview__metrics">
-              <div><small>PROJECTED IRR</small><strong>18.4%</strong><i style={{ '--fill': '84%' }} /></div>
-              <div><small>CASH-ON-CASH</small><strong>9.7%</strong><i style={{ '--fill': '69%' }} /></div>
+            <div className="mf-deal-card__metrics">
+              <div><small>Projected IRR</small><strong>18.4%</strong><i style={{ '--fill': '84%' }} /></div>
+              <div><small>Cash-on-cash</small><strong>9.7%</strong><i style={{ '--fill': '69%' }} /></div>
               <div><small>DSCR</small><strong>1.46×</strong><i style={{ '--fill': '74%' }} /></div>
             </div>
           </div>
-
-          <button className="text-link text-link--light" onClick={() => navigate('/investment-calculator')}>
-            Analyze an opportunity <ArrowUpRight />
-          </button>
         </div>
       </section>
 
-      <section className="journey-section">
-        <div className="section-heading section-heading--center">
-          <div>
-            <p className="eyebrow">ONE MAISON. EVERY MOVE.</p>
-            <h2>Your entire real estate journey,<br /><em>beautifully orchestrated.</em></h2>
+      {/* Markets */}
+      <section className="mf-markets" id="markets">
+        <div className="mf-markets__inner">
+          <div className="mf-markets__list">
+            <p className="eyebrow" data-reveal>Signature markets</p>
+            <h2 data-reveal>The world&apos;s most<br /><em>considered addresses.</em></h2>
+            <div className="mf-markets__rows" data-reveal style={{ '--reveal-delay': '.1s' }}>
+              {neighborhoods.map((place, index) => (
+                <button
+                  key={place.name}
+                  className={marketIndex === index ? 'is-active' : ''}
+                  onMouseEnter={() => setMarketIndex(index)}
+                  onFocus={() => setMarketIndex(index)}
+                  onClick={() => navigate(`/search?q=${encodeURIComponent(place.name)}`)}
+                >
+                  <span>0{index + 1}</span>
+                  <strong>{place.name}</strong>
+                  <small>{place.properties} residences · avg {formatPrice(place.avgPrice)}</small>
+                  <ArrowUpRight />
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="mf-markets__preview" data-reveal style={{ '--reveal-delay': '.15s' }}>
+            <div className="mf-markets__frame">
+              {marketImages.map((src, index) => (
+                <img key={src} src={src} alt={neighborhoods[index].name} className={marketIndex === index ? 'is-active' : ''} loading="lazy" />
+              ))}
+            </div>
+            <div className="mf-markets__caption">
+              <strong>{neighborhoods[marketIndex].name}</strong>
+              <span>{neighborhoods[marketIndex].city}</span>
+            </div>
           </div>
         </div>
-        <div className="journey-grid">
-          {services.map(({ number, icon: Icon, title, copy }) => (
-            <article key={title}>
-              <div><span>{number}</span><Icon /></div>
-              <h3>{title}</h3>
-              <p>{copy}</p>
-              <button onClick={() => navigate(title === 'Invest' ? '/investment-calculator' : title === 'Acquire' ? '/search' : '/agents')} aria-label={`Explore ${title}`}><ArrowUpRight /></button>
-            </article>
-          ))}
+      </section>
+
+      {/* Client portal */}
+      <section className="mf-portal" id="portal">
+        <div className="mf-portal__inner">
+          <div className="mf-portal__head">
+            <p className="eyebrow" data-reveal>The client portal</p>
+            <h2 data-reveal>Self-service,<br /><em>concierge standard.</em></h2>
+            <p data-reveal style={{ '--reveal-delay': '.1s' }}>
+              Everything you need to move on real estate — search, underwriting, guidance, and
+              representation — available on your own terms, at any hour. Start yourself; escalate to a
+              human advisor the moment it matters.
+            </p>
+          </div>
+          <div className="mf-portal__grid">
+            {portalTiles.map(({ index, icon: Icon, title, copy, action }, i) => (
+              <button
+                key={title}
+                className="mf-portal__tile"
+                data-reveal
+                style={{ '--reveal-delay': `${i * 0.08}s` }}
+                onClick={() => onPortalTile(action)}
+              >
+                <header><span>{index}</span><Icon /></header>
+                <h3>{title}</h3>
+                <p>{copy}</p>
+                <footer>Open <ArrowRight /></footer>
+              </button>
+            ))}
+          </div>
         </div>
       </section>
 
-      <section className="destinations-section">
-        <div className="destinations-section__intro">
-          <p className="eyebrow eyebrow--light">SIGNATURE MARKETS</p>
-          <h2>The world’s most<br /><em>considered addresses.</em></h2>
-          <p>Local knowledge, private access, and connected representation across the markets that matter.</p>
-          <button className="text-link text-link--light" onClick={() => navigate('/search')}>Explore all markets <ArrowUpRight /></button>
-        </div>
-        <div className="destinations-section__list">
-          {neighborhoods.map((place, index) => (
-            <button key={place.name} onClick={() => navigate(`/search?q=${encodeURIComponent(place.name)}`)}>
-              <span>0{index + 1}</span>
-              <strong>{place.name}</strong>
-              <small>{place.city} · {place.properties} residences</small>
-              <ArrowUpRight />
+      {/* Contact / closing */}
+      <section className="mf-contact" id="contact">
+        <div className="mf-contact__image" />
+        <div className="mf-contact__veil" />
+        <div className="mf-contact__content">
+          <p className="eyebrow" data-reveal>Your next chapter</p>
+          <h2 data-reveal>Some addresses are found.<br /><em>Others find you.</em></h2>
+          <div className="mf-contact__actions" data-reveal style={{ '--reveal-delay': '.12s' }}>
+            <button className="mf-btn mf-btn--solid" onClick={() => navigate('/agents')}>
+              <Users size={15} /> Begin a private conversation
             </button>
-          ))}
-        </div>
-      </section>
-
-      <section className="concierge-section">
-        <div className="concierge-section__content">
-          <p className="eyebrow">PRIVATE CONCIERGE</p>
-          <h2>Ask anything.<br /><em>Move with clarity.</em></h2>
-          <p>Explore buying, selling, financing, taxes, neighborhoods, and investment strategy with a real-estate intelligence partner—then connect with a human advisor when it matters.</p>
-          <div>
-            <button onClick={() => window.dispatchEvent(new CustomEvent('open-diamond-assistant'))}><MessageCircle /> Ask DiamondEcho</button>
-            <button onClick={() => navigate('/agents')}>Speak with an advisor <ArrowUpRight /></button>
-          </div>
-          <small>Educational guidance only. Legal, tax, mortgage, and investment decisions should be reviewed with qualified professionals.</small>
-        </div>
-        <div className="concierge-section__visual">
-          <img src="https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?auto=format&fit=crop&w=1600&q=88" alt="Elegant contemporary residence interior" />
-          <div className="concierge-card">
-            <span><MessageCircle /> PRIVATE ASSISTANT</span>
-            <p>“What should I know before making an offer on a historic property?”</p>
-            <div><Sparkles /><span>I’ll walk you through inspections, restrictions, insurance, financing, and negotiation considerations.</span></div>
+            <button className="mf-btn" onClick={() => navigate('/search')}>
+              <Building2 size={15} /> Browse the collection
+            </button>
           </div>
         </div>
       </section>
-
-      <section className="closing-statement">
-        <div className="closing-statement__image" />
-        <div className="closing-statement__veil" />
-        <div>
-          <p className="eyebrow eyebrow--light">YOUR NEXT CHAPTER</p>
-          <h2>Some addresses are found.<br /><em>Others find you.</em></h2>
-          <button onClick={() => navigate('/agents')}>Begin a private conversation <ArrowUpRight /></button>
-        </div>
-      </section>
-
     </main>
   );
 };
