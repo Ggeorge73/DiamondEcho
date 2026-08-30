@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 
-const child = spawn("npm", ["--prefix", "frontend", "run", "start"], {
+const child = spawn("npm", ["run", "start", "--workspace", "frontend"], {
   stdio: "inherit",
   env: {
     ...process.env,
