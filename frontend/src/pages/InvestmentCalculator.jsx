@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { properties } from '../data/mockData';
 import { analyzeDealLocally, runMonteCarloLocally } from '../lib/dealAnalysis';
+import { buildRentalDecision, RENTAL_EVIDENCE_ITEMS } from '../lib/dealDecision';
 import { downloadDealWorkbook } from '../lib/dealWorkbook';
 import { buildDealRequest } from '../lib/dealRequest';
 import { buildMonteCarloScenarios, MONTE_CARLO_CASES } from '../lib/monteCarloCases';
@@ -37,6 +38,8 @@ const initialForm = {
   explicitSalePrice: '',
   arv: '4200000', rehabCost: '450000', rehabContingency: '10', monthlyHolding: '7500',
   otherProjectCosts: '50000', sellingCosts: '6', discountRate: '10', mcIterations: '2500',
+  targetCashOnCash: '8', minimumDscr: '1.2', targetIrr: '15', preliminaryMarketCeiling: '',
+  maxImmediateCapex: '', maxAnnualTaxes: '', maxAnnualInsurance: '',
   developmentType: 'single_family_subdivision', dispositionStrategy: 'build_and_sell',
   siteAcres: '2.5', parcelCount: '1', currentZoning: '', proposedZoning: '',
   entitlementStatus: 'unentitled', utilityStatus: 'verify', accessStatus: 'verify',
@@ -90,6 +93,8 @@ const AutocompleteField = ({ label, name, value, onChange, suggestions, onSelect
 const InvestmentCalculator = () => {
   const [form, setForm] = useState(initialForm);
   const [result, setResult] = useState(null);
+  const [decision, setDecision] = useState(null);
+  const [evidence, setEvidence] = useState(() => Object.fromEntries(RENTAL_EVIDENCE_ITEMS.map((item) => [item.key, false])));
   const [monteCarlo, setMonteCarlo] = useState(null);
   const [error, setError] = useState('');
   const [riskError, setRiskError] = useState('');
@@ -191,16 +196,24 @@ const InvestmentCalculator = () => {
 
   const analyze = async (event) => {
     event.preventDefault();
-    setLoading(true); setError(''); setResult(null); setResultMode('base');
+    setLoading(true); setError(''); setResult(null); setDecision(null); setResultMode('base');
     const request = buildRequest();
     try {
-      if (!backendUrl) setResult(analyzeDealLocally(request));
+      if (!backendUrl) {
+        const analysis = analyzeDealLocally(request);
+        setResult(analysis);
+        setDecision(buildRentalDecision({ form, evidence }));
+      }
       else {
         const { data } = await axios.post(`${backendUrl}/api/v1/deals/analyze`, request);
         setResult(data);
+        setDecision(buildRentalDecision({ form, evidence }));
       }
     } catch (requestError) {
-      try { setResult(analyzeDealLocally(request)); }
+      try {
+        setResult(analyzeDealLocally(request));
+        setDecision(buildRentalDecision({ form, evidence }));
+      }
       catch (calculationError) {
         const detail = requestError.response?.data?.detail;
         setError(calculationError.message || (typeof detail === 'string' ? detail : 'The analysis could not be completed. Review the assumptions and try again.'));
@@ -253,7 +266,7 @@ const InvestmentCalculator = () => {
     try {
       const request = buildRequest();
       const analysis = analyzeDealLocally(request);
-      setResult(analysis); setResultMode('base');
+      setResult(analysis); setDecision(buildRentalDecision({ form, evidence })); setResultMode('base');
       downloadDealWorkbook({ form, request, result: analysis });
     } catch (calculationError) {
       setError(calculationError.message || 'The deal-specific workbook could not be generated. Review the assumptions and try again.');
@@ -362,6 +375,7 @@ const InvestmentCalculator = () => {
           </fieldset>
 
           {form.strategy === 'rental' ? (
+            <>
             <fieldset>
               <legend><span>03</span> Operations & exit</legend>
               <div className="studio-field-grid">
@@ -382,6 +396,28 @@ const InvestmentCalculator = () => {
                 <Field label="Expected sale price / terminal value" name="explicitSalePrice" value={form.explicitSalePrice} onChange={update} prefix="$" />
               </div>
             </fieldset>
+            <fieldset className="studio-mandate">
+              <legend><span>04</span> Investment mandate & evidence</legend>
+              <div className="studio-field-grid">
+                <Field label="Target cash-on-cash" name="targetCashOnCash" value={form.targetCashOnCash} onChange={update} suffix="%" />
+                <Field label="Minimum DSCR" name="minimumDscr" value={form.minimumDscr} onChange={update} suffix="×" />
+                <Field label="Target levered IRR" name="targetIrr" value={form.targetIrr} onChange={update} suffix="%" />
+                <Field label="Market-value ceiling (optional)" name="preliminaryMarketCeiling" value={form.preliminaryMarketCeiling} onChange={update} prefix="$" />
+                <Field label="Maximum immediate capital work" name="maxImmediateCapex" value={form.maxImmediateCapex} onChange={update} prefix="$" />
+                <Field label="Maximum annual taxes" name="maxAnnualTaxes" value={form.maxAnnualTaxes} onChange={update} prefix="$" />
+                <Field label="Maximum annual insurance" name="maxAnnualInsurance" value={form.maxAnnualInsurance} onChange={update} prefix="$" />
+              </div>
+              <div className="studio-evidence-grid">
+                {RENTAL_EVIDENCE_ITEMS.map((item) => (
+                  <label key={item.key} className={evidence[item.key] ? 'is-verified' : ''}>
+                    <input type="checkbox" checked={Boolean(evidence[item.key])} onChange={(event) => setEvidence((current) => ({ ...current, [item.key]: event.target.checked }))} />
+                    <span>{evidence[item.key] ? <CheckCircle2 /> : <AlertCircle />}{item.label}</span>
+                  </label>
+                ))}
+              </div>
+              <p className="studio-provider-note"><ShieldCheck /> Hurdles determine the maximum investment basis. Evidence controls the confidence level; unchecked items remain diligence conditions, not assumed facts.</p>
+            </fieldset>
+            </>
           ) : form.strategy === 'land' ? (
             <fieldset>
               <legend><span>03</span> Land development program & feasibility</legend>
@@ -456,7 +492,7 @@ const InvestmentCalculator = () => {
           )}
 
           <fieldset className="studio-monte-carlo">
-            <legend><span>04</span> Monte Carlo risk laboratory</legend>
+            <legend><span>{form.strategy === 'rental' ? '05' : '04'}</span> Monte Carlo risk laboratory</legend>
             <div className="studio-case-picker">
               {MONTE_CARLO_CASES.map((caseName) => (
                 <div key={caseName} className="is-active"><CheckCircle2 /> {caseName}</div>
@@ -500,15 +536,57 @@ const InvestmentCalculator = () => {
         </form>
 
         <aside className="deal-studio-results">
-          <div className="deal-studio-results__head"><span><Sparkles /> INVESTMENT COMMITTEE OUTPUT</span>{result && <small>{result.formula_version}</small>}</div>
-          <div className="studio-result-tabs"><button className={resultMode === 'base' ? 'is-active' : ''} onClick={() => setResultMode('base')}>Base case</button><button className={resultMode === 'risk' ? 'is-active' : ''} onClick={() => setResultMode('risk')}>Monte Carlo</button></div>
+          <div className="deal-studio-results__head"><span><Sparkles /> INVESTMENT COMMITTEE OUTPUT</span>{result && <small>{decision?.version || result.formula_version}</small>}</div>
+          <div className="studio-result-tabs"><button className={resultMode === 'base' ? 'is-active' : ''} onClick={() => setResultMode('base')}>{form.strategy === 'rental' ? 'IC decision' : 'Base case'}</button><button className={resultMode === 'risk' ? 'is-active' : ''} onClick={() => setResultMode('risk')}>Monte Carlo</button></div>
           {resultMode === 'base' && !result && !error && (
             <div className="studio-empty"><CircleDollarSign /><h2>Your decision canvas</h2><p>Complete the assumptions and run an analysis. DiamondEcho will calculate returns, debt coverage, value creation, and risk signals without hidden inputs.</p></div>
           )}
           {resultMode === 'base' && error && <div className="studio-error"><AlertCircle /><h2>Analysis needs attention</h2><p>{error}</p><button onClick={() => setError('')}><RotateCcw /> Review inputs</button></div>}
           {resultMode === 'base' && result && (
             <div className="studio-result">
-              <div className="studio-result__verdict"><span>MODEL STATUS</span><strong>Analysis complete</strong><p>{result.calculation_mode === 'browser' ? 'Calculated on this device with the same transparent underwriting conventions.' : result.strategy === 'rental' ? 'Income, financing, and exit assumptions have been modeled.' : 'Acquisition, project, holding, and disposition costs have been modeled.'}</p></div>
+              {decision ? <>
+                <div className={`studio-result__verdict studio-result__verdict--${decision.tone}`}>
+                  <span>INVESTMENT COMMITTEE VERDICT · {decision.confidence.toUpperCase()} CONFIDENCE</span>
+                  <strong>{decision.verdict}</strong>
+                  <p>{decision.summary}</p>
+                </div>
+                <div className="studio-decision-kpis">
+                  <article><small>RECOMMENDED MAXIMUM</small><strong>{decision.recommendedMaximum ? money.format(decision.recommendedMaximum) : 'Not established'}</strong><p>{decision.exactMaximum ? `Exact modeled ceiling ${money.format(decision.exactMaximum)}` : 'Review return hurdles'}</p></article>
+                  <article><small>GAP TO ASK</small><strong className={decision.gapToAsk > 0 ? 'is-negative' : 'is-positive'}>{decision.gapToAsk == null ? '—' : decision.gapToAsk > 0 ? `${money.format(decision.gapToAsk)} over` : `${money.format(Math.abs(decision.gapToAsk))} below`}</strong><p>Compared with {money.format(decision.askingPrice)}</p></article>
+                  <article><small>OPENING RANGE</small><strong>{decision.openingRange ? `${money.format(decision.openingRange[0])}–${money.format(decision.openingRange[1])}` : '—'}</strong><p>Target no higher than {decision.recommendedMaximum ? money.format(decision.recommendedMaximum) : 'the verified ceiling'}</p></article>
+                  <article><small>EVIDENCE CONFIDENCE</small><strong>{decision.confidence}</strong><p>{decision.evidenceVerified} of {decision.evidenceTotal} core files verified</p></article>
+                </div>
+
+                <section className="studio-decision-section">
+                  <div className="studio-decision-section__head"><span>RETURN-CONSTRAINED PRICE CEILINGS</span><small>Lowest verified ceiling controls</small></div>
+                  <div className="studio-ceiling-list">
+                    {decision.ceilings.map((ceiling) => <div key={ceiling.key} className={ceiling.binding ? 'is-binding' : ''}><span>{ceiling.label}<small>{ceiling.source}</small></span><strong>{ceiling.value ? money.format(ceiling.value) : 'Not solved'}{ceiling.binding && <em>BINDING</em>}</strong></div>)}
+                  </div>
+                  <p className="studio-valuation-notice"><ShieldCheck /> {decision.valuationNotice}</p>
+                </section>
+
+                <section className="studio-decision-section">
+                  <div className="studio-decision-section__head"><span>HURDLE TEST AT CURRENT PRICE</span><small>Pass / fail at stated assumptions</small></div>
+                  <div className="studio-hurdle-grid">
+                    {decision.hurdleResults.map((hurdle) => <article key={hurdle.label} className={hurdle.pass ? 'is-pass' : 'is-fail'}><span>{hurdle.pass ? <CheckCircle2 /> : <AlertCircle />}{hurdle.label}</span><strong>{hurdle.actual == null ? '—' : hurdle.format === 'multiple' ? `${number.format(hurdle.actual)}×` : `${number.format(hurdle.actual * 100)}%`}</strong><small>Minimum {hurdle.format === 'multiple' ? `${number.format(hurdle.target)}×` : `${number.format(hurdle.target * 100)}%`}</small></article>)}
+                  </div>
+                </section>
+
+                <section className="studio-decision-section">
+                  <div className="studio-decision-section__head"><span>DETERMINISTIC SCENARIOS</span><small>At the current purchase price</small></div>
+                  <div className="studio-scenario-table">
+                    <div className="studio-scenario-row studio-scenario-row--head"><span>Case</span><span>NOI</span><span>CoC</span><span>DSCR</span><span>IRR</span></div>
+                    {decision.scenarios.map((scenario) => <div className="studio-scenario-row" key={scenario.name}><strong>{scenario.name}</strong><span>{money.format(scenario.metrics.noi || 0)}</span><span>{scenario.metrics.cashOnCash == null ? '—' : `${number.format(scenario.metrics.cashOnCash * 100)}%`}</span><span>{scenario.metrics.dscr == null ? '—' : `${number.format(scenario.metrics.dscr)}×`}</span><span>{scenario.metrics.irr == null ? '—' : `${number.format(scenario.metrics.irr * 100)}%`}</span></div>)}
+                  </div>
+                </section>
+
+                <section className="studio-decision-section studio-diligence">
+                  <div className="studio-decision-section__head"><span>DILIGENCE CONDITIONS & WALK-AWAY TESTS</span><small>{decision.evidenceGaps.length} evidence gaps</small></div>
+                  {decision.evidenceGaps.length > 0 ? decision.evidenceGaps.map((item) => <div key={item.key}><AlertCircle /><p><strong>{item.label}</strong>{item.action}</p></div>) : <div className="is-cleared"><CheckCircle2 /><p><strong>Core evidence checklist complete</strong>Maintain contract protections and confirm no material change before closing.</p></div>}
+                  {decision.walkAwaySignals.map((signal) => <div className="is-walk" key={signal}><AlertCircle /><p><strong>Exception triggered</strong>{signal}</p></div>)}
+                </section>
+              </> : <div className="studio-result__verdict"><span>MODEL STATUS</span><strong>Analysis complete</strong><p>{result.calculation_mode === 'browser' ? 'Calculated on this device with the same transparent underwriting conventions.' : 'Acquisition, project, holding, and disposition costs have been modeled.'}</p></div>}
+              <div className="studio-metric-heading"><span>TRANSPARENT MODEL OUTPUT</span><small>Formula-level detail</small></div>
               <div className="studio-metrics">
                 {metricKeys.map((key) => {
                   const metric = result.metrics[key];
