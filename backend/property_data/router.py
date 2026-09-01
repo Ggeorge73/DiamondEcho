@@ -3,8 +3,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query
 
-from .models import PropertyLookupResponse, SuggestionResponse
-from .service import lookup, suggest
+from .models import PropertyLookupResponse, SuggestionResponse, UnderwritingProfileResponse
+from .service import build_underwriting_profile, lookup, suggest
 
 
 router = APIRouter(prefix="/v1/properties", tags=["Property data"])
@@ -30,3 +30,19 @@ async def property_lookup(address: str = Query(min_length=5, max_length=240)) ->
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail="Property-data provider is temporarily unavailable.") from exc
+
+
+@router.get("/underwriting-profile", response_model=UnderwritingProfileResponse)
+async def property_underwriting_profile(
+    address: str = Query(min_length=5, max_length=240),
+    strategy: str = Query(default="rental", pattern="^(rental|flip|land)$"),
+    radius_miles: float = Query(default=.5, ge=.1, le=2.0),
+) -> UnderwritingProfileResponse:
+    try:
+        return await asyncio.to_thread(build_underwriting_profile, address, strategy, radius_miles)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Local underwriting research is temporarily unavailable.") from exc

@@ -1,9 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import {
   AlertCircle, ArrowRight, BarChart3, Building2, CheckCircle2, ChevronDown,
   CircleDollarSign, Database, Download, FileSpreadsheet, Home, Loader2,
-  LandPlot, MapPin, RotateCcw, ShieldCheck, Sparkles, TrendingUp
+  LandPlot, MapPin, RotateCcw, Search, ShieldCheck, Sparkles, TrendingUp, Undo2
 } from 'lucide-react';
 import { properties } from '../data/mockData';
 import { analyzeDealLocally, runMonteCarloLocally } from '../lib/dealAnalysis';
@@ -11,6 +11,9 @@ import { buildRentalDecision, RENTAL_EVIDENCE_ITEMS } from '../lib/dealDecision'
 import { downloadDealWorkbook } from '../lib/dealWorkbook';
 import { buildDealRequest } from '../lib/dealRequest';
 import { buildMonteCarloScenarios, MONTE_CARLO_CASES } from '../lib/monteCarloCases';
+import {
+  applyAutofillProfile, assumptionsByField, buildReviewAutofillProfile, UNDERWRITING_RADIUS_MILES,
+} from '../lib/propertyAutofill';
 
 const MARKET_OPTIONS = [
   'Atlanta, GA', 'Austin, TX', 'Boston, MA', 'Charlotte, NC', 'Chicago, IL',
@@ -60,10 +63,34 @@ const initialForm = {
 const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 const number = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });
 
+const AutofillContext = createContext({ assumptions: {}, overriddenFields: new Set(), restoreField: () => {} });
+
+const sourceLabel = (sourceKind) => ({
+  subject_record: 'Public record', provider_avm: 'Provider AVM', radius_average: '0.5-mi average',
+  zip_trend: 'Local trend', location_model: 'Modeled estimate', financing_benchmark: 'Finance default',
+  policy_default: 'Policy default', risk_default: 'Risk default', verification_required: 'Verify',
+  not_applied: 'Not applied', review_default: 'Review estimate',
+}[sourceKind] || 'Estimated');
+
+const FieldSource = ({ name }) => {
+  const { assumptions, overriddenFields, restoreField } = useContext(AutofillContext);
+  const insight = assumptions[name];
+  if (!insight) return null;
+  const overridden = overriddenFields.has(name);
+  const detail = [insight.method, insight.note].filter(Boolean).join(' · ');
+  return (
+    <small className={`studio-field-source ${overridden ? 'is-overridden' : ''}`} title={detail}>
+      <span>{overridden ? 'User override' : sourceLabel(insight.source_kind)} · {insight.confidence} confidence</span>
+      {overridden && <button type="button" onClick={() => restoreField(name)} aria-label={`Restore researched value for ${insight.label || name}`}><Undo2 /> Restore</button>}
+    </small>
+  );
+};
+
 const Field = ({ label, name, value, onChange, prefix, suffix, type = 'number', min = '0', step = 'any' }) => (
   <label className="studio-field">
     <span>{label}</span>
     <div>{prefix && <i>{prefix}</i>}<input name={name} value={value} onChange={onChange} type={type} min={min} step={step} />{suffix && <i>{suffix}</i>}</div>
+    <FieldSource name={name} />
   </label>
 );
 
@@ -71,6 +98,7 @@ const SelectField = ({ label, name, value, onChange, children }) => (
   <label className="studio-field">
     <span>{label}</span>
     <div><select name={name} value={value} onChange={onChange}>{children}</select><ChevronDown /></div>
+    <FieldSource name={name} />
   </label>
 );
 
@@ -87,6 +115,7 @@ const AutocompleteField = ({ label, name, value, onChange, suggestions, onSelect
         ))}
       </div>
     )}
+    <FieldSource name={name} />
   </label>
 );
 
@@ -102,11 +131,14 @@ const InvestmentCalculator = () => {
   const [riskLoading, setRiskLoading] = useState(false);
   const [propertyLoading, setPropertyLoading] = useState(false);
   const [propertyRecord, setPropertyRecord] = useState(null);
+  const [autofillProfile, setAutofillProfile] = useState(null);
+  const [overriddenFields, setOverriddenFields] = useState(() => new Set());
   const [addressSuggestions, setAddressSuggestions] = useState([]);
   const [marketSuggestions, setMarketSuggestions] = useState([]);
   const [resultMode, setResultMode] = useState('base');
   const backendUrl = useMemo(() => (process.env.REACT_APP_BACKEND_URL || '').replace(/\/$/, ''), []);
   const sessionToken = useMemo(() => globalThis.crypto?.randomUUID?.() || `session-${Date.now()}`, []);
+  const autofillAssumptions = useMemo(() => assumptionsByField(autofillProfile), [autofillProfile]);
 
   const n = (value) => Number(value || 0);
   const rate = (value) => n(value) / 100;
@@ -138,59 +170,90 @@ const InvestmentCalculator = () => {
 
   const update = (event) => {
     const { name, value } = event.target;
+    if (autofillAssumptions[name]) {
+      setOverriddenFields((current) => {
+        const next = new Set(current);
+        if (String(autofillProfile.inputs?.[name] ?? '') === String(value)) next.delete(name);
+        else next.add(name);
+        return next;
+      });
+    }
+    if (name === 'address' && value !== form.address) {
+      setAutofillProfile(null); setOverriddenFields(new Set()); setPropertyRecord(null);
+    }
     setForm((current) => ({ ...current, [name]: value, ...(name === 'propertyType' && value === 'land' ? { strategy: 'land' } : {}) }));
   };
 
-  const propertyTypeValue = (value = '') => {
-    const normalized = value.toLowerCase();
-    if (normalized.includes('multi') || normalized.includes('apartment')) return 'multifamily';
-    if (normalized.includes('condo')) return 'condo';
-    if (normalized.includes('office')) return 'office';
-    if (normalized.includes('retail')) return 'retail';
-    if (normalized.includes('industrial')) return 'industrial';
-    if (normalized.includes('mixed')) return 'mixed_use';
-    if (normalized.includes('land') || normalized.includes('lot') || normalized.includes('vacant')) return 'land';
-    return 'single_family';
+  const calculateLocally = (nextForm, nextEvidence = evidence) => {
+    const analysis = analyzeDealLocally(buildDealRequest(nextForm));
+    setResult(analysis);
+    setDecision(buildRentalDecision({ form: nextForm, evidence: nextEvidence }));
+    setResultMode('base');
+    return analysis;
   };
 
-  const applyProperty = (record) => {
-    const market = [record.city, record.state].filter(Boolean).join(', ');
-    setPropertyRecord(record);
-    setForm((current) => ({
-      ...current,
-      address: record.formatted_address || current.address,
-      market: market || current.market,
-      propertyType: propertyTypeValue(record.property_type),
-      units: record.property_type?.toLowerCase().includes('multi') ? current.units : '1',
-      rentableSquareFeet: String(record.square_footage || current.rentableSquareFeet),
-      purchasePrice: String(record.last_sale_price || record.price || current.purchasePrice),
-      propertyTaxes: String(record.annual_taxes || current.propertyTaxes),
-    }));
+  const applyResearchProfile = (profile) => {
+    const nextForm = applyAutofillProfile(form, profile);
+    setPropertyRecord(profile.property);
+    setAutofillProfile(profile);
+    setOverriddenFields(new Set());
+    setForm(nextForm);
     setAddressSuggestions([]);
+    setError('');
+    try { calculateLocally(nextForm); }
+    catch (calculationError) { setError(calculationError.message || 'The researched assumptions require review before calculation.'); }
+  };
+
+  const researchAddress = async (address = form.address, reviewProperty = null, strategy = form.strategy) => {
+    const clean = address.trim();
+    if (clean.length < 5) { setError('Enter a complete property address to research the 0.5-mile market.'); return; }
+    setPropertyLoading(true); setError('');
+    try {
+      if (reviewProperty) {
+        applyResearchProfile(buildReviewAutofillProfile({ property: reviewProperty, strategy, currentForm: form }));
+      } else {
+        const { data } = await axios.get(`${backendUrl}/api/v1/properties/underwriting-profile`, {
+          params: { address: clean, strategy, radius_miles: UNDERWRITING_RADIUS_MILES },
+        });
+        applyResearchProfile(data);
+      }
+    } catch (lookupError) {
+      const detail = lookupError.response?.data?.detail;
+      setError(typeof detail === 'string' ? detail : 'Address research could not be completed. Confirm the address and property-data service configuration.');
+    } finally { setPropertyLoading(false); }
+  };
+
+  const restoreField = (name) => {
+    if (!autofillProfile?.inputs || !(name in autofillProfile.inputs)) return;
+    setForm((current) => ({ ...current, [name]: String(autofillProfile.inputs[name] ?? '') }));
+    setOverriddenFields((current) => { const next = new Set(current); next.delete(name); return next; });
+  };
+
+  const restoreAllResearchedValues = () => {
+    if (!autofillProfile) return;
+    const nextForm = applyAutofillProfile(form, autofillProfile);
+    setForm(nextForm); setOverriddenFields(new Set());
+    try { calculateLocally(nextForm); } catch { /* Existing validation UI remains authoritative. */ }
   };
 
   const selectAddress = async (suggestion) => {
     setForm((current) => ({ ...current, address: suggestion.label }));
     setAddressSuggestions([]);
     if (suggestion.property) {
-      applyProperty({
-        formatted_address: suggestion.label, city: suggestion.property.city,
-        state: suggestion.property.state, property_type: suggestion.property.propertyType,
-        square_footage: suggestion.property.sqft, last_sale_price: suggestion.property.price,
-        annual_taxes: suggestion.property.taxHistory?.[0]?.amount, bedrooms: suggestion.property.beds,
-        bathrooms: suggestion.property.baths, year_built: suggestion.property.yearBuilt,
-        provider: 'review', is_demo: true,
-      });
+      await researchAddress(suggestion.label, suggestion.property);
       return;
     }
-    setPropertyLoading(true); setError('');
-    try {
-      const { data } = await axios.get(`${backendUrl}/api/v1/properties/lookup`, { params: { address: suggestion.label } });
-      applyProperty(data.property);
-    } catch (lookupError) {
-      setError(lookupError.response?.data?.detail || 'Address selected. Live property details require the configured property-data provider.');
-    } finally { setPropertyLoading(false); }
+    await researchAddress(suggestion.label);
   };
+
+  useEffect(() => {
+    if (!result || propertyLoading) return undefined;
+    const timer = window.setTimeout(() => {
+      try { calculateLocally(form); }
+      catch (calculationError) { setError(calculationError.message || 'Review the overridden assumption.'); }
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [form, evidence]);
 
   const buildRequest = () => buildDealRequest(form);
 
@@ -305,6 +368,7 @@ const InvestmentCalculator = () => {
   const summaryFormat = (key, value) => value == null ? 'Not defined' : key === 'npv' || key === 'flip_profit' || key === 'development_profit' ? money.format(value) : key === 'equity_multiple' || key === 'dscr' ? `${number.format(value)}×` : `${number.format(value * 100)}%`;
 
   return (
+    <AutofillContext.Provider value={{ assumptions: autofillAssumptions, overriddenFields, restoreField }}>
     <main className="deal-studio-page">
       <header className="deal-studio-hero">
         <div>
@@ -327,18 +391,22 @@ const InvestmentCalculator = () => {
             <legend><span>01</span> Property intelligence</legend>
             <div className="studio-property-search">
               <AutocompleteField label="Property address" name="address" value={form.address} onChange={update} suggestions={addressSuggestions} onSelect={selectAddress} placeholder="Start typing any U.S. address" icon={MapPin} />
-              {propertyLoading && <p className="studio-provider-note"><Loader2 className="spin" /> Retrieving public-record details…</p>}
-              {!propertyLoading && <p className="studio-provider-note"><Database /> Mapbox autocomplete + RentCast public records when provider credentials are configured.</p>}
+              <div className="studio-address-research">
+                <p className="studio-provider-note">{propertyLoading ? <><Loader2 className="spin" /> Researching subject records and the 0.5-mile micro-market…</> : <><Database /> Enter one address. DiamondEcho fills the screening model from public records, local comparable evidence, and labelled defaults.</>}</p>
+                <button type="button" onClick={() => researchAddress()} disabled={propertyLoading || form.address.trim().length < 5}>{propertyLoading ? <Loader2 className="spin" /> : <Search />} Research & autofill</button>
+              </div>
             </div>
             {propertyRecord && (
               <div className="studio-property-card">
-                <div><span>{propertyRecord.is_demo ? 'REVIEW RECORD' : 'PUBLIC RECORD'}</span><strong>{propertyRecord.formatted_address}</strong><small>{propertyRecord.provider || 'Property data provider'}</small></div>
+                <div><span>{propertyRecord.is_demo ? 'REVIEW RECORD' : 'ADDRESS RESEARCH COMPLETE'}</span><strong>{propertyRecord.formatted_address}</strong><small>{autofillProfile ? `${autofillProfile.radius_miles}-mile screening profile · ${overriddenFields.size} user override${overriddenFields.size === 1 ? '' : 's'}` : propertyRecord.provider || 'Property data provider'}</small></div>
                 <dl>
                   <div><dt>TYPE</dt><dd>{propertyRecord.property_type || 'Verify'}</dd></div>
                   <div><dt>BUILT</dt><dd>{propertyRecord.year_built || '—'}</dd></div>
                   <div><dt>SIZE</dt><dd>{propertyRecord.square_footage ? `${number.format(propertyRecord.square_footage)} sf` : '—'}</dd></div>
                   <div><dt>TAXES</dt><dd>{propertyRecord.annual_taxes ? money.format(propertyRecord.annual_taxes) : '—'}</dd></div>
+                  {autofillProfile && <><div><dt>RENT COMPS</dt><dd>{autofillProfile.comparables?.rental_comps ?? 0}</dd></div><div><dt>SALE COMPS</dt><dd>{autofillProfile.comparables?.sale_comps ?? 0}</dd></div></>}
                 </dl>
+                {autofillProfile && <div className="studio-research-audit"><span>INPUT AUDIT</span><p>Blue labels are researched or modeled inputs. Editing a value marks it as a user override and automatically recalculates the analysis.</p>{overriddenFields.size > 0 && <button type="button" onClick={restoreAllResearchedValues}><Undo2 /> Restore all researched values</button>}</div>}
               </div>
             )}
             <div className="studio-field-grid">
@@ -551,16 +619,16 @@ const InvestmentCalculator = () => {
                   <p>{decision.summary}</p>
                 </div>
                 <div className="studio-decision-kpis">
-                  <article><small>RECOMMENDED MAXIMUM</small><strong>{decision.recommendedMaximum ? money.format(decision.recommendedMaximum) : 'Not established'}</strong><p>{decision.exactMaximum ? `Exact modeled ceiling ${money.format(decision.exactMaximum)}` : 'Review return hurdles'}</p></article>
+                  <article><small>RECOMMENDED MAXIMUM</small><strong>{decision.recommendedMaximum !== null ? money.format(decision.recommendedMaximum) : 'Not established'}</strong><p>{decision.exactMaximum !== null ? `Exact modeled ceiling ${money.format(decision.exactMaximum)}` : 'Review return hurdles'}</p></article>
                   <article><small>GAP TO ASK</small><strong className={decision.gapToAsk > 0 ? 'is-negative' : 'is-positive'}>{decision.gapToAsk == null ? '—' : decision.gapToAsk > 0 ? `${money.format(decision.gapToAsk)} over` : `${money.format(Math.abs(decision.gapToAsk))} below`}</strong><p>Compared with {money.format(decision.askingPrice)}</p></article>
-                  <article><small>OPENING RANGE</small><strong>{decision.openingRange ? `${money.format(decision.openingRange[0])}–${money.format(decision.openingRange[1])}` : '—'}</strong><p>Target no higher than {decision.recommendedMaximum ? money.format(decision.recommendedMaximum) : 'the verified ceiling'}</p></article>
+                  <article><small>OPENING RANGE</small><strong>{decision.openingRange ? `${money.format(decision.openingRange[0])}–${money.format(decision.openingRange[1])}` : '—'}</strong><p>Target no higher than {decision.recommendedMaximum !== null ? money.format(decision.recommendedMaximum) : 'the verified ceiling'}</p></article>
                   <article><small>EVIDENCE CONFIDENCE</small><strong>{decision.confidence}</strong><p>{decision.evidenceVerified} of {decision.evidenceTotal} core files verified</p></article>
                 </div>
 
                 <section className="studio-decision-section">
                   <div className="studio-decision-section__head"><span>RETURN-CONSTRAINED PRICE CEILINGS</span><small>Lowest verified ceiling controls</small></div>
                   <div className="studio-ceiling-list">
-                    {decision.ceilings.map((ceiling) => <div key={ceiling.key} className={ceiling.binding ? 'is-binding' : ''}><span>{ceiling.label}<small>{ceiling.source}</small></span><strong>{ceiling.value ? money.format(ceiling.value) : 'Not solved'}{ceiling.binding && <em>BINDING</em>}</strong></div>)}
+                    {decision.ceilings.map((ceiling) => <div key={ceiling.key} className={ceiling.binding ? 'is-binding' : ''}><span>{ceiling.label}<small>{ceiling.source}</small></span><strong>{ceiling.value !== null ? money.format(ceiling.value) : 'Not solved'}{ceiling.binding && <em>BINDING</em>}</strong></div>)}
                   </div>
                   <p className="studio-valuation-notice"><ShieldCheck /> {decision.valuationNotice}</p>
                 </section>
@@ -575,8 +643,8 @@ const InvestmentCalculator = () => {
                 <section className="studio-decision-section">
                   <div className="studio-decision-section__head"><span>DETERMINISTIC SCENARIOS</span><small>At the current purchase price</small></div>
                   <div className="studio-scenario-table">
-                    <div className="studio-scenario-row studio-scenario-row--head"><span>Case</span><span>NOI</span><span>CoC</span><span>DSCR</span><span>IRR</span></div>
-                    {decision.scenarios.map((scenario) => <div className="studio-scenario-row" key={scenario.name}><strong>{scenario.name}</strong><span>{money.format(scenario.metrics.noi || 0)}</span><span>{scenario.metrics.cashOnCash == null ? '—' : `${number.format(scenario.metrics.cashOnCash * 100)}%`}</span><span>{scenario.metrics.dscr == null ? '—' : `${number.format(scenario.metrics.dscr)}×`}</span><span>{scenario.metrics.irr == null ? '—' : `${number.format(scenario.metrics.irr * 100)}%`}</span></div>)}
+                    <div className="studio-scenario-row studio-scenario-row--head"><span>Case</span><span>NOI</span><span>Exit</span><span>CoC</span><span>DSCR</span><span>IRR</span></div>
+                    {decision.scenarios.map((scenario) => <div className="studio-scenario-row" key={scenario.name}><strong>{scenario.name}</strong><span>{money.format(scenario.metrics.noi || 0)}</span><span>{scenario.metrics.salePrice == null ? '—' : money.format(scenario.metrics.salePrice)}</span><span>{scenario.metrics.cashOnCash == null ? '—' : `${number.format(scenario.metrics.cashOnCash * 100)}%`}</span><span>{scenario.metrics.dscr == null ? '—' : `${number.format(scenario.metrics.dscr)}×`}</span><span>{scenario.metrics.irr == null ? '—' : `${number.format(scenario.metrics.irr * 100)}%`}</span></div>)}
                   </div>
                 </section>
 
@@ -609,6 +677,7 @@ const InvestmentCalculator = () => {
         </aside>
       </section>
     </main>
+    </AutofillContext.Provider>
   );
 };
 
