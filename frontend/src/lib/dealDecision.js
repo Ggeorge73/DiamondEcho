@@ -1,7 +1,10 @@
 import { analyzeDealLocally } from './dealAnalysis';
 import { buildDealRequest } from './dealRequest';
 
-export const DECISION_VERSION = 'diamond-decision-1.0.0';
+export const DECISION_VERSION = 'diamond-decision-1.0.1';
+
+const EXPLICIT_EXIT_DOWNSIDE_MULTIPLIER = 0.9;
+const EXPLICIT_EXIT_UPSIDE_MULTIPLIER = 1.1;
 
 export const RENTAL_EVIDENCE_ITEMS = [
   { key: 'rentRollVerified', label: 'Rent roll, leases, deposits, and delinquencies verified', action: 'Reconcile signed leases to the rent roll, bank deposits, concessions, delinquencies, notices, and security deposits.' },
@@ -29,7 +32,6 @@ const atPrice = (form, purchasePrice) => {
     ...form,
     purchasePrice: String(purchasePrice),
     closingCosts: String(purchasePrice * closingRate),
-    explicitSalePrice: '',
   });
 };
 
@@ -80,9 +82,18 @@ const buildScenario = (form, name, changes) => {
       dscr: metricValue(analysis, 'dscr'),
       irr: metricValue(analysis, 'irr'),
       equityMultiple: metricValue(analysis, 'equity_multiple'),
+      salePrice: metricValue(analysis, 'sale_price'),
     },
   };
 };
+
+const downsideExitChanges = (form) => n(form.explicitSalePrice) > 0
+  ? { explicitSalePrice: String(n(form.explicitSalePrice) * EXPLICIT_EXIT_DOWNSIDE_MULTIPLIER) }
+  : { exitCap: String(n(form.exitCap) + 0.75) };
+
+const upsideExitChanges = (form) => n(form.explicitSalePrice) > 0
+  ? { explicitSalePrice: String(n(form.explicitSalePrice) * EXPLICIT_EXIT_UPSIDE_MULTIPLIER) }
+  : { exitCap: String(Math.max(0.1, n(form.exitCap) - 0.5)) };
 
 const buildScenarios = (form) => [
   buildScenario(form, 'Downside', {
@@ -90,7 +101,7 @@ const buildScenarios = (form) => [
     otherIncome: String(n(form.otherIncome) * 0.9),
     vacancy: String(Math.min(50, n(form.vacancy) + 3)),
     interestRate: String(n(form.interestRate) + 0.5),
-    exitCap: String(n(form.exitCap) + 0.75),
+    ...downsideExitChanges(form),
     initialCapex: String(n(form.initialCapex) * 1.25),
     ...scaleOperatingExpenses(form, 1.1),
   }),
@@ -100,7 +111,7 @@ const buildScenarios = (form) => [
     otherIncome: String(n(form.otherIncome) * 1.1),
     vacancy: String(Math.max(0, n(form.vacancy) - 2)),
     interestRate: String(Math.max(0, n(form.interestRate) - 0.25)),
-    exitCap: String(Math.max(0.1, n(form.exitCap) - 0.5)),
+    ...upsideExitChanges(form),
     initialCapex: String(n(form.initialCapex) * 0.75),
     ...scaleOperatingExpenses(form, 0.95),
   }),
@@ -122,8 +133,9 @@ export const buildRentalDecision = ({ form, evidence = {} }) => {
 
   const validCeilings = ceilings.filter((item) => item.value !== null && item.value > 0);
   const exactMaximum = validCeilings.length ? Math.min(...validCeilings.map((item) => item.value)) : null;
-  const recommendedMaximum = exactMaximum ? roundDown(exactMaximum) : null;
-  const bindingKey = exactMaximum ? validCeilings.find((item) => item.value === exactMaximum)?.key : null;
+  const hasExactMaximum = exactMaximum !== null;
+  const recommendedMaximum = hasExactMaximum ? roundDown(exactMaximum) : null;
+  const bindingKey = hasExactMaximum ? validCeilings.find((item) => item.value === exactMaximum)?.key : null;
   const askingPrice = n(form.purchasePrice);
   const base = analyzeForm(form);
   const baseMetrics = {
@@ -148,14 +160,15 @@ export const buildRentalDecision = ({ form, evidence = {} }) => {
 
   let verdict = 'CONDITIONAL — VERIFY THE DEAL';
   let tone = 'amber';
-  if (recommendedMaximum && askingPrice > recommendedMaximum * 1.05) { verdict = 'REPRICE OR PASS'; tone = 'red'; }
-  else if (recommendedMaximum && askingPrice > recommendedMaximum) { verdict = 'NEGOTIATE TO THE CEILING'; tone = 'amber'; }
+  if (hasExactMaximum && askingPrice > exactMaximum * 1.05) { verdict = 'REPRICE OR PASS'; tone = 'red'; }
+  else if (hasExactMaximum && askingPrice > exactMaximum) { verdict = 'NEGOTIATE TO THE CEILING'; tone = 'amber'; }
   else if (walkAwaySignals.length) { verdict = 'CONDITIONAL — RESOLVE EXCEPTIONS'; tone = 'red'; }
   else if (gaps.length === 0 && hurdleResults.every((item) => item.pass)) { verdict = 'PROCEED TO DILIGENCE'; tone = 'green'; }
 
   const gapToAsk = recommendedMaximum === null ? null : askingPrice - recommendedMaximum;
-  const openingLow = recommendedMaximum ? roundNearest(recommendedMaximum * 0.92) : null;
-  const openingHigh = recommendedMaximum ? roundNearest(recommendedMaximum * 0.97) : null;
+  const hasPositiveRecommendedMaximum = recommendedMaximum !== null && recommendedMaximum > 0;
+  const openingLow = hasPositiveRecommendedMaximum ? roundNearest(recommendedMaximum * 0.92) : null;
+  const openingHigh = hasPositiveRecommendedMaximum ? roundNearest(recommendedMaximum * 0.97) : null;
 
   return {
     version: DECISION_VERSION,
@@ -171,12 +184,12 @@ export const buildRentalDecision = ({ form, evidence = {} }) => {
     recommendedMaximum,
     askingPrice,
     gapToAsk,
-    openingRange: recommendedMaximum ? [openingLow, openingHigh] : null,
-    targetRange: recommendedMaximum ? [openingHigh, recommendedMaximum] : null,
+    openingRange: hasPositiveRecommendedMaximum ? [openingLow, openingHigh] : null,
+    targetRange: hasPositiveRecommendedMaximum ? [openingHigh, recommendedMaximum] : null,
     scenarios: buildScenarios(form),
     walkAwaySignals,
-    summary: recommendedMaximum
-      ? askingPrice > recommendedMaximum
+    summary: hasExactMaximum
+      ? askingPrice > exactMaximum
         ? `The proposed price exceeds the return-constrained ceiling by ${Math.round(gapToAsk).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}. Reprice the basis or improve verified income, expenses, financing, or seller economics.`
         : `The proposed price is within the modeled return ceiling, subject to complete evidence and diligence.`
       : 'No defensible maximum offer could be established from the selected hurdles. Review the assumptions before proceeding.',

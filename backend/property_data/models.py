@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -36,6 +36,8 @@ class PropertyDetails(StrictModel):
     square_footage: Optional[float] = None
     lot_size: Optional[float] = None
     year_built: Optional[int] = None
+    unit_count: Optional[int] = None
+    zoning: Optional[str] = None
     last_sale_price: Optional[float] = None
     last_sale_date: Optional[str] = None
     assessed_value: Optional[float] = None
@@ -48,3 +50,40 @@ class PropertyDetails(StrictModel):
 
 class PropertyLookupResponse(StrictModel):
     property: PropertyDetails
+
+
+class AssumptionEvidence(StrictModel):
+    field: str
+    value: Union[str, float, int]
+    label: str
+    source_kind: str
+    source_name: str
+    method: str
+    confidence: str
+    sample_size: Optional[int] = None
+    radius_miles: Optional[float] = None
+    source_url: Optional[str] = None
+    note: Optional[str] = None
+
+
+class ComparableSummary(StrictModel):
+    radius_miles: float
+    property_records: int = 0
+    rental_comps: int = 0
+    sale_comps: int = 0
+    predominant_property_type: Optional[str] = None
+    average_monthly_rent: Optional[float] = None
+    average_sale_price: Optional[float] = None
+    average_price_per_square_foot: Optional[float] = None
+
+
+class UnderwritingProfileResponse(StrictModel):
+    property: PropertyDetails
+    strategy: str
+    radius_miles: float
+    inputs: Dict[str, str]
+    assumptions: List[AssumptionEvidence]
+    comparables: ComparableSummary
+    generated_at: str
+    provider: str
+    warnings: List[str] = Field(default_factory=list)
