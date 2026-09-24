@@ -43,11 +43,14 @@ and draft PR #9 is not production-ready.
 
 ## Domain discovery (read-only, 2026-09-24)
 
-Gbenga identified `diamondecho.com`. Public DNS currently delegates to
+Gbenga identified `diamondecho.com` and confirmed GoDaddy also hosts the
+website; the specific GoDaddy hosting product is not yet known. Public DNS
+currently delegates to
 `ns55.domaincontrol.com` and `ns56.domaincontrol.com` (GoDaddy-managed DNS).
 The apex has A records, `www` is a CNAME to the apex, and the domain has MX
-and TXT records used for email. These records do not establish where the
-website or API is hosted. No DNS change was made.
+and TXT records used for email. These records alone do not establish the
+hosting product or where the FastAPI/MongoDB services run. No DNS change was
+made.
 
 Lara must inventory **all** DNS records and current web/email services before
 any cutover. Cloudflare's full DNS setup would leave domain registration at
