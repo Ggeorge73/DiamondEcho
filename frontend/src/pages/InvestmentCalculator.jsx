@@ -11,8 +11,10 @@ import { analyzeDealLocally, runMonteCarloLocally } from '../lib/dealAnalysis';
 import { buildRentalDecision, RENTAL_EVIDENCE_ITEMS } from '../lib/dealDecision';
 import { downloadDealWorkbook } from '../lib/dealWorkbook';
 import { buildDealRequest } from '../lib/dealRequest';
+import { responseErrorMessage, validateDealForm, validateMonteCarloScenarios } from '../lib/dealValidation';
 import { buildMonteCarloScenarios, MONTE_CARLO_CASES } from '../lib/monteCarloCases';
 import { recordFromListing, resolveListingContext } from '../lib/listingContext';
+import { applyPropertyAutofill, preparePropertyChange } from '../lib/propertyAutofill';
 
 const MARKET_OPTIONS = [
   'Atlanta, GA', 'Austin, TX', 'Boston, MA', 'Charlotte, NC', 'Chicago, IL',
@@ -98,6 +100,7 @@ const InvestmentCalculator = () => {
   const listingContext = useMemo(() => resolveListingContext(location.search, properties), [location.search]);
   const [form, setForm] = useState(initialForm);
   const [result, setResult] = useState(null);
+  const [analysisSnapshot, setAnalysisSnapshot] = useState(null);
   const [decision, setDecision] = useState(null);
   const [evidence, setEvidence] = useState(() => Object.fromEntries(RENTAL_EVIDENCE_ITEMS.map((item) => [item.key, false])));
   const [monteCarlo, setMonteCarlo] = useState(null);
@@ -107,6 +110,9 @@ const InvestmentCalculator = () => {
   const [riskLoading, setRiskLoading] = useState(false);
   const [propertyLoading, setPropertyLoading] = useState(false);
   const [propertyRecord, setPropertyRecord] = useState(null);
+  const [propertyProvenance, setPropertyProvenance] = useState({});
+  const [propertyReviewFields, setPropertyReviewFields] = useState([]);
+  const [propertySourceLabel, setPropertySourceLabel] = useState('');
   const [addressSuggestions, setAddressSuggestions] = useState([]);
   const [marketSuggestions, setMarketSuggestions] = useState([]);
   const [resultMode, setResultMode] = useState('base');
@@ -122,6 +128,7 @@ const InvestmentCalculator = () => {
   const invalidateAnalysis = () => {
     analysisGeneration.current += 1;
     setResult(null);
+    setAnalysisSnapshot(null);
     setDecision(null);
     setMonteCarlo(null);
     setResultMode('base');
@@ -169,37 +176,30 @@ const InvestmentCalculator = () => {
       propertyLookupGeneration.current += 1;
       invalidateAnalysis();
       setPropertyRecord(null);
+      setPropertyProvenance({});
+      setPropertyReviewFields([]);
+      setPropertySourceLabel('');
       setPropertyLoading(false);
       clearListingRoute();
-      setForm((current) => ({
-        ...current, address: value, market: '', purchasePrice: '',
-        rentableSquareFeet: '', propertyTaxes: '',
-      }));
+      setForm((current) => preparePropertyChange(current, value));
       return;
     }
     if (name === 'propertyType' && value === 'land' && form.strategy !== 'land') {
       switchStrategy('land', 'land');
       return;
     }
+    invalidateAnalysis();
+    setPropertyProvenance((current) => ({ ...current, [name]: { source: 'Your input', description: 'Entered for this analysis; verify before relying on it' } }));
     setForm((current) => ({ ...current, [name]: value, ...(name === 'propertyType' && value === 'land' ? { strategy: 'land' } : {}) }));
   };
 
   const switchStrategy = (strategy, propertyType) => {
     if (strategy === form.strategy) return;
     invalidateAnalysis();
+    if (propertyType && propertyType !== form.propertyType) {
+      setPropertyProvenance((current) => ({ ...current, propertyType: { source: 'Your input', description: 'Selected for this analysis; verify against the property' } }));
+    }
     setForm((current) => ({ ...current, strategy, propertyType: propertyType || current.propertyType }));
-  };
-
-  const propertyTypeValue = (value = '') => {
-    const normalized = value.toLowerCase();
-    if (normalized.includes('multi') || normalized.includes('apartment')) return 'multifamily';
-    if (normalized.includes('condo')) return 'condo';
-    if (normalized.includes('office')) return 'office';
-    if (normalized.includes('retail')) return 'retail';
-    if (normalized.includes('industrial')) return 'industrial';
-    if (normalized.includes('mixed')) return 'mixed_use';
-    if (normalized.includes('land') || normalized.includes('lot') || normalized.includes('vacant')) return 'land';
-    return 'single_family';
   };
 
   useEffect(() => {
@@ -215,38 +215,30 @@ const InvestmentCalculator = () => {
 
     if (listingContext.kind === 'listing') {
       const record = recordFromListing(listingContext.listing);
+      const autofill = applyPropertyAutofill(initialForm, record, 'listing');
       setPropertyRecord(record);
-      setForm({
-        ...initialForm,
-        address: record.formatted_address,
-        market: [record.city, record.state].filter(Boolean).join(', '),
-        propertyType: propertyTypeValue(record.property_type),
-        units: '1',
-        rentableSquareFeet: String(record.square_footage || ''),
-        purchasePrice: String(record.price),
-        propertyTaxes: record.annual_taxes == null ? '' : String(record.annual_taxes),
-      });
+      setForm(autofill.form);
+      setPropertyProvenance(autofill.provenance);
+      setPropertyReviewFields(autofill.reviewFields);
+      setPropertySourceLabel(autofill.sourceLabel);
     } else {
       setPropertyRecord(null);
+      setPropertyProvenance({});
+      setPropertyReviewFields([]);
+      setPropertySourceLabel('');
       setForm(listingContext.kind === 'missing'
-        ? { ...initialForm, address: '', market: '', rentableSquareFeet: '', purchasePrice: '', propertyTaxes: '' }
+        ? preparePropertyChange(initialForm)
         : initialForm);
     }
   }, [listingContext]);
 
   const applyProperty = (record) => {
-    const market = [record.city, record.state].filter(Boolean).join(', ');
+    const autofill = applyPropertyAutofill(form, record, record.source_listing_id != null ? 'listing' : 'record');
     setPropertyRecord(record);
-    setForm((current) => ({
-      ...current,
-      address: record.formatted_address || current.address,
-      market: market || current.market,
-      propertyType: propertyTypeValue(record.property_type),
-      units: record.property_type?.toLowerCase().includes('multi') ? current.units : '1',
-      rentableSquareFeet: String(record.square_footage || current.rentableSquareFeet),
-      purchasePrice: String(record.last_sale_price || record.price || current.purchasePrice),
-      propertyTaxes: String(record.annual_taxes || current.propertyTaxes),
-    }));
+    setForm(autofill.form);
+    setPropertyProvenance(autofill.provenance);
+    setPropertyReviewFields(autofill.reviewFields);
+    setPropertySourceLabel(autofill.sourceLabel);
     setAddressSuggestions([]);
   };
 
@@ -254,11 +246,11 @@ const InvestmentCalculator = () => {
     const lookupGeneration = ++propertyLookupGeneration.current;
     invalidateAnalysis();
     setPropertyRecord(null);
+    setPropertyProvenance({});
+    setPropertyReviewFields([]);
+    setPropertySourceLabel('');
     setPropertyLoading(false);
-    setForm((current) => ({
-      ...current, address: suggestion.label, market: '', purchasePrice: '',
-      rentableSquareFeet: '', propertyTaxes: '',
-    }));
+    setForm((current) => preparePropertyChange(current, suggestion.label));
     setAddressSuggestions([]);
     if (suggestion.property) {
       const listingPath = '/investment-calculator?listing=' + encodeURIComponent(suggestion.property.id);
@@ -278,12 +270,16 @@ const InvestmentCalculator = () => {
     }
   };
 
-  const buildRequest = () => buildDealRequest(form);
+  const buildRequest = () => {
+    validateDealForm(form);
+    return buildDealRequest(form);
+  };
 
   const analyze = async (event) => {
     event.preventDefault();
     const generation = ++analysisGeneration.current;
-    setLoading(true); setError(''); setResult(null); setDecision(null); setResultMode('base');
+    setLoading(true); setError(''); setRiskError(''); setResult(null); setDecision(null); setMonteCarlo(null); setResultMode('base');
+    setAnalysisSnapshot(null);
     let request;
     try {
       request = buildRequest();
@@ -291,6 +287,7 @@ const InvestmentCalculator = () => {
         const analysis = analyzeDealLocally(request);
         if (generation === analysisGeneration.current) {
           setResult(analysis);
+          setAnalysisSnapshot({ form: { ...form }, request, result: analysis });
           setDecision(buildRentalDecision({ form, evidence }));
         }
       }
@@ -298,22 +295,12 @@ const InvestmentCalculator = () => {
         const { data } = await axios.post(`${backendUrl}/api/v1/deals/analyze`, request);
         if (generation === analysisGeneration.current) {
           setResult(data);
+          setAnalysisSnapshot({ form: { ...form }, request, result: data });
           setDecision(buildRentalDecision({ form, evidence }));
         }
       }
     } catch (requestError) {
-      try {
-        if (!request) throw requestError;
-        const analysis = analyzeDealLocally(request);
-        if (generation === analysisGeneration.current) {
-          setResult(analysis);
-          setDecision(buildRentalDecision({ form, evidence }));
-        }
-      }
-      catch (calculationError) {
-        const detail = requestError.response?.data?.detail;
-        if (generation === analysisGeneration.current) setError(calculationError.message || (typeof detail === 'string' ? detail : 'The analysis could not be completed. Review the assumptions and try again.'));
-      }
+      if (generation === analysisGeneration.current) setError(responseErrorMessage(requestError, 'The analysis could not be completed. Review the assumptions and try again.'));
     } finally { if (generation === analysisGeneration.current) setLoading(false); }
   };
 
@@ -345,6 +332,7 @@ const InvestmentCalculator = () => {
     setRiskLoading(true); setRiskError(''); setMonteCarlo(null); setResultMode('risk');
     try {
       const scenarios = buildMonteCarloScenarios({ iterations: form.mcIterations, driversForCase: scenarioDrivers });
+      validateMonteCarloScenarios(scenarios);
       const payload = { deal: buildRequest(), scenarios };
       if (!backendUrl) {
         const analysis = runMonteCarloLocally(payload);
@@ -355,23 +343,18 @@ const InvestmentCalculator = () => {
         if (generation === analysisGeneration.current) setMonteCarlo(data);
       }
     } catch (requestError) {
-      try {
-        const payload = { deal: buildRequest(), scenarios: buildMonteCarloScenarios({ iterations: form.mcIterations, driversForCase: scenarioDrivers }) };
-        const analysis = runMonteCarloLocally(payload);
-        if (generation === analysisGeneration.current) setMonteCarlo(analysis);
-      } catch (calculationError) {
-        if (generation === analysisGeneration.current) setRiskError(calculationError.message || requestError.response?.data?.detail || 'Risk analysis could not be completed.');
-      }
+      if (generation === analysisGeneration.current) setRiskError(responseErrorMessage(requestError, 'Risk analysis could not be completed.'));
     } finally { if (generation === analysisGeneration.current) setRiskLoading(false); }
   };
 
   const exportWorkbook = () => {
     setError('');
+    setResultMode('base');
     try {
-      const request = buildRequest();
-      const analysis = analyzeDealLocally(request);
-      setResult(analysis); setDecision(buildRentalDecision({ form, evidence })); setResultMode('base');
-      downloadDealWorkbook({ form, request, result: analysis });
+      if (!analysisSnapshot || !result || resultIssue) {
+        throw new Error('Run a successful base analysis with the current inputs before downloading Excel.');
+      }
+      downloadDealWorkbook(analysisSnapshot);
     } catch (calculationError) {
       setError(calculationError.message || 'The deal-specific workbook could not be generated. Review the assumptions and try again.');
       setResultMode('base');
@@ -432,12 +415,13 @@ const InvestmentCalculator = () => {
       </header>
 
       <section className="deal-studio-shell">
-        <form className="deal-studio-form" onSubmit={analyze}>
+        <form className="deal-studio-form" onSubmit={analyze} noValidate>
           {listingContext.kind === 'listing' && propertyRecord?.source_listing_id === listingContext.listing.id && (
-            <p className="studio-provider-note" role="status">DiamondEcho listing #{listingContext.listing.id} loaded. Address, asking price, size and displayed tax history come from this listing; all other financial assumptions are illustrative and need verification.</p>
+            <p className="studio-provider-note" role="status">DiamondEcho listing #{listingContext.listing.id} loaded. Only the sourced fields below were copied; unrelated financial assumptions were cleared and must be entered and reviewed.</p>
           )}
           {listingContext.kind === 'manual' && !propertyRecord && <p className="studio-provider-note" role="status">Manual Deal Studio entry. Any prefilled numbers are illustrative, not facts about a selected listing; verify all assumptions.</p>}
           {listingContext.kind === 'missing' && <p className="studio-provider-note" role="alert">Listing #{listingContext.id || '(empty)'} is unavailable. No listing facts were loaded; enter and verify a property manually or return to search.</p>}
+          {propertyRecord && <div className="studio-provider-note studio-provenance-note" role="status"><strong>Input sources: {propertySourceLabel}</strong><ul>{Object.entries(propertyProvenance).map(([field, details]) => <li key={field}>{field.replace(/([A-Z])/g, ' $1')}: {details.source} — {details.description}</li>)}</ul>{propertyReviewFields.length > 0 && <p>Review and enter missing values: {propertyReviewFields.join('; ')}.</p>}</div>}
           <div className="studio-strategy" role="group" aria-label="Investment strategy">
             <button type="button" className={form.strategy === 'rental' ? 'is-active' : ''} onClick={() => switchStrategy('rental', form.propertyType === 'land' ? 'multifamily' : form.propertyType)}><Building2 /> Rental & commercial</button>
             <button type="button" className={form.strategy === 'flip' ? 'is-active' : ''} onClick={() => switchStrategy('flip', ['multifamily', 'land'].includes(form.propertyType) ? 'single_family' : form.propertyType)}><Home /> Fix & flip</button>
@@ -457,8 +441,8 @@ const InvestmentCalculator = () => {
                 <dl>
                   <div><dt>TYPE</dt><dd>{propertyRecord.property_type || 'Verify'}</dd></div>
                   <div><dt>BUILT</dt><dd>{propertyRecord.year_built || '—'}</dd></div>
-                  <div><dt>SIZE</dt><dd>{propertyRecord.square_footage ? `${number.format(propertyRecord.square_footage)} sf` : '—'}</dd></div>
-                  <div><dt>TAXES</dt><dd>{propertyRecord.annual_taxes ? money.format(propertyRecord.annual_taxes) : '—'}</dd></div>
+                  <div><dt>SIZE</dt><dd>{propertyRecord.square_footage != null ? `${number.format(propertyRecord.square_footage)} sf` : '—'}</dd></div>
+                  <div><dt>TAXES</dt><dd>{propertyRecord.annual_taxes != null ? money.format(propertyRecord.annual_taxes) : '—'}</dd></div>
                 </dl>
               </div>
             )}
@@ -470,7 +454,7 @@ const InvestmentCalculator = () => {
                 <option value="mixed_use">Mixed-use</option><option value="hospitality">Hospitality</option>
                 <option value="land">Lot / land</option>
               </SelectField>
-              <AutocompleteField label="Market" name="market" value={form.market} onChange={update} suggestions={marketSuggestions} onSelect={(item) => { setForm((current) => ({ ...current, market: item.label })); setMarketSuggestions([]); }} placeholder="Type one letter" />
+              <AutocompleteField label="Market" name="market" value={form.market} onChange={update} suggestions={marketSuggestions} onSelect={(item) => { invalidateAnalysis(); setPropertyProvenance((current) => ({ ...current, market: { source: 'Your input', description: 'Selected market for this analysis' } })); setForm((current) => ({ ...current, market: item.label })); setMarketSuggestions([]); }} placeholder="Type one letter" />
               <Field label={form.strategy === 'land' ? 'Planned units / lots' : 'Units'} name="units" value={form.units} onChange={update} step="1" />
               <Field label={form.strategy === 'land' ? 'Buildable square feet' : 'Rentable square feet'} name="rentableSquareFeet" value={form.rentableSquareFeet} onChange={update} suffix="sf" />
               <Field label="Purchase price" name="purchasePrice" value={form.purchasePrice} onChange={update} prefix="$" />
@@ -531,7 +515,7 @@ const InvestmentCalculator = () => {
               <div className="studio-evidence-grid">
                 {RENTAL_EVIDENCE_ITEMS.map((item) => (
                   <label key={item.key} className={evidence[item.key] ? 'is-verified' : ''}>
-                    <input type="checkbox" checked={Boolean(evidence[item.key])} onChange={(event) => setEvidence((current) => ({ ...current, [item.key]: event.target.checked }))} />
+                    <input type="checkbox" checked={Boolean(evidence[item.key])} onChange={(event) => { invalidateAnalysis(); setEvidence((current) => ({ ...current, [item.key]: event.target.checked })); }} />
                     <span>{evidence[item.key] ? <CheckCircle2 /> : <AlertCircle />}{item.label}</span>
                   </label>
                 ))}
@@ -544,6 +528,7 @@ const InvestmentCalculator = () => {
               <legend><span>03</span> Land development program & feasibility</legend>
               <div className="studio-field-grid">
                 <SelectField label="Development type" name="developmentType" value={form.developmentType} onChange={update}>
+                  <option value="">Select / verify…</option>
                   <option value="sell_entitled_land">Entitle and sell land</option><option value="finished_lots">Finished-lot development</option>
                   <option value="single_family_subdivision">Single-family subdivision</option><option value="multifamily">Multifamily</option>
                   <option value="mixed_use">Mixed-use</option><option value="retail">Retail</option><option value="office">Office</option>
@@ -551,6 +536,7 @@ const InvestmentCalculator = () => {
                   <option value="self_storage">Self-storage</option><option value="data_center">Data center</option><option value="other">Other</option>
                 </SelectField>
                 <SelectField label="Disposition strategy" name="dispositionStrategy" value={form.dispositionStrategy} onChange={update}>
+                  <option value="">Select / verify…</option>
                   <option value="sell_entitled">Sell entitled land</option><option value="sell_finished_lots">Sell finished lots</option>
                   <option value="build_and_sell">Build and sell</option><option value="stabilize_and_sell">Stabilize and sell</option>
                   <option value="stabilize_and_hold">Stabilize and hold / refinance</option>
@@ -560,6 +546,7 @@ const InvestmentCalculator = () => {
                 <Field label="Current zoning" name="currentZoning" value={form.currentZoning} onChange={update} type="text" min={undefined} />
                 <Field label="Proposed zoning" name="proposedZoning" value={form.proposedZoning} onChange={update} type="text" min={undefined} />
                 <SelectField label="Entitlement status" name="entitlementStatus" value={form.entitlementStatus} onChange={update}>
+                  <option value="">Select / verify…</option>
                   <option value="unentitled">Unentitled</option><option value="rezoning_required">Rezoning required</option>
                   <option value="application_pending">Application pending</option><option value="approved_with_conditions">Approved with conditions</option>
                   <option value="fully_entitled">Fully entitled</option><option value="shovel_ready">Shovel-ready / permitted</option>
@@ -662,7 +649,7 @@ const InvestmentCalculator = () => {
           {resultMode === 'base' && !result && !error && (
             <div className="studio-empty"><CircleDollarSign /><h2>Your decision canvas</h2><p>Complete the assumptions and run an analysis. DiamondEcho will calculate returns, debt coverage, value creation, and risk signals without hidden inputs.</p></div>
           )}
-          {resultMode === 'base' && error && <div className="studio-error"><AlertCircle /><h2>Analysis needs attention</h2><p>{error}</p><button onClick={() => setError('')}><RotateCcw /> Review inputs</button></div>}
+          {resultMode === 'base' && error && <div className="studio-error" role="alert"><AlertCircle /><h2>Analysis needs attention</h2><p>{error}</p><button onClick={() => setError('')}><RotateCcw /> Review inputs</button></div>}
           {resultMode === 'base' && resultIssue && <div className="studio-error" role="alert"><AlertCircle /><h2>Analysis needs attention</h2><p>{resultIssue}</p><button onClick={() => { setResult(null); setDecision(null); }}><RotateCcw /> Review inputs</button></div>}
           {resultMode === 'base' && result && !resultIssue && (
             <div className="studio-result">
