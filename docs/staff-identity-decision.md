@@ -40,3 +40,17 @@ Cloudflare account and Gbenga membership/MFA, obtain Access application
 audience/issuer and approved identity in deployment configuration, and choose
 the exact staff/API routing. Until these are met, the queue remains disabled
 and draft PR #9 is not production-ready.
+
+## Domain discovery (read-only, 2026-09-24)
+
+Gbenga identified `diamondecho.com`. Public DNS currently delegates to
+`ns55.domaincontrol.com` and `ns56.domaincontrol.com` (GoDaddy-managed DNS).
+The apex has A records, `www` is a CNAME to the apex, and the domain has MX
+and TXT records used for email. These records do not establish where the
+website or API is hosted. No DNS change was made.
+
+Lara must inventory **all** DNS records and current web/email services before
+any cutover. Cloudflare's full DNS setup would leave domain registration at
+GoDaddy but change authoritative nameservers; a partial CNAME setup would
+retain GoDaddy DNS but currently requires Cloudflare Business or Enterprise.
+Gbenga must approve the selected cost and migration risk before either path.
