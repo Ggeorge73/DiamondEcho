@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self' https://api.example.invalid; base-uri 'none'; form-action 'none'; object-src 'none'; upgrade-insecure-requests">
+  <title>DiamondEcho Staff | Inquiry Queue</title>
+  <link rel="stylesheet" href="./staff.css">
+  <script defer src="./config.js"></script>
+  <script defer src="./app.js"></script>
+</head>
+<body>
+  <main class="shell">
+    <p class="eyebrow">DiamondEcho staff</p>
+    <h1>Inquiry queue</h1>
+    <p class="intro">Restricted visitor requests. Use only your approved staff credential on the designated staff site.</p>
+    <div id="alert" class="alert" role="alert" tabindex="-1" hidden></div>
+    <p id="notice" class="notice" role="status" hidden></p>
+    <section id="signin-section" aria-label="Staff access">
+      <form id="signin-form" class="card">
+        <label for="credential">Approved staff credential</label>
+        <input id="credential" name="credential" type="password" autocomplete="off" spellcheck="false" required>
+        <p class="hint">This provisional access key is kept in page memory only. It is cleared when you sign out or close this page.</p>
+        <button id="signin-button" type="submit">Open queue</button>
+      </form>
+    </section>
+    <section id="queue-section" aria-label="Staff inquiries" hidden>
+      <div class="controls">
+        <p id="count" role="status"></p>
+        <div class="actions">
+          <button id="refresh-button" type="button">Refresh</button>
+          <button id="signout-button" type="button">Sign out</button>
+        </div>
+      </div>
+      <ul id="inquiries" class="inquiries"></ul>
+    </section>
+  </main>
+</body>
+</html>

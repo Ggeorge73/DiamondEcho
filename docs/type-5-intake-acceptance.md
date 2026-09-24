@@ -1,5 +1,9 @@
 # Type 5 — inquiry acceptance runbook (DE-9 / audit DE-01)
 
+Historical note: Gbenga subsequently chose a secure DiamondEcho staff queue
+instead of SMTP. Use `docs/type-7-staff-queue-acceptance.md` for current
+acceptance; the SMTP steps below describe the superseded Type 5 design.
+
 This runbook is for Tiara (QA) and Lara (operations), with Gbenga as the
 approval and merge owner. Passing automated tests is not proof that a real
 recipient received an inquiry. Do not mark DE-9 Done until the evidence below

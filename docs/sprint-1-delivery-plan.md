@@ -33,8 +33,11 @@ Agents are implementation support, not Jira user accounts. **Gbenga is the human
 4. **Critical site correctness** — fix DE-8's blank-screen strategy crash and DE-11's wrong-property context. These independent, high-impact defects have no product-scope dependency. Stop and report.
 5. **Buyer, seller, and tour intake** — implement DE-9 after DE-6. Verify each request is persisted once, routed to the approved recipient, and accurately confirmed; test failures, mobile, keyboard and cleanup. Stop and report.
 6. **Dependent calculator and property safeguards** — fix DE-10 after DE-8 and DE-12 after DE-11. Verify invalid/stale results and exports, and prevent prior-property assumptions from becoming new-property facts. Stop and report.
+7. **Launch evidence and secure inquiry operations** — define Tiara's 18-finding QA evidence matrix (DE-29) and adapt DE-9/DE-31 to Gbenga's newly approved secure staff queue rather than SMTP. Staff authentication, responder, retention and operational acceptance must be explicit before a live inquiry receipt can be claimed. Stop and report.
 
 Within Type 4, the crash and listing-context streams can proceed in parallel when authorized. DE-9 is brought forward after its scope dependency because it is a Highest-priority missing customer journey and has substantial integration work. The user has asked for permission between types, so no later type begins automatically. Jira moves to Done only after issue-specific acceptance evidence and a named reviewer acceptance are recorded.
+
+Type 7 was added after Gbenga authorized continuation following the Type 6 merge and changed the lead destination to a DiamondEcho staff queue. This is a scope change to the Type 5 implementation, not evidence that the existing SMTP-dependent path works live. The initial queue is intended for Gbenga's staff account; the sign-in method and production configuration remain approval gates.
 
 ## Mobilization findings and open decisions
 

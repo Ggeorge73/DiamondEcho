@@ -92,7 +92,7 @@ const InquiryForm = ({ kind, property }) => {
       const response = await axios.post(backendUrl + '/api/v1/inquiries', payload, {
         headers: { 'X-Idempotency-Key': submissionRef.current.key },
       });
-      if (![200, 201].includes(response.status) || response.data?.status !== 'routed' || !response.data?.request_id) {
+      if (![200, 201].includes(response.status) || response.data?.status !== 'queued' || !response.data?.request_id) {
         throw new Error('We could not confirm your request. Please retry.');
       }
       setReceipt(response.data);
@@ -110,7 +110,7 @@ const InquiryForm = ({ kind, property }) => {
       <section className="de-inquiry-card de-inquiry-receipt" tabIndex={-1} ref={receiptRef} aria-labelledby="inquiry-receipt-title">
         <p className="eyebrow">Request submitted</p>
         <h2 id="inquiry-receipt-title">DiamondEcho received your request.</h2>
-        <p>{kind === 'tour' ? 'This is a tour request. The visit is not booked or confirmed.' : 'An advisor can follow up using the contact details you provided.'}</p>
+        <p>Your request is in the DiamondEcho staff queue. {kind === 'tour' ? 'This is a tour request. The visit is not booked or confirmed.' : 'A team member can review it and follow up using the contact details you provided.'}</p>
         <p className="de-inquiry-reference">Reference: {receipt.request_id}</p>
         <Link className="mf-btn mf-btn--solid" to={property ? '/property/' + property.id : '/search'}>Continue browsing</Link>
       </section>

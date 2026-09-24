@@ -1,32 +1,38 @@
-"""Durable inquiry intake; SMTP handoff is not proof of inbox receipt."""
+"""Durable inquiry queue. A receipt confirms storage, not staff acknowledgement."""
 
-import asyncio
 import hashlib
+import hmac
 import json
 import os
-import smtplib
-import ssl
+import re
 import uuid
-from datetime import datetime, timedelta, timezone
-from email.message import EmailMessage
+from datetime import datetime, timezone
 
-from pydantic import EmailStr, TypeAdapter, ValidationError
 from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
+from pymongo.write_concern import WriteConcern
 
-from .models import InquiryCreate, InquiryReceipt
+from .models import InquiryCreate, InquiryReceipt, StaffAcknowledgement, StaffInquiry, StaffInquiryList
 
 
 CONSENT_VERSION = "2026-09-24-v1"
-RETRY_MESSAGE = "Inquiry was saved but delivery is unavailable. Please retry with the same submission key."
-LEASE_DURATION = timedelta(minutes=5)
+MAJORITY_WRITE = WriteConcern(w="majority", j=True, wtimeout=5000)
+HEX_SHA256 = re.compile(r"^[0-9a-fA-F]{64}$")
 
 
-class DeliveryUnavailable(Exception):
+class QueueUnavailable(Exception):
     pass
 
 
 class IdempotencyConflict(Exception):
+    pass
+
+
+class StaffUnauthorized(Exception):
+    pass
+
+
+class InquiryNotFound(Exception):
     pass
 
 
@@ -35,120 +41,106 @@ def _fingerprint(inquiry: InquiryCreate) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
-def _smtp_settings() -> tuple[str, str, str, str, str, str, int]:
-    recipient = os.environ.get("INQUIRY_APPROVED_RECIPIENT_EMAIL", "").strip()
-    sender = os.environ.get("INQUIRY_SMTP_FROM_EMAIL", "").strip()
-    host = os.environ.get("INQUIRY_SMTP_HOST", "").strip()
-    username = os.environ.get("INQUIRY_SMTP_USERNAME", "").strip()
-    password = os.environ.get("INQUIRY_SMTP_PASSWORD", "")
-    security = os.environ.get("INQUIRY_SMTP_SECURITY", "starttls").strip().lower()
-    try:
-        port = int(os.environ.get("INQUIRY_SMTP_PORT", "587"))
-        email_type = TypeAdapter(EmailStr)
-        email_type.validate_python(recipient)
-        email_type.validate_python(sender)
-    except (ValueError, ValidationError) as exc:
-        raise DeliveryUnavailable("Inquiry mail configuration is incomplete.") from exc
-    if not all((recipient, sender, host, username, password)) or security not in ("starttls", "ssl") or not 1 <= port <= 65535:
-        raise DeliveryUnavailable("Inquiry mail configuration is incomplete.")
-    return recipient, sender, host, username, password, security, port
+def _staff_settings() -> tuple[str, str]:
+    """No route is enabled without an explicit staff account and valid key hash."""
+    enabled = os.environ.get("INQUIRY_STAFF_QUEUE_ENABLED", "").strip().lower() == "true"
+    account = os.environ.get("INQUIRY_STAFF_ACCOUNT_NAME", "").strip()
+    digest = os.environ.get("INQUIRY_STAFF_ACCESS_KEY_SHA256", "").strip().lower()
+    if not enabled or not account or not HEX_SHA256.fullmatch(digest):
+        raise QueueUnavailable("Inquiry queue is not configured.")
+    return account, digest
 
 
-def _send_smtp(document: dict) -> None:
-    recipient, sender, host, username, password, security, port = _smtp_settings()
-    payload = document["payload"]
-    message = EmailMessage()
-    message["From"] = sender
-    message["To"] = recipient
-    message["Subject"] = f"DiamondEcho {payload['kind']} inquiry [{document['request_id']}]"
-    message["Message-ID"] = f"<{document['request_id']}@diamond-echo-inquiries.invalid>"
-    message.set_content(
-        "DiamondEcho inquiry; a tour request is not a booking.\n"
-        f"Request ID: {document['request_id']}\n"
-        f"Type: {payload['kind']}\nName: {payload['full_name']}\n"
-        f"Email: {payload['email']}\nPhone: {payload.get('phone') or 'Not provided'}\n"
-        f"Listing ID: {payload.get('property_id') or 'Not provided'}\n"
-        f"Property address: {payload.get('property_address') or 'Not provided'}\n"
-        f"Preferred tour time: {payload.get('preferred_tour_time') or 'Not provided'}\n"
-        f"Message: {payload.get('message') or 'Not provided'}\n"
-        f"Consent version: {document['consent_version']}\n"
-        f"Consent time (UTC): {document['consent_at']}\n"
-    )
-    context = ssl.create_default_context()
-    if security == "ssl":
-        connection = smtplib.SMTP_SSL(host, port, timeout=10, context=context)
-    else:
-        connection = smtplib.SMTP(host, port, timeout=10)
-    with connection as smtp:
-        if security == "starttls":
-            smtp.starttls(context=context)
-        smtp.login(username, password)
-        smtp.send_message(message)
+def authorize_staff(authorization: str | None) -> str:
+    account, expected_digest = _staff_settings()
+    scheme, _, token = (authorization or "").partition(" ")
+    if scheme.lower() != "bearer" or not token or len(token) < 32:
+        raise StaffUnauthorized()
+    actual_digest = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    if not hmac.compare_digest(actual_digest, expected_digest):
+        raise StaffUnauthorized()
+    return account
 
 
-async def submit_inquiry(collection, inquiry: InquiryCreate, key: uuid.UUID, deliver=None) -> tuple[InquiryReceipt, bool]:
-    """Persist once; return routed only after SMTP acceptance.
+def _majority(collection):
+    return collection.with_options(write_concern=MAJORITY_WRITE)
 
-    SMTP lacks exactly-once semantics. An interrupted send remains `sending`;
-    retries do not automatically resend it because acceptance may be ambiguous.
-    Operations must reconcile stale claims using the stable request ID.
-    """
+
+async def submit_inquiry(collection, inquiry: InquiryCreate, key: uuid.UUID) -> tuple[InquiryReceipt, bool]:
+    """Store once using a majority+journaled write; fail closed without staff access."""
+    _staff_settings()
     now = datetime.now(timezone.utc)
     document_id = hashlib.sha256(str(key).encode("ascii")).hexdigest()
     fingerprint = _fingerprint(inquiry)
     document = {
-        "_id": document_id, "request_id": str(uuid.uuid4()),
-        "payload_hash": fingerprint, "payload": inquiry.model_dump(mode="json"),
-        "status": "pending", "submitted_at": now.isoformat(), "consent_at": now.isoformat(),
-        "consent_version": CONSENT_VERSION, "attempts": 0,
+        "_id": document_id,
+        "request_id": str(uuid.uuid4()),
+        "payload_hash": fingerprint,
+        "payload": inquiry.model_dump(mode="json"),
+        "status": "queued",
+        "submitted_at": now.isoformat(),
+        "consent_at": now.isoformat(),
+        "consent_version": CONSENT_VERSION,
     }
     try:
-        await collection.insert_one(document)
+        durable = _majority(collection)
+        result = await durable.insert_one(document)
+        if not result.acknowledged:
+            raise QueueUnavailable("Inquiry storage was not confirmed. Retry with the same submission key.")
+        replay = False
     except DuplicateKeyError:
-        document = await collection.find_one({"_id": document_id})
+        try:
+            document = await collection.find_one({"_id": document_id})
+        except Exception as exc:
+            raise QueueUnavailable("Inquiry status is unavailable. Retry with the same submission key.") from exc
         if document is None:
-            raise DeliveryUnavailable(RETRY_MESSAGE)
+            raise QueueUnavailable("Inquiry status is unavailable. Retry with the same submission key.")
+        replay = True
+    except QueueUnavailable:
+        raise
     except Exception as exc:
-        raise DeliveryUnavailable("Inquiry could not be saved. Please retry with the same submission key.") from exc
+        raise QueueUnavailable("Inquiry storage was not confirmed. Retry with the same submission key.") from exc
 
     if document["payload_hash"] != fingerprint:
         raise IdempotencyConflict("This submission key was already used for a different request.")
-    if document["status"] == "routed":
-        return InquiryReceipt(request_id=document["request_id"], submitted_at=document["submitted_at"]), True
+    return InquiryReceipt(request_id=document["request_id"], submitted_at=document["submitted_at"]), replay
 
+
+def _staff_item(document: dict) -> StaffInquiry:
+    return StaffInquiry(
+        request_id=document["request_id"],
+        **document["payload"],
+        submitted_at=document["submitted_at"],
+        status=document["status"],
+        consent_at=document["consent_at"],
+        consent_version=document["consent_version"],
+    )
+
+
+async def list_staff_inquiries(collection, limit: int) -> StaffInquiryList:
     try:
-        claim = await collection.find_one_and_update(
-            {"_id": document_id, "status": {"$in": ["pending", "failed"]}},
-            {"$set": {"status": "sending", "lease_until": now + LEASE_DURATION}, "$inc": {"attempts": 1}},
+        documents = await collection.find(
+            {"status": {"$in": ["queued", "acknowledged"]}}
+        ).sort("submitted_at", -1).limit(limit).to_list(length=limit)
+        return StaffInquiryList(items=[_staff_item(document) for document in documents])
+    except Exception as exc:
+        raise QueueUnavailable("Inquiry queue is temporarily unavailable.") from exc
+
+
+async def acknowledge_inquiry(collection, request_id: uuid.UUID, account: str) -> StaffAcknowledgement:
+    timestamp = datetime.now(timezone.utc).isoformat()
+    try:
+        document = await _majority(collection).find_one_and_update(
+            {"request_id": str(request_id), "status": "queued"},
+            {"$set": {"status": "acknowledged", "acknowledged_at": timestamp, "acknowledged_by": account}},
             return_document=ReturnDocument.AFTER,
         )
+        if document is None:
+            document = await collection.find_one({"request_id": str(request_id)})
     except Exception as exc:
-        raise DeliveryUnavailable(RETRY_MESSAGE) from exc
-    if claim is None:
-        raise DeliveryUnavailable("Inquiry is being processed or needs operator review. Please quote the request time to support; do not start a new request.")
-
-    try:
-        await asyncio.to_thread(deliver or _send_smtp, claim)
-    except DeliveryUnavailable as exc:
-        try:
-            await collection.update_one({"_id": document_id, "status": "sending"}, {"$set": {"status": "failed", "last_attempt_at": datetime.now(timezone.utc)}})
-        except Exception:
-            pass  # A missing status update keeps the claim non-retryable pending review.
-        raise DeliveryUnavailable(RETRY_MESSAGE) from exc
-    except Exception as exc:
-        # A transport error can occur after SMTP accepted the message (for
-        # example, while closing the connection). Do not authorize a resend.
-        raise DeliveryUnavailable(
-            f"Inquiry delivery needs operator review. Reference: {claim['request_id']}. Do not submit a new request."
-        ) from exc
-
-    try:
-        result = await collection.update_one(
-            {"_id": document_id, "status": "sending"},
-            {"$set": {"status": "routed", "routed_at": datetime.now(timezone.utc)}, "$unset": {"lease_until": ""}},
-        )
-        if result.modified_count != 1:
-            raise RuntimeError("Inquiry routing status was not saved.")
-    except Exception as exc:
-        raise DeliveryUnavailable(RETRY_MESSAGE) from exc
-    return InquiryReceipt(request_id=claim["request_id"], submitted_at=claim["submitted_at"]), False
+        raise QueueUnavailable("Inquiry acknowledgement was not confirmed.") from exc
+    if document is None:
+        raise InquiryNotFound()
+    if document["status"] != "acknowledged":
+        raise QueueUnavailable("Inquiry acknowledgement was not confirmed.")
+    return StaffAcknowledgement(request_id=document["request_id"], acknowledged_at=document["acknowledged_at"])

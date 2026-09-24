@@ -65,7 +65,7 @@ test('buyer request requires name, email, message, and explicit consent', async 
   await consent();
   expect(input('consent').checked).toBe(true);
   expect(input('consent').getAttribute('aria-invalid')).toBe('false');
-  axios.post.mockResolvedValueOnce({ status: 201, data: { status: 'routed', request_id: 'REQ-B', submitted_at: '2026-09-24T12:00:00Z' } });
+  axios.post.mockResolvedValueOnce({ status: 201, data: { status: 'queued', request_id: 'REQ-B', submitted_at: '2026-09-24T12:00:00Z' } });
   await submit();
   expect(container.textContent).not.toContain('Request needs attention');
   expect(axios.post).toHaveBeenCalledTimes(1);
@@ -86,7 +86,7 @@ test('seller consultation includes address and details', async () => {
   expect(input('message').getAttribute('aria-invalid')).toBe('true');
   expect(axios.post).not.toHaveBeenCalled();
   await fill('message', 'Please discuss a potential sale.');
-  axios.post.mockResolvedValueOnce({ status: 201, data: { status: 'routed', request_id: 'REQ-S' } });
+  axios.post.mockResolvedValueOnce({ status: 201, data: { status: 'queued', request_id: 'REQ-S' } });
   await submit();
   expect(axios.post.mock.calls[0][1]).toMatchObject({
     kind: 'seller', property_address: '10 Main St, Atlanta, GA', message: 'Please discuss a potential sale.',
@@ -102,7 +102,7 @@ test('tour sends listing context and offset-aware requested time without booking
   const localFuture = new Date(future.getTime() - future.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
   await fill('preferredTime', localFuture);
   await consent();
-  axios.post.mockResolvedValueOnce({ status: 201, data: { status: 'routed', request_id: 'REQ-T' } });
+  axios.post.mockResolvedValueOnce({ status: 201, data: { status: 'queued', request_id: 'REQ-T' } });
   await submit();
   const payload = axios.post.mock.calls[0][1];
   expect(payload).toMatchObject({ kind: 'tour', property_id: '7', consent: true });
@@ -124,11 +124,11 @@ test('503 remains an error; duplicate submit is guarded and retry reuses its key
   expect(axios.post).toHaveBeenCalledTimes(1);
   const key = axios.post.mock.calls[0][2].headers['X-Idempotency-Key'];
   await act(async () => {
-    rejectFirst({ response: { status: 503, data: { detail: 'Inquiry was saved but delivery is unavailable. Please retry with the same submission key.' } } });
+    rejectFirst({ response: { status: 503, data: { detail: 'The staff queue is unavailable. Please retry with the same submission key.' } } });
   });
   expect(container.textContent).toContain('Your request has not been confirmed');
   expect(container.textContent).not.toContain('DiamondEcho received your request');
-  axios.post.mockResolvedValueOnce({ status: 200, data: { status: 'routed', request_id: 'REQ-R' } });
+  axios.post.mockResolvedValueOnce({ status: 200, data: { status: 'queued', request_id: 'REQ-R' } });
   await submit();
   expect(axios.post).toHaveBeenCalledTimes(2);
   expect(axios.post.mock.calls[1][2].headers['X-Idempotency-Key']).toBe(key);
@@ -145,7 +145,7 @@ test('getRandomValues fallback generates a UUID header', async () => {
   await fill('email', 'fallback@example.com');
   await fill('message', 'Interested in buying.');
   await consent();
-  axios.post.mockResolvedValueOnce({ status: 201, data: { status: 'routed', request_id: 'REQ-F' } });
+  axios.post.mockResolvedValueOnce({ status: 201, data: { status: 'queued', request_id: 'REQ-F' } });
   await submit();
   expect(axios.post.mock.calls[0][2].headers['X-Idempotency-Key'])
     .toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
