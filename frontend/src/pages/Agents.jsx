@@ -56,8 +56,11 @@ const Agents = () => {
             <button className="mf-btn mf-btn--solid" onClick={() => window.dispatchEvent(new CustomEvent('open-diamond-assistant'))}>
               <MessageCircle size={15} /> Ask the concierge
             </button>
-            <button className="mf-btn" onClick={() => navigate('/search')}>
-              <Building2 size={15} /> Browse the collection
+            <button className="mf-btn" onClick={() => navigate('/inquire?type=buyer')}>
+              <Building2 size={15} /> Ask about buying
+            </button>
+            <button className="mf-btn" onClick={() => navigate('/inquire?type=seller')}>
+              <Building2 size={15} /> Discuss selling
             </button>
           </div>
         </div>

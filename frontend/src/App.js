@@ -9,6 +9,7 @@ import PropertyDetail from "./pages/PropertyDetail";
 import InvestmentCalculator from "./pages/InvestmentCalculator";
 import Agents from "./pages/Agents";
 import About from "./pages/About";
+import Inquire from "./pages/Inquire";
 import RealEstateAssistant from "./components/assistant/RealEstateAssistant";
 
 const ScrollToTop = () => {
@@ -30,6 +31,7 @@ function App() {
           <Route path="/investment-calculator" element={<InvestmentCalculator />} />
           <Route path="/agents" element={<Agents />} />
           <Route path="/about" element={<About />} />
+          <Route path="/inquire" element={<Inquire />} />
         </Routes>
         <Footer />
         <RealEstateAssistant />

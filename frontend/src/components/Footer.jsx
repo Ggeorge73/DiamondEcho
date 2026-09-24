@@ -51,6 +51,8 @@ const Footer = () => (
         <nav>
           <Link to="/search">Search the collection</Link>
           <Link to="/investment-calculator">Deal studio</Link>
+          <Link to="/inquire?type=buyer">Buyer inquiry</Link>
+          <Link to="/inquire?type=seller">Seller consultation</Link>
           <button onClick={() => window.dispatchEvent(new CustomEvent('open-diamond-assistant'))}>
             Ask the concierge
           </button>

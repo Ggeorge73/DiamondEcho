@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Bath, Bed, Calculator as CalcIcon, Calendar, Heart,
-  MapPin, Mail, Phone, Share2, Square,
+  MapPin, Phone, Share2, Square,
 } from 'lucide-react';
 import { properties, agents } from '../data/mockData';
 
@@ -164,11 +164,11 @@ const PropertyDetail = () => {
                 <a className="mf-btn mf-btn--solid" href={`tel:${agent.phone.replace(/[^\d+]/g, '')}`} style={{ justifyContent: 'center' }}>
                   <Phone size={15} /> Call advisor
                 </a>
-                <a className="mf-btn" href={`mailto:${agent.email}`} style={{ justifyContent: 'center' }}>
-                  <Mail size={15} /> Send email
-                </a>
-                <button className="mf-btn" style={{ justifyContent: 'center' }}>
-                  <Calendar size={15} /> Schedule tour
+                <button className="mf-btn" style={{ justifyContent: 'center' }} onClick={() => navigate('/inquire?type=buyer&listing=' + encodeURIComponent(property.id))}>
+                  Ask about residence
+                </button>
+                <button className="mf-btn" style={{ justifyContent: 'center' }} onClick={() => navigate('/inquire?type=tour&listing=' + encodeURIComponent(property.id))}>
+                  <Calendar size={15} /> Request tour
                 </button>
               </div>
               <div className="mf-agent-panel__links">
