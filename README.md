@@ -39,13 +39,17 @@ flowchart LR
 
 ## Local development
 
-Frontend:
+Frontend (run from the repository root with npm 10.9.3):
 
 ```bash
-cd frontend
 npm ci
-npm start
+npm run start --workspace frontend
+npm run test --workspace frontend -- --watchAll=false --runInBand
+npm run build
 ```
+
+The root `package-lock.json` is the single npm workspace lockfile. The root
+build copies `frontend/build` to `build/`, the static hosting output.
 
 Backend:
 
