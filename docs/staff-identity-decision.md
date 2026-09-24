@@ -52,6 +52,14 @@ and TXT records used for email. These records alone do not establish the
 hosting product or where the FastAPI/MongoDB services run. No DNS change was
 made.
 
+An HTTPS read of `https://diamondecho.com/` on 2026-09-24 returned a short
+JavaScript redirect to `/lander`; that page identified itself as a GoDaddy
+`parking-lander`. The domain is therefore **not currently serving the GitHub
+DiamondEcho application** at the checked URL. This does not disprove that a
+GoDaddy hosting product exists in the account; it means deployment/routing to
+that product has not been evidenced. DE-13 must establish the actual website
+and API hosting/deployment path before PR work can improve the live domain.
+
 Lara must inventory **all** DNS records and current web/email services before
 any cutover. Cloudflare's full DNS setup would leave domain registration at
 GoDaddy but change authoritative nameservers; a partial CNAME setup would
