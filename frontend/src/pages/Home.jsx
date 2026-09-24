@@ -590,11 +590,11 @@ const Home = () => {
           <p className="eyebrow" data-reveal>Your next chapter</p>
           <h2 data-reveal>Some addresses are found.<br /><em>Others find you.</em></h2>
           <div className="mf-contact__actions" data-reveal style={{ '--reveal-delay': '.12s' }}>
-            <button className="mf-btn mf-btn--solid" onClick={() => navigate('/agents')}>
-              <Users size={15} /> Begin a private conversation
+            <button className="mf-btn mf-btn--solid" onClick={() => navigate('/inquire?type=buyer')}>
+              <Users size={15} /> Ask about buying
             </button>
-            <button className="mf-btn" onClick={() => navigate('/search')}>
-              <Building2 size={15} /> Browse the collection
+            <button className="mf-btn" onClick={() => navigate('/inquire?type=seller')}>
+              <Building2 size={15} /> Discuss selling
             </button>
           </div>
         </div>

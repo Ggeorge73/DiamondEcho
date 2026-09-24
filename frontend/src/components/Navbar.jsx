@@ -106,6 +106,8 @@ const Navbar = () => {
                   Ask the concierge
                 </button>
                 <button onClick={() => closeAndNavigate('/agents')}>Meet the advisors</button>
+                <button onClick={() => closeAndNavigate('/inquire?type=buyer')}>Buyer inquiry</button>
+                <button onClick={() => closeAndNavigate('/inquire?type=seller')}>Seller consultation</button>
               </nav>
             </div>
             <div className="mf-menu__contact">
