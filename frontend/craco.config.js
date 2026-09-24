@@ -30,6 +30,16 @@ if (config.enableHealthCheck) {
 }
 
 const webpackConfig = {
+  jest: {
+    configure: (jestConfig) => ({
+      ...jestConfig,
+      // CRA's older Jest resolver does not honor the react-router v7 subpath export.
+      moduleNameMapper: {
+        ...jestConfig.moduleNameMapper,
+        '^react-router/dom$': path.join(path.dirname(require.resolve('react-router')), 'dom-export.js'),
+      },
+    }),
+  },
   webpack: {
     alias: {
       '@': path.resolve(__dirname, 'src'),
