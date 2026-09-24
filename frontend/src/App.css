@@ -535,6 +535,10 @@ h1, h2, h3, .display { font-family: 'Sora', 'Inter', sans-serif; }
 .studio-field select option { background: var(--panel); color: var(--ice); }
 .studio-field i { color: var(--mist); font-size: 10px; font-style: normal; white-space: nowrap; }
 .studio-field svg { width: 14px; color: var(--mist); pointer-events: none; }
+.studio-field-source { min-height: 18px; margin-top: 6px; display: flex; justify-content: space-between; align-items: center; gap: 6px; color: var(--steel-bright); font-size: 7px; letter-spacing: .08em; line-height: 1.35; text-transform: uppercase; }
+.studio-field-source.is-overridden { color: #dca66f; }
+.studio-field-source button { padding: 0; display: inline-flex; align-items: center; gap: 3px; border: 0; background: transparent; color: inherit; font-size: 7px; letter-spacing: .08em; text-transform: uppercase; cursor: pointer; }
+.studio-field-source button svg { width: 10px; height: 10px; color: inherit; pointer-events: auto; }
 .studio-submit-row { padding-top: 30px; display: flex; justify-content: space-between; align-items: center; gap: 22px; border-top: 1px solid var(--line); }
 .studio-submit-row p { max-width: 390px; margin: 0; display: flex; gap: 10px; align-items: flex-start; color: var(--mist); font-size: 9px; line-height: 1.65; }
 .studio-submit-row p svg { width: 15px; flex: none; color: var(--steel-bright); }
@@ -582,6 +586,11 @@ h1, h2, h3, .display { font-family: 'Sora', 'Inter', sans-serif; }
 .studio-suggestions button small { color: var(--mist); font-size: 7px; letter-spacing: .14em; text-transform: uppercase; }
 .studio-provider-note { margin: 10px 0 0; display: flex; align-items: center; gap: 8px; color: var(--mist); font-size: 8px; line-height: 1.5; }
 .studio-provider-note svg { width: 13px; color: var(--steel-bright); }
+.studio-address-research { margin-top: 10px; display: flex; justify-content: space-between; align-items: center; gap: 18px; }
+.studio-address-research .studio-provider-note { margin: 0; }
+.studio-address-research button { min-height: 36px; padding: 0 13px; display: inline-flex; align-items: center; gap: 7px; flex: none; border: 1px solid var(--steel); background: rgba(45,98,140,.12); color: var(--steel-bright); font-size: 7px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; cursor: pointer; }
+.studio-address-research button:disabled { opacity: .45; cursor: default; }
+.studio-address-research button svg { width: 13px; }
 .studio-property-card { margin: 0 0 30px; padding: 23px; display: grid; grid-template-columns: 1.2fr 1fr; gap: 25px; border: 1px solid rgba(94,156,208,.32); background: rgba(45,98,140,.1); }
 .studio-property-card > div { display: flex; flex-direction: column; gap: 7px; }
 .studio-property-card span, .studio-property-card dt { color: var(--steel-bright); font-size: 7px; font-weight: 600; letter-spacing: .18em; text-transform: uppercase; }
@@ -590,6 +599,10 @@ h1, h2, h3, .display { font-family: 'Sora', 'Inter', sans-serif; }
 .studio-property-card dl { margin: 0; display: grid; grid-template-columns: repeat(2, 1fr); gap: 13px; }
 .studio-property-card dl div { padding-left: 12px; border-left: 1px solid var(--line-strong); }
 .studio-property-card dd { margin: 5px 0 0; font-size: 11px; }
+.studio-property-card .studio-research-audit { grid-column: 1 / -1; padding-top: 17px; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 14px; border-top: 1px solid var(--line); }
+.studio-property-card .studio-research-audit p { margin: 0; color: var(--mist); font-size: 8px; line-height: 1.55; }
+.studio-property-card .studio-research-audit button { padding: 8px 10px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid rgba(212,155,98,.45); background: transparent; color: #dca66f; font-size: 7px; letter-spacing: .1em; text-transform: uppercase; }
+.studio-property-card .studio-research-audit button svg { width: 11px; }
 .studio-monte-carlo { padding: 30px !important; border: 1px solid rgba(94,156,208,.3) !important; background: rgba(45,98,140,.07); }
 .studio-case-picker { margin: 0 0 26px; display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--line); }
 .studio-case-picker > div { min-height: 44px; display: flex; justify-content: center; align-items: center; gap: 8px; border-right: 1px solid var(--line); background: var(--steel); color: var(--ice); font-size: 8px; font-weight: 600; letter-spacing: .13em; text-transform: uppercase; }
@@ -668,7 +681,7 @@ h1, h2, h3, .display { font-family: 'Sora', 'Inter', sans-serif; }
 .studio-hurdle-grid strong { margin: 10px 0 4px; display: block; font-size: 18px; font-weight: 400; }
 .studio-hurdle-grid small { color: var(--mist); font-size: 7px; }
 .studio-scenario-table { margin-top: 13px; overflow-x: auto; }
-.studio-scenario-row { min-width: 450px; padding: 11px 5px; display: grid; grid-template-columns: 1.1fr repeat(4, 1fr); gap: 8px; align-items: center; border-bottom: 1px solid var(--line); font-size: 9px; font-variant-numeric: tabular-nums; }
+.studio-scenario-row { min-width: 540px; padding: 11px 5px; display: grid; grid-template-columns: 1.1fr repeat(5, 1fr); gap: 8px; align-items: center; border-bottom: 1px solid var(--line); font-size: 9px; font-variant-numeric: tabular-nums; }
 .studio-scenario-row span { text-align: right; }
 .studio-scenario-row--head { color: var(--mist); font-size: 6px; letter-spacing: .12em; text-transform: uppercase; }
 .studio-diligence > div:not(.studio-decision-section__head) { padding: 13px 0; display: grid; grid-template-columns: 16px 1fr; gap: 9px; border-bottom: 1px solid var(--line); }
@@ -773,6 +786,7 @@ h1, h2, h3, .display { font-family: 'Sora', 'Inter', sans-serif; }
   .studio-submit-actions { flex-direction: column; }
   .studio-submit-actions > a { justify-content: center; }
   .studio-property-card { grid-template-columns: 1fr; }
+  .studio-property-card .studio-research-audit { grid-template-columns: 1fr; }
   .studio-case-picker { grid-template-columns: 1fr; }
   .studio-case-picker > div { border-right: 0; border-bottom: 1px solid var(--line); }
   .studio-case-picker > div:last-child { border-bottom: 0; }
@@ -786,6 +800,7 @@ h1, h2, h3, .display { font-family: 'Sora', 'Inter', sans-serif; }
 
 @media (max-width: 460px) {
   .studio-field-grid { grid-template-columns: 1fr; }
+  .studio-address-research { align-items: flex-start; flex-direction: column; }
   .studio-metrics { grid-template-columns: 1fr; }
   .studio-metrics article:nth-child(odd) { border-right: 0; }
   .studio-metrics article:nth-child(even) { padding-left: 0; }

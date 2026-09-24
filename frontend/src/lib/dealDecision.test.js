@@ -32,3 +32,45 @@ test('downside is weaker than base and evidence drives confidence', () => {
   expect(downside.metrics.dscr).toBeLessThan(base.metrics.dscr);
   expect(decision.confidence).toBe('High');
 });
+
+test('preserves an explicit terminal value while solving the maximum offer', () => {
+  const decision = buildRentalDecision({
+    form: { ...oakStreetForm, exitCap: '', explicitSalePrice: '420000' },
+    evidence: {},
+  });
+  const irrCeiling = decision.ceilings.find((item) => item.key === 'irr');
+
+  expect(irrCeiling.value).toBeGreaterThan(300000);
+  expect(decision.recommendedMaximum).toBe(325000);
+  expect(decision.verdict).toBe('REPRICE OR PASS');
+  expect(decision.openingRange).toEqual([300000, 315000]);
+});
+
+test('stresses an explicit terminal value instead of an ignored exit cap', () => {
+  const decision = buildRentalDecision({
+    form: { ...oakStreetForm, exitCap: '', explicitSalePrice: '420000' },
+    evidence: {},
+  });
+  const downside = decision.scenarios.find((item) => item.name === 'Downside');
+  const base = decision.scenarios.find((item) => item.name === 'Base');
+  const upside = decision.scenarios.find((item) => item.name === 'Upside');
+
+  expect(downside.assumptions.explicitSalePrice).toBe('378000');
+  expect(downside.assumptions.exitCap).toBeUndefined();
+  expect(downside.metrics.salePrice).toBe(378000);
+  expect(base.metrics.salePrice).toBe(420000);
+  expect(upside.metrics.salePrice).toBeCloseTo(462000, 6);
+});
+
+test('treats a rounded zero maximum as a binding walk-away decision', () => {
+  const decision = buildRentalDecision({
+    form: { ...oakStreetForm, preliminaryMarketCeiling: '3804' },
+    evidence: {},
+  });
+
+  expect(decision.exactMaximum).toBe(3804);
+  expect(decision.recommendedMaximum).toBe(0);
+  expect(decision.verdict).toBe('REPRICE OR PASS');
+  expect(decision.tone).toBe('red');
+  expect(decision.summary).toContain('exceeds the return-constrained ceiling');
+});
