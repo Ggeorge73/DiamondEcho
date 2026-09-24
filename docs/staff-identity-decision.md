@@ -54,11 +54,13 @@ made.
 
 An HTTPS read of `https://diamondecho.com/` on 2026-09-24 returned a short
 JavaScript redirect to `/lander`; that page identified itself as a GoDaddy
-`parking-lander`. The domain is therefore **not currently serving the GitHub
-DiamondEcho application** at the checked URL. This does not disprove that a
-GoDaddy hosting product exists in the account; it means deployment/routing to
-that product has not been evidenced. DE-13 must establish the actual website
-and API hosting/deployment path before PR work can improve the live domain.
+`parking-lander`. Gbenga clarified that the GitHub DiamondEcho site **will be
+deployed to GoDaddy hosting and this domain**. The parking page is therefore
+an expected prelaunch state, not evidence of a failed deployment. The GitHub
+application is not yet serving at the checked URL. DE-13 must verify the
+React build-to-GoDaddy process, the public API and MongoDB runtime location,
+HTTPS/deep-link routing, and a release-candidate URL before code changes can
+be claimed as improvements to the live domain.
 
 Lara must inventory **all** DNS records and current web/email services before
 any cutover. Cloudflare's full DNS setup would leave domain registration at
