@@ -68,7 +68,7 @@ const Navbar = () => {
 
           <div className="mf-nav__actions">
             <button className="mf-nav__portal" onClick={() => navigate('/search')}>
-              <LayoutGrid size={14} /> Client portal
+              <LayoutGrid size={14} /> Browse residences
             </button>
             <button
               className="mf-nav__burger"
@@ -98,14 +98,14 @@ const Navbar = () => {
           </div>
           <div className="mf-menu__secondary">
             <div>
-              <h4>Self-service portal</h4>
+              <h4>Explore DiamondEcho</h4>
               <nav>
                 <button onClick={() => closeAndNavigate('/search')}>Search the collection</button>
                 <button onClick={() => closeAndNavigate('/investment-calculator')}>Run a deal analysis</button>
                 <button onClick={() => { setIsMenuOpen(false); window.dispatchEvent(new CustomEvent('open-diamond-assistant')); }}>
                   Ask the concierge
                 </button>
-                <button onClick={() => closeAndNavigate('/agents')}>Request representation</button>
+                <button onClick={() => closeAndNavigate('/agents')}>Meet the advisors</button>
               </nav>
             </div>
             <div className="mf-menu__contact">

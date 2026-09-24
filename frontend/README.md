@@ -1,4 +1,11 @@
-# Getting Started with Create React App
+# DiamondEcho frontend workspace
+
+Install dependencies from the repository root with `npm ci`. The canonical
+lockfile is `../package-lock.json`; do not generate a separate lockfile in
+this directory. Run `npm run test --workspace frontend -- --watchAll=false
+--runInBand` and `npm run build` from the repository root to reproduce CI.
+
+## Create React App reference
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
 

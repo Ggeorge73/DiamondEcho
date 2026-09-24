@@ -47,7 +47,7 @@ const Footer = () => (
       </div>
 
       <div className="mf-footer__col">
-        <h4>Portal</h4>
+        <h4>Explore</h4>
         <nav>
           <Link to="/search">Search the collection</Link>
           <Link to="/investment-calculator">Deal studio</Link>

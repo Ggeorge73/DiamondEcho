@@ -51,7 +51,7 @@ const sections = [
   { id: 'collection', label: 'Collection' },
   { id: 'intelligence', label: 'Intelligence' },
   { id: 'markets', label: 'Markets' },
-  { id: 'portal', label: 'Portal' },
+  { id: 'portal', label: 'Explore' },
   { id: 'contact', label: 'Contact' },
 ];
 
@@ -120,7 +120,7 @@ const explorerData = {
 const portalTiles = [
   {
     index: '01', icon: Search, title: 'Search the collection',
-    copy: 'Filter every residence by market, price, size, and character — no registration required.',
+    copy: 'Browse residences by market, price, size, and character.',
     action: 'search',
   },
   {
@@ -135,7 +135,7 @@ const portalTiles = [
   },
   {
     index: '04', icon: Users, title: 'Private advisors',
-    copy: 'When it matters, move from self-service to full representation with a senior advisor in one step.',
+    copy: 'Meet the advisory team and learn about its approach to buying and selling.',
     action: 'advisors',
   },
 ];
@@ -552,16 +552,15 @@ const Home = () => {
         </div>
       </section>
 
-      {/* Client portal */}
+      {/* Public services */}
       <section className="mf-portal" id="portal">
         <div className="mf-portal__inner">
           <div className="mf-portal__head">
-            <p className="eyebrow" data-reveal>The client portal</p>
-            <h2 data-reveal>Self-service,<br /><em>concierge standard.</em></h2>
+            <p className="eyebrow" data-reveal>Explore DiamondEcho</p>
+            <h2 data-reveal>Explore properties.<br /><em>Meet the advisors.</em></h2>
             <p data-reveal style={{ '--reveal-delay': '.1s' }}>
-              Everything you need to move on real estate — search, underwriting, guidance, and
-              representation — available on your own terms, at any hour. Start yourself; escalate to a
-              human advisor the moment it matters.
+              Browse residences, model a potential deal, and ask property questions online.
+              Learn about our approach to buying and selling through the advisory team.
             </p>
           </div>
           <div className="mf-portal__grid">
