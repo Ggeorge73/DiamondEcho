@@ -129,12 +129,18 @@ async def submit_inquiry(collection, inquiry: InquiryCreate, key: uuid.UUID, del
 
     try:
         await asyncio.to_thread(deliver or _send_smtp, claim)
-    except Exception as exc:
+    except DeliveryUnavailable as exc:
         try:
             await collection.update_one({"_id": document_id, "status": "sending"}, {"$set": {"status": "failed", "last_attempt_at": datetime.now(timezone.utc)}})
         except Exception:
-            pass  # The lease permits a later retry if the database is unavailable.
+            pass  # A missing status update keeps the claim non-retryable pending review.
         raise DeliveryUnavailable(RETRY_MESSAGE) from exc
+    except Exception as exc:
+        # A transport error can occur after SMTP accepted the message (for
+        # example, while closing the connection). Do not authorize a resend.
+        raise DeliveryUnavailable(
+            f"Inquiry delivery needs operator review. Reference: {claim['request_id']}. Do not submit a new request."
+        ) from exc
 
     try:
         result = await collection.update_one(

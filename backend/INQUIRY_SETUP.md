@@ -51,9 +51,10 @@ a retention period; Gbenga/Lara must approve one before live operation.
    agreed retention policy. Verify production monitoring and ownership of
    failed/pending records before marking DE-9 complete.
 
-SMTP does not support exactly-once delivery. If a process crashes after SMTP
-acceptance but before the MongoDB `routed` update, the record remains `sending`
-and retry returns 503 instead of blindly sending a possible duplicate. Lara's
+SMTP does not support exactly-once delivery. If SMTP raises after acceptance,
+or a process crashes after acceptance but before the MongoDB `routed` update,
+the record remains `sending` and retry returns 503 instead of blindly sending
+a possible duplicate. Lara's
 operator must reconcile stale claims against the mailbox/provider using the
 stable request ID before manually deciding whether to resend or close. The
 five-minute lease timestamp is an investigation signal, not an automatic resend.

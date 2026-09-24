@@ -122,7 +122,7 @@ def test_delivery_failure_is_not_success_and_same_key_retries():
     collection = FakeCollection()
     key = uuid.uuid4()
     def fail(_):
-        raise RuntimeError("provider outage")
+        raise DeliveryUnavailable("configuration unavailable before sending")
     with pytest.raises(DeliveryUnavailable):
         asyncio.run(submit_inquiry(collection, buyer(), key, fail))
     saved = next(iter(collection.documents.values()))
@@ -132,6 +132,23 @@ def test_delivery_failure_is_not_success_and_same_key_retries():
     assert replay is False
     assert len(collection.documents) == 1
     assert saved["attempts"] == 2
+
+
+def test_ambiguous_smtp_exception_after_acceptance_never_resends():
+    collection = FakeCollection()
+    key = uuid.uuid4()
+    accepted = []
+    def accepted_then_disconnect(document):
+        accepted.append(document["request_id"])
+        raise RuntimeError("connection failed after SMTP acceptance")
+    with pytest.raises(DeliveryUnavailable, match="operator review"):
+        asyncio.run(submit_inquiry(collection, buyer(), key, accepted_then_disconnect))
+    with pytest.raises(DeliveryUnavailable):
+        asyncio.run(submit_inquiry(collection, buyer(), key, accepted_then_disconnect))
+    saved = next(iter(collection.documents.values()))
+    assert saved["status"] == "sending"
+    assert saved["attempts"] == 1
+    assert accepted == [saved["request_id"]]
 
 
 def test_unconfigured_recipient_fails_closed_without_smtp(monkeypatch):
