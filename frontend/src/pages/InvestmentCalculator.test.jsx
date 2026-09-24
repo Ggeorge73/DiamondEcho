@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import axios from 'axios';
 import InvestmentCalculator from './InvestmentCalculator';
 import { analyzeDealLocally, runMonteCarloLocally } from '../lib/dealAnalysis';
+import { downloadDealWorkbook } from '../lib/dealWorkbook';
 
 jest.mock('react-router-dom', () => ({
   MemoryRouter: ({ children }) => children,
@@ -28,6 +29,20 @@ const button = (text) => [...container.querySelectorAll('button')]
   .find((item) => item.textContent.includes(text));
 const click = async (text) => {
   await act(async () => { button(text).click(); });
+};
+const changeField = async (name, value) => {
+  const input = container.querySelector(`[name="${name}"]`);
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+  await act(async () => {
+    setValue.call(input, value);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+};
+const useBackend = async () => {
+  await act(async () => { root.unmount(); });
+  process.env.REACT_APP_BACKEND_URL = 'https://example.test';
+  root = createRoot(container);
+  await act(async () => { root.render(<MemoryRouter><InvestmentCalculator /></MemoryRouter>); });
 };
 const submitBase = async () => {
   const invalid = [...container.querySelectorAll('form :invalid')].map((input) => input.name);
@@ -125,10 +140,7 @@ test('a base response for another strategy is rejected with a recoverable error'
 });
 
 test.each(['base', 'risk'])('late %s response cannot restore results after a strategy switch', async (mode) => {
-  await act(async () => { root.unmount(); });
-  process.env.REACT_APP_BACKEND_URL = 'https://example.test';
-  root = createRoot(container);
-  await act(async () => { root.render(<MemoryRouter><InvestmentCalculator /></MemoryRouter>); });
+  await useBackend();
 
   let resolveResponse;
   axios.post.mockReturnValueOnce(new Promise((resolve) => { resolveResponse = resolve; }));
@@ -143,4 +155,99 @@ test.each(['base', 'risk'])('late %s response cannot restore results after a str
   });
   expect(container.textContent).toContain('Your decision canvas');
   expect(container.querySelector('.studio-risk-results')).toBeNull();
+});
+
+test('changing an assumption clears base and risk results and makes the next request use the new value', async () => {
+  await submitBase();
+  await click('Run Monte Carlo');
+  expect(container.querySelector('.studio-risk-results')).not.toBeNull();
+  await changeField('purchasePrice', '3500000');
+  expect(container.textContent).toContain('Your decision canvas');
+  expect(container.querySelector('.studio-risk-results')).toBeNull();
+  await submitBase();
+  expect(analyzeDealLocally.mock.lastCall[0].acquisition.purchase_price).toBe(3500000);
+});
+
+test.each(['base', 'risk'])('server 422 on %s is visible and never replaced by a local result', async (mode) => {
+  await useBackend();
+  axios.post.mockRejectedValueOnce({ response: { status: 422, data: { detail: 'Invalid assumptions' } } });
+  if (mode === 'base') await submitBase();
+  else await click('Run Monte Carlo');
+  expect(container.textContent).toContain('Invalid assumptions');
+  expect(analyzeDealLocally).not.toHaveBeenCalled();
+  expect(runMonteCarloLocally).not.toHaveBeenCalled();
+  expect(container.querySelector('.studio-result')).toBeNull();
+  expect(container.querySelector('.studio-risk-results')).toBeNull();
+});
+
+test('invalid purchase price is rejected before analysis and workbook export', async () => {
+  await changeField('purchasePrice', '0');
+  await submitBase();
+  expect(container.textContent).toContain('Purchase price must be greater than 0');
+  await click('Download deal-specific Excel');
+  expect(analyzeDealLocally).not.toHaveBeenCalled();
+  expect(downloadDealWorkbook).not.toHaveBeenCalled();
+});
+
+test('Excel uses the successful analysis snapshot and is blocked after inputs change', async () => {
+  await submitBase();
+  await click('Download deal-specific Excel');
+  expect(downloadDealWorkbook).toHaveBeenCalledTimes(1);
+  expect(downloadDealWorkbook.mock.calls[0][0].request.acquisition.purchase_price).toBe(3000000);
+  await changeField('purchasePrice', '5000000');
+  await click('Download deal-specific Excel');
+  expect(downloadDealWorkbook).toHaveBeenCalledTimes(1);
+  expect(container.textContent).toContain('Run a successful base analysis with the current inputs');
+});
+
+test('server validation rejection cannot be bypassed by Excel export', async () => {
+  await useBackend();
+  axios.post.mockRejectedValueOnce({ response: { status: 422, data: { detail: 'Invalid assumptions' } } });
+  await submitBase();
+  await click('Download deal-specific Excel');
+  expect(downloadDealWorkbook).not.toHaveBeenCalled();
+  expect(analyzeDealLocally).not.toHaveBeenCalled();
+});
+
+test('interest-only period cannot exceed the loan term', async () => {
+  await changeField('loanTermYears', '1');
+  await changeField('interestOnlyMonths', '13');
+  await submitBase();
+  expect(container.textContent).toContain('Interest-only period cannot exceed the loan term');
+  expect(analyzeDealLocally).not.toHaveBeenCalled();
+});
+
+test('negative explicit sale price and nonpositive reported area are rejected', async () => {
+  await changeField('explicitSalePrice', '-1');
+  await click('Run base analysis');
+  expect(container.textContent).toContain('Expected sale price must be greater than 0');
+  await changeField('explicitSalePrice', '');
+  await changeField('rentableSquareFeet', '-1');
+  await click('Run base analysis');
+  expect(container.textContent).toContain('Rentable square feet must be greater than 0');
+});
+
+test('out-of-range Monte Carlo vacancy inputs are rejected before simulation', async () => {
+  await changeField('mcVacancyMin', '-1');
+  await click('Run Monte Carlo');
+  expect(container.textContent).toContain('vacancy rate must stay between 0 and 0.95');
+  expect(runMonteCarloLocally).not.toHaveBeenCalled();
+});
+
+test('unordered Monte Carlo drivers show an actionable error without a simulation', async () => {
+  await changeField('mcRentMin', '20');
+  await click('Run Monte Carlo');
+  expect(container.textContent).toContain('must be ordered low');
+  expect(runMonteCarloLocally).not.toHaveBeenCalled();
+});
+
+test('changing assumptions while a base request is pending prevents stale results', async () => {
+  await useBackend();
+  let resolveResponse;
+  axios.post.mockReturnValueOnce(new Promise((resolve) => { resolveResponse = resolve; }));
+  await submitBase();
+  await changeField('purchasePrice', '3500000');
+  await act(async () => { resolveResponse({ data: { strategy: 'rental', metrics: {}, formula_version: 'test' } }); });
+  expect(container.textContent).toContain('Your decision canvas');
+  expect(container.querySelector('.studio-result')).toBeNull();
 });

@@ -24,6 +24,20 @@ const typeAddress = async (value) => {
   });
 };
 
+const enterRequiredListingAssumptions = async () => {
+  const values = {
+    closingCosts: '0', dueDiligenceCosts: '0', initialCapex: '0', sellingCosts: '6',
+    annualRent: '360000', otherIncome: '0', vacancy: '5', insurance: '0',
+    repairsMaintenance: '0', utilities: '0', payrollAdmin: '0', managementFee: '0',
+    reserves: '0', annualBelowNoiCosts: '0', incomeGrowth: '0', expenseGrowth: '0', exitCap: '6.5',
+  };
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+  for (const [name, value] of Object.entries(values)) {
+    const input = container.querySelector(`input[name="${name}"]`);
+    await act(async () => { setValue.call(input, value); input.dispatchEvent(new Event('input', { bubbles: true })); });
+  }
+};
+
 const renderRoute = async (path) => {
   container = document.createElement('div');
   document.body.appendChild(container);
@@ -34,7 +48,7 @@ const renderRoute = async (path) => {
         <LocationProbe />
         <Routes>
           <Route path="/property/:id" element={<PropertyDetail />} />
-          <Route path="/investment-calculator" element={<><Link to="/investment-calculator?listing=2">Open listing 2</Link><InvestmentCalculator /></>} />
+          <Route path="/investment-calculator" element={<><Link to="/investment-calculator?listing=2">Open listing 2</Link><Link to="/investment-calculator?listing=6">Open listing 6</Link><InvestmentCalculator /></>} />
         </Routes>
       </MemoryRouter>
     );
@@ -122,9 +136,26 @@ test('selecting a different local listing updates the URL and replaces property 
   expect(container.textContent).toContain('REVIEW LISTING #2');
 });
 
+test('switching to 567 Design Way clears the previous rental assumptions and labels facts', async () => {
+  await renderRoute('/investment-calculator?listing=1');
+  expect(container.querySelector('input[name="annualRent"]').value).toBe('');
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+  const rent = container.querySelector('input[name="annualRent"]');
+  await act(async () => { setValue.call(rent, '360000'); rent.dispatchEvent(new Event('input', { bubbles: true })); });
+  await act(async () => { container.querySelector('a[href="/investment-calculator?listing=6"]').click(); });
+  expect(container.querySelector('input[name="address"]').value).toContain('567 Design Way');
+  expect(container.querySelector('select[name="propertyType"]').value).toBe('single_family');
+  expect(container.querySelector('input[name="purchasePrice"]').value).toBe('3200000');
+  expect(container.querySelector('input[name="annualRent"]').value).toBe('');
+  expect(container.querySelector('input[name="insurance"]').value).toBe('');
+  expect(container.textContent).toContain('Input sources: DiamondEcho review listing #6');
+  expect(container.textContent).toContain('Review and enter missing values');
+});
+
 test.each(['base', 'risk'])('a late %s response cannot restore analysis for the prior listing', async (mode) => {
   process.env.REACT_APP_BACKEND_URL = 'https://example.test';
   await renderRoute('/investment-calculator?listing=1');
+  await enterRequiredListingAssumptions();
   let resolveResponse;
   axios.post.mockReturnValueOnce(new Promise((resolve) => { resolveResponse = resolve; }));
   const action = [...container.querySelectorAll('button')]
