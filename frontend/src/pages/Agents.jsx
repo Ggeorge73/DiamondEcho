@@ -15,8 +15,8 @@ const Agents = () => {
             <h1>Private <em>advisors.</em></h1>
             <p className="mf-page-hero__lede">
               Senior advisors coordinating financing, diligence, negotiation, and closing —
-              one relationship across your entire real estate life. Begin with self-service;
-              escalate to full representation the moment it matters.
+              one relationship across your entire real estate life. Explore the collection
+              and learn how an advisor can support your next decision.
             </p>
           </div>
           <div className="mf-page-hero__meta">
