@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   AlertCircle, ArrowRight, BarChart3, Building2, CheckCircle2, ChevronDown,
   CircleDollarSign, Database, Download, FileSpreadsheet, Home, Loader2,
@@ -11,6 +12,7 @@ import { buildRentalDecision, RENTAL_EVIDENCE_ITEMS } from '../lib/dealDecision'
 import { downloadDealWorkbook } from '../lib/dealWorkbook';
 import { buildDealRequest } from '../lib/dealRequest';
 import { buildMonteCarloScenarios, MONTE_CARLO_CASES } from '../lib/monteCarloCases';
+import { recordFromListing, resolveListingContext } from '../lib/listingContext';
 
 const MARKET_OPTIONS = [
   'Atlanta, GA', 'Austin, TX', 'Boston, MA', 'Charlotte, NC', 'Chicago, IL',
@@ -91,6 +93,9 @@ const AutocompleteField = ({ label, name, value, onChange, suggestions, onSelect
 );
 
 const InvestmentCalculator = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const listingContext = useMemo(() => resolveListingContext(location.search, properties), [location.search]);
   const [form, setForm] = useState(initialForm);
   const [result, setResult] = useState(null);
   const [decision, setDecision] = useState(null);
@@ -105,11 +110,33 @@ const InvestmentCalculator = () => {
   const [addressSuggestions, setAddressSuggestions] = useState([]);
   const [marketSuggestions, setMarketSuggestions] = useState([]);
   const [resultMode, setResultMode] = useState('base');
+  const analysisGeneration = useRef(0);
+  const propertyLookupGeneration = useRef(0);
+  const skipNextContextReset = useRef(false);
   const backendUrl = useMemo(() => (process.env.REACT_APP_BACKEND_URL || '').replace(/\/$/, ''), []);
   const sessionToken = useMemo(() => globalThis.crypto?.randomUUID?.() || `session-${Date.now()}`, []);
 
   const n = (value) => Number(value || 0);
   const rate = (value) => n(value) / 100;
+
+  const invalidateAnalysis = () => {
+    analysisGeneration.current += 1;
+    setResult(null);
+    setDecision(null);
+    setMonteCarlo(null);
+    setResultMode('base');
+    setError('');
+    setRiskError('');
+    setLoading(false);
+    setRiskLoading(false);
+  };
+
+  const clearListingRoute = () => {
+    if (listingContext.kind !== 'manual') {
+      skipNextContextReset.current = true;
+      navigate('/investment-calculator', { replace: true });
+    }
+  };
 
   useEffect(() => {
     const clean = form.address.trim().toLowerCase();
@@ -138,7 +165,29 @@ const InvestmentCalculator = () => {
 
   const update = (event) => {
     const { name, value } = event.target;
+    if (name === 'address') {
+      propertyLookupGeneration.current += 1;
+      invalidateAnalysis();
+      setPropertyRecord(null);
+      setPropertyLoading(false);
+      clearListingRoute();
+      setForm((current) => ({
+        ...current, address: value, market: '', purchasePrice: '',
+        rentableSquareFeet: '', propertyTaxes: '',
+      }));
+      return;
+    }
+    if (name === 'propertyType' && value === 'land' && form.strategy !== 'land') {
+      switchStrategy('land', 'land');
+      return;
+    }
     setForm((current) => ({ ...current, [name]: value, ...(name === 'propertyType' && value === 'land' ? { strategy: 'land' } : {}) }));
+  };
+
+  const switchStrategy = (strategy, propertyType) => {
+    if (strategy === form.strategy) return;
+    invalidateAnalysis();
+    setForm((current) => ({ ...current, strategy, propertyType: propertyType || current.propertyType }));
   };
 
   const propertyTypeValue = (value = '') => {
@@ -152,6 +201,38 @@ const InvestmentCalculator = () => {
     if (normalized.includes('land') || normalized.includes('lot') || normalized.includes('vacant')) return 'land';
     return 'single_family';
   };
+
+  useEffect(() => {
+    if (skipNextContextReset.current) {
+      skipNextContextReset.current = false;
+      return;
+    }
+    propertyLookupGeneration.current += 1;
+    invalidateAnalysis();
+    setPropertyLoading(false);
+    setAddressSuggestions([]);
+    setMarketSuggestions([]);
+
+    if (listingContext.kind === 'listing') {
+      const record = recordFromListing(listingContext.listing);
+      setPropertyRecord(record);
+      setForm({
+        ...initialForm,
+        address: record.formatted_address,
+        market: [record.city, record.state].filter(Boolean).join(', '),
+        propertyType: propertyTypeValue(record.property_type),
+        units: '1',
+        rentableSquareFeet: String(record.square_footage || ''),
+        purchasePrice: String(record.price),
+        propertyTaxes: record.annual_taxes == null ? '' : String(record.annual_taxes),
+      });
+    } else {
+      setPropertyRecord(null);
+      setForm(listingContext.kind === 'missing'
+        ? { ...initialForm, address: '', market: '', rentableSquareFeet: '', purchasePrice: '', propertyTaxes: '' }
+        : initialForm);
+    }
+  }, [listingContext]);
 
   const applyProperty = (record) => {
     const market = [record.city, record.state].filter(Boolean).join(', ');
@@ -170,55 +251,70 @@ const InvestmentCalculator = () => {
   };
 
   const selectAddress = async (suggestion) => {
-    setForm((current) => ({ ...current, address: suggestion.label }));
+    const lookupGeneration = ++propertyLookupGeneration.current;
+    invalidateAnalysis();
+    setPropertyRecord(null);
+    setPropertyLoading(false);
+    setForm((current) => ({
+      ...current, address: suggestion.label, market: '', purchasePrice: '',
+      rentableSquareFeet: '', propertyTaxes: '',
+    }));
     setAddressSuggestions([]);
     if (suggestion.property) {
-      applyProperty({
-        formatted_address: suggestion.label, city: suggestion.property.city,
-        state: suggestion.property.state, property_type: suggestion.property.propertyType,
-        square_footage: suggestion.property.sqft, last_sale_price: suggestion.property.price,
-        annual_taxes: suggestion.property.taxHistory?.[0]?.amount, bedrooms: suggestion.property.beds,
-        bathrooms: suggestion.property.baths, year_built: suggestion.property.yearBuilt,
-        provider: 'review', is_demo: true,
-      });
+      const listingPath = '/investment-calculator?listing=' + encodeURIComponent(suggestion.property.id);
+      if (location.pathname + location.search === listingPath) applyProperty(recordFromListing(suggestion.property));
+      else navigate(listingPath);
       return;
     }
+    clearListingRoute();
     setPropertyLoading(true); setError('');
     try {
       const { data } = await axios.get(`${backendUrl}/api/v1/properties/lookup`, { params: { address: suggestion.label } });
-      applyProperty(data.property);
+      if (lookupGeneration === propertyLookupGeneration.current) applyProperty(data.property);
     } catch (lookupError) {
-      setError(lookupError.response?.data?.detail || 'Address selected. Live property details require the configured property-data provider.');
-    } finally { setPropertyLoading(false); }
+      if (lookupGeneration === propertyLookupGeneration.current) setError(lookupError.response?.data?.detail || 'Address selected. Live property details require the configured property-data provider.');
+    } finally {
+      if (lookupGeneration === propertyLookupGeneration.current) setPropertyLoading(false);
+    }
   };
 
   const buildRequest = () => buildDealRequest(form);
 
   const analyze = async (event) => {
     event.preventDefault();
+    const generation = ++analysisGeneration.current;
     setLoading(true); setError(''); setResult(null); setDecision(null); setResultMode('base');
-    const request = buildRequest();
+    let request;
     try {
+      request = buildRequest();
       if (!backendUrl) {
         const analysis = analyzeDealLocally(request);
-        setResult(analysis);
-        setDecision(buildRentalDecision({ form, evidence }));
+        if (generation === analysisGeneration.current) {
+          setResult(analysis);
+          setDecision(buildRentalDecision({ form, evidence }));
+        }
       }
       else {
         const { data } = await axios.post(`${backendUrl}/api/v1/deals/analyze`, request);
-        setResult(data);
-        setDecision(buildRentalDecision({ form, evidence }));
+        if (generation === analysisGeneration.current) {
+          setResult(data);
+          setDecision(buildRentalDecision({ form, evidence }));
+        }
       }
     } catch (requestError) {
       try {
-        setResult(analyzeDealLocally(request));
-        setDecision(buildRentalDecision({ form, evidence }));
+        if (!request) throw requestError;
+        const analysis = analyzeDealLocally(request);
+        if (generation === analysisGeneration.current) {
+          setResult(analysis);
+          setDecision(buildRentalDecision({ form, evidence }));
+        }
       }
       catch (calculationError) {
         const detail = requestError.response?.data?.detail;
-        setError(calculationError.message || (typeof detail === 'string' ? detail : 'The analysis could not be completed. Review the assumptions and try again.'));
+        if (generation === analysisGeneration.current) setError(calculationError.message || (typeof detail === 'string' ? detail : 'The analysis could not be completed. Review the assumptions and try again.'));
       }
-    } finally { setLoading(false); }
+    } finally { if (generation === analysisGeneration.current) setLoading(false); }
   };
 
   const scenarioDrivers = (caseName) => {
@@ -245,20 +341,28 @@ const InvestmentCalculator = () => {
   };
 
   const runRiskAnalysis = async () => {
+    const generation = ++analysisGeneration.current;
     setRiskLoading(true); setRiskError(''); setMonteCarlo(null); setResultMode('risk');
-    const scenarios = buildMonteCarloScenarios({ iterations: form.mcIterations, driversForCase: scenarioDrivers });
-    const payload = { deal: buildRequest(), scenarios };
     try {
-      if (!backendUrl) setMonteCarlo(runMonteCarloLocally(payload));
+      const scenarios = buildMonteCarloScenarios({ iterations: form.mcIterations, driversForCase: scenarioDrivers });
+      const payload = { deal: buildRequest(), scenarios };
+      if (!backendUrl) {
+        const analysis = runMonteCarloLocally(payload);
+        if (generation === analysisGeneration.current) setMonteCarlo(analysis);
+      }
       else {
         const { data } = await axios.post(`${backendUrl}/api/v1/deals/monte-carlo`, payload);
-        setMonteCarlo(data);
+        if (generation === analysisGeneration.current) setMonteCarlo(data);
       }
     } catch (requestError) {
       try {
-        setMonteCarlo(runMonteCarloLocally(payload));
-      } catch (calculationError) { setRiskError(calculationError.message || requestError.response?.data?.detail || 'Risk analysis could not be completed.'); }
-    } finally { setRiskLoading(false); }
+        const payload = { deal: buildRequest(), scenarios: buildMonteCarloScenarios({ iterations: form.mcIterations, driversForCase: scenarioDrivers }) };
+        const analysis = runMonteCarloLocally(payload);
+        if (generation === analysisGeneration.current) setMonteCarlo(analysis);
+      } catch (calculationError) {
+        if (generation === analysisGeneration.current) setRiskError(calculationError.message || requestError.response?.data?.detail || 'Risk analysis could not be completed.');
+      }
+    } finally { if (generation === analysisGeneration.current) setRiskLoading(false); }
   };
 
   const exportWorkbook = () => {
@@ -303,6 +407,18 @@ const InvestmentCalculator = () => {
   };
 
   const summaryFormat = (key, value) => value == null ? 'Not defined' : key === 'npv' || key === 'flip_profit' || key === 'development_profit' ? money.format(value) : key === 'equity_multiple' || key === 'dscr' ? `${number.format(value)}×` : `${number.format(value * 100)}%`;
+  const resultIssue = result && (result.strategy !== form.strategy || !result.metrics || typeof result.metrics !== 'object')
+    ? 'This analysis result does not match the current strategy or is incomplete. Run the base analysis again.'
+    : '';
+  const riskSummaryKey = form.strategy === 'rental' ? 'irr' : form.strategy === 'land' ? 'development_profit' : 'flip_profit';
+  const riskResultIssue = monteCarlo && (!Array.isArray(monteCarlo.scenarios) || monteCarlo.scenarios.length === 0 || monteCarlo.scenarios.some((scenario) => {
+    const summary = scenario?.summaries?.[riskSummaryKey];
+    return typeof scenario?.name !== 'string' || !Number.isFinite(scenario?.iterations_completed)
+      || !summary || !('p50' in summary) || !('p10' in summary) || !('p90' in summary)
+      || !Number.isFinite(summary.probability_above_zero);
+  }))
+    ? 'The risk result is incomplete for this strategy. Review the scenarios and run the analysis again.'
+    : '';
 
   return (
     <main className="deal-studio-page">
@@ -317,10 +433,15 @@ const InvestmentCalculator = () => {
 
       <section className="deal-studio-shell">
         <form className="deal-studio-form" onSubmit={analyze}>
+          {listingContext.kind === 'listing' && propertyRecord?.source_listing_id === listingContext.listing.id && (
+            <p className="studio-provider-note" role="status">DiamondEcho listing #{listingContext.listing.id} loaded. Address, asking price, size and displayed tax history come from this listing; all other financial assumptions are illustrative and need verification.</p>
+          )}
+          {listingContext.kind === 'manual' && !propertyRecord && <p className="studio-provider-note" role="status">Manual Deal Studio entry. Any prefilled numbers are illustrative, not facts about a selected listing; verify all assumptions.</p>}
+          {listingContext.kind === 'missing' && <p className="studio-provider-note" role="alert">Listing #{listingContext.id || '(empty)'} is unavailable. No listing facts were loaded; enter and verify a property manually or return to search.</p>}
           <div className="studio-strategy" role="group" aria-label="Investment strategy">
-            <button type="button" className={form.strategy === 'rental' ? 'is-active' : ''} onClick={() => setForm((f) => ({ ...f, strategy: 'rental' }))}><Building2 /> Rental & commercial</button>
-            <button type="button" className={form.strategy === 'flip' ? 'is-active' : ''} onClick={() => setForm((f) => ({ ...f, strategy: 'flip', propertyType: f.propertyType === 'multifamily' ? 'single_family' : f.propertyType }))}><Home /> Fix & flip</button>
-            <button type="button" className={form.strategy === 'land' ? 'is-active' : ''} onClick={() => setForm((f) => ({ ...f, strategy: 'land', propertyType: 'land' }))}><LandPlot /> Land development</button>
+            <button type="button" className={form.strategy === 'rental' ? 'is-active' : ''} onClick={() => switchStrategy('rental', form.propertyType === 'land' ? 'multifamily' : form.propertyType)}><Building2 /> Rental & commercial</button>
+            <button type="button" className={form.strategy === 'flip' ? 'is-active' : ''} onClick={() => switchStrategy('flip', ['multifamily', 'land'].includes(form.propertyType) ? 'single_family' : form.propertyType)}><Home /> Fix & flip</button>
+            <button type="button" className={form.strategy === 'land' ? 'is-active' : ''} onClick={() => switchStrategy('land', 'land')}><LandPlot /> Land development</button>
           </div>
 
           <fieldset>
@@ -332,7 +453,7 @@ const InvestmentCalculator = () => {
             </div>
             {propertyRecord && (
               <div className="studio-property-card">
-                <div><span>{propertyRecord.is_demo ? 'REVIEW RECORD' : 'PUBLIC RECORD'}</span><strong>{propertyRecord.formatted_address}</strong><small>{propertyRecord.provider || 'Property data provider'}</small></div>
+                <div><span>{propertyRecord.source_listing_id ? 'REVIEW LISTING #' + propertyRecord.source_listing_id : propertyRecord.is_demo ? 'REVIEW RECORD' : 'PUBLIC RECORD'}</span><strong>{propertyRecord.formatted_address}</strong><small>{propertyRecord.provider || 'Property data provider'}</small></div>
                 <dl>
                   <div><dt>TYPE</dt><dd>{propertyRecord.property_type || 'Verify'}</dd></div>
                   <div><dt>BUILT</dt><dd>{propertyRecord.year_built || '—'}</dd></div>
@@ -542,7 +663,8 @@ const InvestmentCalculator = () => {
             <div className="studio-empty"><CircleDollarSign /><h2>Your decision canvas</h2><p>Complete the assumptions and run an analysis. DiamondEcho will calculate returns, debt coverage, value creation, and risk signals without hidden inputs.</p></div>
           )}
           {resultMode === 'base' && error && <div className="studio-error"><AlertCircle /><h2>Analysis needs attention</h2><p>{error}</p><button onClick={() => setError('')}><RotateCcw /> Review inputs</button></div>}
-          {resultMode === 'base' && result && (
+          {resultMode === 'base' && resultIssue && <div className="studio-error" role="alert"><AlertCircle /><h2>Analysis needs attention</h2><p>{resultIssue}</p><button onClick={() => { setResult(null); setDecision(null); }}><RotateCcw /> Review inputs</button></div>}
+          {resultMode === 'base' && result && !resultIssue && (
             <div className="studio-result">
               {decision ? <>
                 <div className={`studio-result__verdict studio-result__verdict--${decision.tone}`}>
@@ -596,13 +718,12 @@ const InvestmentCalculator = () => {
               {result.warnings?.length > 0 && <div className="studio-warnings"><span>ASSUMPTIONS TO VERIFY</span>{result.warnings.map((warning) => <p key={warning}>{warning}</p>)}</div>}
             </div>
           )}
-          {resultMode === 'risk' && riskError && <div className="studio-error"><AlertCircle /><h2>Risk analysis needs attention</h2><p>{riskError}</p><button onClick={() => setRiskError('')}><RotateCcw /> Review scenarios</button></div>}
+          {resultMode === 'risk' && (riskError || riskResultIssue) && <div className="studio-error" role="alert"><AlertCircle /><h2>Risk analysis needs attention</h2><p>{riskError || riskResultIssue}</p><button onClick={() => { setRiskError(''); setMonteCarlo(null); }}><RotateCcw /> Review scenarios</button></div>}
           {resultMode === 'risk' && !monteCarlo && !riskError && <div className="studio-empty"><BarChart3 /><h2>Distribution before decision</h2><p>Select multiple cases and run Monte Carlo to see percentile returns, downside frequency, and the range of plausible outcomes.</p></div>}
-          {resultMode === 'risk' && monteCarlo && <div className="studio-risk-results">
+          {resultMode === 'risk' && monteCarlo && !riskResultIssue && !riskError && <div className="studio-risk-results">
             {monteCarlo.scenarios.map((scenario) => {
-              const primaryKey = form.strategy === 'rental' ? 'irr' : form.strategy === 'land' ? 'development_profit' : 'flip_profit';
-              const summary = scenario.summaries[primaryKey];
-              return <article key={scenario.name}><span>{scenario.name.toUpperCase()}</span><h3>{summaryFormat(primaryKey, summary.p50)}</h3><p>Median {labels[primaryKey] || primaryKey} · {number.format(summary.probability_above_zero * 100)}% probability above zero</p><dl><div><dt>P10</dt><dd>{summaryFormat(primaryKey, summary.p10)}</dd></div><div><dt>P50</dt><dd>{summaryFormat(primaryKey, summary.p50)}</dd></div><div><dt>P90</dt><dd>{summaryFormat(primaryKey, summary.p90)}</dd></div></dl><small>{scenario.iterations_completed.toLocaleString()} valid iterations · seed {scenario.seed}</small></article>;
+              const summary = scenario.summaries[riskSummaryKey];
+              return <article key={scenario.name}><span>{scenario.name.toUpperCase()}</span><h3>{summaryFormat(riskSummaryKey, summary.p50)}</h3><p>Median {labels[riskSummaryKey] || riskSummaryKey} · {number.format(summary.probability_above_zero * 100)}% probability above zero</p><dl><div><dt>P10</dt><dd>{summaryFormat(riskSummaryKey, summary.p10)}</dd></div><div><dt>P50</dt><dd>{summaryFormat(riskSummaryKey, summary.p50)}</dd></div><div><dt>P90</dt><dd>{summaryFormat(riskSummaryKey, summary.p90)}</dd></div></dl><small>{scenario.iterations_completed.toLocaleString()} valid iterations · seed {scenario.seed}</small></article>;
             })}
           </div>}
           <p className="studio-disclaimer">Illustrative analysis only. Not an appraisal, credit decision, offer, tax opinion, or investment recommendation. Verify property records and every assumption with qualified professionals.</p>

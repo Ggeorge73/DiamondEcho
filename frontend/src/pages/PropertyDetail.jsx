@@ -172,7 +172,7 @@ const PropertyDetail = () => {
                 </button>
               </div>
               <div className="mf-agent-panel__links">
-                <button onClick={() => navigate('/investment-calculator')}>
+                <button onClick={() => navigate(`/investment-calculator?listing=${encodeURIComponent(property.id)}`)}>
                   <CalcIcon /> Analyze as investment
                 </button>
                 <button><Heart /> Save residence</button>
