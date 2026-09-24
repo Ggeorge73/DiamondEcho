@@ -1,5 +1,11 @@
 # Standalone DiamondEcho staff queue (provisional)
 
+Gbenga approved Cloudflare Access as the interim account sign-in direction;
+see `docs/staff-identity-decision.md`. The current bearer-key entry is a
+disabled prototype, **not** the approved production sign-in. Do not enable it
+by only changing `config.js`; Access protection and backend identity validation
+must replace that flow first.
+
 This is a **separate staff site**, not a route in the public React application. The public site's `frontend/public/index.html` loads session-recording and analytics scripts; it must never host staff credentials or visitor inquiry details. Deploy this directory on a dedicated, access-restricted staff origin with HTTPS. Do not embed it in the public site's page, iframe, or origin.
 
 The page is intentionally **disabled** in `config.js`. Its bearer-key entry is provisional and is **not** an implemented DiamondEcho staff account or MFA sign-in. Gbenga must approve an existing identity provider or access gateway and its staff account membership before enabling production access. A static page plus bearer key is not sufficient to claim that account-based access is live.

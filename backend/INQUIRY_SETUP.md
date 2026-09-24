@@ -1,5 +1,12 @@
 # Inquiry queue setup and release check
 
+Gbenga subsequently approved Cloudflare Access as the interim DiamondEcho
+staff-account sign-in direction. See `docs/staff-identity-decision.md`. The
+bearer-key configuration below is a disabled-by-default prototype and must
+not be activated as the production sign-in merely by setting environment
+variables; Access session validation and isolated hosting still need to be
+implemented and tested.
+
 `POST /api/v1/inquiries` stores buyer, seller, and tour requests in MongoDB's
 `inquiries` collection. A 201 `queued` receipt means the database acknowledged
 a majority+journaled write. It does **not** mean a staff member read the request
