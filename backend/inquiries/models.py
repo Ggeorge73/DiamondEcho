@@ -47,5 +47,31 @@ class InquiryCreate(BaseModel):
 
 class InquiryReceipt(BaseModel):
     request_id: str
-    status: Literal["routed"] = "routed"
+    status: Literal["queued"] = "queued"
     submitted_at: datetime
+
+
+class StaffInquiry(BaseModel):
+    request_id: str
+    kind: InquiryKind
+    full_name: str
+    email: EmailStr
+    phone: str | None = None
+    message: str | None = None
+    property_id: str | None = None
+    property_address: str | None = None
+    preferred_tour_time: datetime | None = None
+    submitted_at: datetime
+    status: Literal["queued", "acknowledged"]
+    consent_at: datetime
+    consent_version: str
+
+
+class StaffInquiryList(BaseModel):
+    items: list[StaffInquiry]
+
+
+class StaffAcknowledgement(BaseModel):
+    request_id: str
+    status: Literal["acknowledged"] = "acknowledged"
+    acknowledged_at: datetime
