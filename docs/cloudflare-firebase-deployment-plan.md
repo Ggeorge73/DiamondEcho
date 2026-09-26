@@ -35,7 +35,7 @@ mandatory. No existing MongoDB data has been migrated or deleted.
 
 ## Verification versus release
 
-Local results: 57 backend tests passed; the real-emulator test is deliberately
+Local results: 58 backend tests passed; the real-emulator test is deliberately
 skipped without the emulator. 53 public frontend tests and seven staff UI tests
 passed. Public production build passed. CI additionally builds the container,
 runs isolated staff builds and exercises deny rules and real Firestore

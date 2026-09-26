@@ -38,7 +38,7 @@ passwords, tokens, enrollment secrets or Admin keys in Jira/screenshots/chat.
    retention/deletion, backup/recovery and abuse/quotas protection. Gbenga
    approves costs, IAM, project/location, DNS and final release.
 
-Local: 57 backend, 53 frontend and 7 staff UI tests passed; public build passed.
+Local: 58 backend, 53 frontend and 7 staff UI tests passed; public build passed.
 Real emulator test is skipped locally without Java 21/emulator. CI adds
 Firestore rules/transaction tests and a container build/smoke check; record
 final CI evidence separately. Real Firebase Auth/TOTP and staging results are

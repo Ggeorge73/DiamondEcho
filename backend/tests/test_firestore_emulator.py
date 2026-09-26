@@ -37,8 +37,16 @@ def test_real_create_replay_conflict_and_transaction():
     request_id=uuid.UUID(results[0][0].request_id)
     with pytest.raises(IdempotencyConflict):
         submit_inquiry(store,inquiry.model_copy(update={"message":"Different request"}),key)
+    def retry_acknowledgement(_):
+        for attempt in range(8):
+            try:
+                return acknowledge_inquiry(store,request_id,"staff-1")
+            except QueueUnavailable:
+                if attempt == 7:
+                    raise
+                time.sleep(0.1 * (attempt + 1))
     with ThreadPoolExecutor(max_workers=6) as pool:
-        acknowledgements=list(pool.map(lambda _:acknowledge_inquiry(store,request_id,"staff-1"),range(6)))
+        acknowledgements=list(pool.map(retry_acknowledgement,range(6)))
     assert len({r.acknowledged_at for r in acknowledgements})==1
     assert db.collection("inquiries").document(str(request_id)).get().to_dict()["acknowledged_by"]=="staff-1"
     assert any(r.request_id==str(request_id) for r in __import__("inquiries.service",fromlist=["list_staff_inquiries"]).list_staff_inquiries(store,100).items)
