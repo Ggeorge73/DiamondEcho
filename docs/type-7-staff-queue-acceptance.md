@@ -1,51 +1,63 @@
-# Type 7: secure staff queue acceptance (DE-9 / DE-31)
+# Type 7: Firebase staff queue acceptance (DE-9 / DE-31)
 
-Gbenga approved a DiamondEcho staff queue for buyer, seller and tour requests
-instead of email. The original Type 5 SMTP runbook is historical; this document
-is the current destination test plan. Gbenga owns account access and PR/merge
-approval, Lara owns operations, Tiara tests, and Adeoba reviews implementation.
-No password or access key belongs in Git, Jira comments, screenshots or chat.
+Gbenga approved Pages + Cloud Run + Firebase implementation. This supersedes
+SMTP, MongoDB and the shared-key gate. Adeoba reviews engineering; Tiara
+verifies staging; Lara owns operations; Gbenga alone approves permissions,
+PR review, merge and release.
 
-## Configuration and security gate
+## Required release evidence
 
-Before accepting public traffic, Lara and Gbenga confirm how Gbenga's existing
-DiamondEcho staff account signs in and is authorized for this queue. The
-provisional bearer-key gate is not that account sign-in. The staff interface
-must run on an isolated origin without the public site's third-party scripts,
-with a matching restrictive CSP and explicit API CORS origin. They must also
-confirm deployment secret provisioning, HTTPS, MongoDB availability, access
-logs, data retention, and a backup responder/escalation plan. Without staff
-access configuration, the
-public API must return 503 with no success receipt. The provisional access-key
-mode is not a claim that a production sign-in policy has been approved.
+Record exact commit/build, public/API/staff URLs, Firebase project, redacted
+test references, device/browser, tester and timestamps. Do not put visitor PII,
+passwords, tokens, enrollment secrets or Admin keys in Jira/screenshots/chat.
 
-## End-to-end test cases
+1. With queue configuration absent or disabled, submit synthetic buyer request:
+   expect 503 and no success UI. Configure staging privately and repeat using
+   the same UUID key: expect confirmed 201 queued and one Firestore document.
+2. Buyer, seller and tour with explicit consent each appear in the authenticated
+   staff queue with contact/property/time/consent metadata. Tour is a request,
+   not a booking. Queued means storage, not a completed human response.
+3. Verify staff email/password and first TOTP enrollment; after enrollment a
+   fresh MFA sign-in is required. Wrong code, unverified email, nonstaff UID,
+   missing MFA, expired/revoked token and disabled user cannot read or change
+   visitor data. A public-origin request is denied even with a valid staff token.
+4. Direct Firestore reads/lists/writes are denied for anonymous, nonstaff and
+   staff browser identities. Separately verify the authorized Admin/API flow.
+5. Identical retries return 200 and stable reference; changed payload/key reuse
+   returns 409. Concurrent duplicates create one record. Unavailable storage,
+   unconfirmed writes or staff identity provider outage must not show success.
+6. Acknowledgement is confirmed by API/database, retains the first actor/time
+   under concurrent retry and survives page refresh. It is not proof the staff
+   member contacted the visitor. Missing reference returns 404.
+7. Sign-out/page exit clears visitor details and MFA secret; late responses
+   cannot restore them. No tokens/visitor details in browser persistence,
+   analytics, logs or public bundles. Confirm no-store and CSP on deployed host.
+8. Keyboard/mobile: labels, focus, errors, TOTP/enrollment, queue and buttons;
+   no horizontal clipping. Verify API CORS and deep-linked public Pages routes.
+9. Lara confirms queue monitoring, response SLA, backup responder, outages,
+   retention/deletion, backup/recovery and abuse/quotas protection. Gbenga
+   approves costs, IAM, project/location, DNS and final release.
 
-1. With staff access deliberately unconfigured, submit a clearly labeled test
-   buyer request: expect HTTP 503 and no success UI. Configure privately and
-   repeat with the same key. Expect HTTP 201, `status: queued` and a stable
-   request reference; verify one majority-acknowledged Mongo record.
-2. Submit one seller consultation and one tour request with distinct test
-   identities and explicit consent. Confirm all three references appear in the
-   authenticated Gbenga queue with type, contact, message, listing/address,
-   preferred time and consent metadata. Tour copy must not promise a booking.
-3. Without a key, with a wrong key, and from an unapproved browser origin,
-   attempt staff list and acknowledgement: no visitor details or state changes.
-   With authorized access, list, filter and acknowledge each request; verify
-   actor/time audit fields. A second acknowledgement must not create a second
-   record or contradictory history.
-4. Repeat each public POST with the same idempotency key and identical body:
-   expect HTTP 200, the same reference and one queue item. A changed body with
-   that key must return 409. A concurrent duplicate must also produce one
-   record, not two.
-5. Simulate unavailable MongoDB and failed writes: no queued receipt. Restore
-   service and retry with the same key. Check keyboard/mobile form and staff
-   queue states, focus, labels, visible errors, and no horizontal clipping.
-6. Lara validates operational monitoring, response SLA, out-of-hours handling,
-   failed-attempt recovery and the approved retention/deletion policy. Remove
-   only identified test records after sign-off; never bulk-delete customer data.
+Local: 57 backend, 53 frontend and 7 staff UI tests passed; public build passed.
+Real emulator test is skipped locally without Java 21/emulator. CI adds
+Firestore rules/transaction tests and a container build/smoke check; record
+final CI evidence separately. Real Firebase Auth/TOTP and staging results are
+still required. DE-9/DE-13/DE-31/DE-29 stay open until their evidence gates pass.
 
-Record build, URL, request references, redacted screenshots, API/database
-observations, browser/device, tester, and timestamps in DE-9 and DE-31. Do not
-mark either Done or claim a live lead journey until Lara, Tiara and Gbenga
-confirm end-to-end evidence on the target environment.
+## Technical Project Manager lesson
+
+Architecture approval is a design decision, not a release decision.
+Authentication answers “who signed in?”; authorization answers “is that UID
+allowed to see this queue?”; MFA proves a second factor participated in sign-in.
+Firestore rules protect browser access, while the Admin API needs its own
+authorization because it bypasses those rules.
+
+Idempotency makes retries safe: the same submission key creates one lead even
+when a response is lost. A transaction keeps acknowledgement history stable
+when staff retry or act concurrently. Unit tests prove these contracts under
+controlled conditions; emulator tests exercise the storage SDK/rules; staging
+tests prove the configured user journey. Those are different evidence levels.
+
+This advances audit DE-01 (missing lead journey) and DE-31 operations work, but
+does not close the original Launch Readiness Audit or establish live delivery.
+Use the Jira finding register until the original audit file is supplied.

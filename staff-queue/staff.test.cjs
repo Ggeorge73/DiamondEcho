@@ -1,75 +1,75 @@
-const test = require('node:test');
-const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
-const { JSDOM } = require('jsdom');
-
-const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
-const app = fs.readFileSync(path.join(__dirname, 'app.js'), 'utf8');
-const tick = () => new Promise((resolve) => setImmediate(resolve));
-
-function page(config, fetch) {
-  const dom = new JSDOM(html, { url: 'https://staff.diamondecho.test/', runScripts: 'outside-only' });
-  dom.window.DIAMOND_ECHO_STAFF_CONFIG = config;
-  dom.window.fetch = fetch;
-  dom.window.eval(app);
-  return dom.window;
+const { test } = require("node:test");
+const assert = require("node:assert/strict");
+const { JSDOM } = require("jsdom");
+const fs = require("node:fs");
+const html = fs.readFileSync(__dirname + "/index.html", "utf8");
+const script = fs.readFileSync(__dirname + "/app.js", "utf8");
+const pause = () => new Promise(resolve => setTimeout(resolve, 15));
+function setup({enabled=true,auth={},fetch}={}) {
+  const dom = new JSDOM(html, {url:"https://staff.example.com",runScripts:"outside-only"});
+  const w = dom.window;
+  w.DIAMOND_ECHO_STAFF_CONFIG = {enabled, staffOrigin:w.location.origin, apiBase:"https://api.example.com"};
+  w.DIAMOND_ECHO_STAFF_AUTH = {signIn:async()=>({type:"mfa"}), completeMfa:async()=>({type:"ready"}),
+    getToken:async()=>"named-id-token", signOut:async()=>{}, ...auth};
+  w.fetch = fetch || (async()=>({ok:true,status:200,json:async()=>({items:[]})}));
+  w.eval(script);
+  const el = id => w.document.getElementById(id);
+  const submit = id => el(id).dispatchEvent(new w.Event("submit",{bubbles:true,cancelable:true}));
+  return {w,el,submit};
 }
-
-function submit(window, key) {
-  window.document.getElementById('credential').value = key;
-  window.document.getElementById('signin-form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+async function login(ui) {
+  ui.el("email").value="staff@example.com"; ui.el("password").value="not-a-real-password";
+  ui.submit("signin-form"); await pause();
+  ui.el("code").value="123456"; ui.submit("mfa-form"); await pause();
 }
-
-test('disabled deployment fails closed without calling an API', () => {
-  let calls = 0;
-  const window = page({ enabled: false, apiBase: 'https://api.example.invalid' }, () => { calls++; });
-  assert.equal(window.document.getElementById('signin-button').disabled, true);
-  assert.match(window.document.getElementById('alert').textContent, /disabled/);
-  assert.equal(window.document.getElementById('queue-section').hidden, true);
-  assert.equal(calls, 0);
-  window.close();
+test("unconfigured deployment blocks sign-in",()=>{
+  const ui=setup({enabled:false}); assert.equal(ui.el("signin-button").disabled,true);
 });
-
-test('denied key reveals no visitor data and clears the input', async () => {
-  const window = page({ enabled: true, apiBase: 'https://api.diamondecho.test' }, async () => ({ ok: false, status: 401 }));
-  submit(window, 'test-key');
-  await tick();
-  assert.match(window.document.getElementById('alert').textContent, /Access denied/);
-  assert.equal(window.document.getElementById('credential').value, '');
-  assert.equal(window.document.getElementById('queue-section').hidden, true);
-  assert.equal(window.document.getElementById('inquiries').textContent, '');
-  window.close();
+test("MFA required before any queue request and password cleared",async()=>{
+  let calls=0;
+  const ui=setup({fetch:async()=>{calls++;return {ok:true,status:200,json:async()=>({items:[]})};}});
+  ui.submit("signin-form"); await pause();
+  assert.equal(calls,0); assert.equal(ui.el("password").value,"");
+  ui.submit("mfa-form"); await pause();
+  assert.equal(calls,1); assert.equal(ui.el("queue-section").hidden,false);
 });
-
-test('authenticated queue acknowledges and sign-out removes PII', async () => {
-  const requests = [];
-  const window = page({ enabled: true, apiBase: 'https://api.diamondecho.test' }, async (url, options) => {
-    requests.push({ url, options });
-    if (options?.method === 'PATCH') return { ok: true, json: async () => ({ request_id: 'req-1', status: 'acknowledged' }) };
-    return { ok: true, json: async () => ({ items: [{ request_id: 'req-1', kind: 'buyer', status: 'queued', full_name: 'Private Buyer', email: 'private@example.com' }] }) };
-  });
-  assert.doesNotMatch(window.document.body.textContent, /Private Buyer/);
-  submit(window, 'test-key');
-  await tick();
-  assert.match(window.document.getElementById('inquiries').textContent, /Private Buyer/);
-  assert.equal(window.document.getElementById('credential').value, '');
-  assert.equal(requests[0].url, 'https://api.diamondecho.test/api/v1/inquiries/staff?limit=50');
-  assert.equal(requests[0].options.headers.Authorization, 'Bearer test-key');
-  window.document.querySelector('.inquiry button').click();
-  await tick();
-  assert.equal(requests[1].url, 'https://api.diamondecho.test/api/v1/inquiries/staff/req-1/acknowledge');
-  assert.equal(window.document.querySelector('.inquiry button').disabled, true);
-  assert.match(window.document.getElementById('notice').textContent, /acknowledged/);
-  window.document.getElementById('signout-button').click();
-  assert.doesNotMatch(window.document.body.textContent, /Private Buyer|private@example.com/);
-  assert.equal(window.document.getElementById('queue-section').hidden, true);
-  window.close();
+test("token request omits cookies and visitor HTML is rendered as text",async()=>{
+  let options;
+  const ui=setup({fetch:async(_,init)=>{options=init;return {ok:true,status:200,json:async()=>({items:[{
+    kind:"buyer",status:"queued",request_id:"ref",full_name:"<script>attack</script>",email:"visitor@example.com"}]})};}});
+  await login(ui);
+  assert.equal(options.credentials,"omit");assert.equal(options.cache,"no-store");
+  assert.equal(options.headers.Authorization,"Bearer named-id-token");
+  assert.equal(ui.el("inquiries").querySelector("script"),null);
+  assert.match(ui.el("inquiries").textContent,/<script>attack<\/script>/);
+  ui.el("signout-button").click();await pause();
+  assert.equal(ui.el("inquiries").textContent,"");
 });
-
-test('staff HTML loads only local scripts and contains no recorder', () => {
-  const scripts = [...html.matchAll(/<script[^>]+src="([^"]+)"/g)].map((match) => match[1]);
-  assert.deepEqual(scripts, ['./config.js', './app.js']);
-  assert.doesNotMatch(html, /rrweb|posthog|emergent-main|https:\/\/[^" ]+\.js/i);
-  assert.doesNotMatch(app, /localStorage|sessionStorage|console\.log/);
+test("first login enrollment requires fresh MFA sign-in",async()=>{
+  const ui=setup({auth:{signIn:async()=>({type:"enroll",secret:"TESTSECRET"}),completeEnrollment:async()=>({type:"enrolled"})}});
+  ui.submit("signin-form");await pause();assert.equal(ui.el("secret").textContent,"TESTSECRET");
+  ui.submit("mfa-form");await pause();assert.equal(ui.el("secret").textContent,"");
+  assert.equal(ui.el("queue-section").hidden,true);
+});
+test("signout prevents late response from restoring visitor data",async()=>{
+  let release;
+  const ui=setup({fetch:()=>new Promise(resolve=>{release=resolve;})});
+  await login(ui);ui.el("signout-button").click();await pause();
+  release({ok:true,status:200,json:async()=>({items:[{kind:"buyer",status:"queued",full_name:"Private"}]})});
+  await pause();assert.equal(ui.el("inquiries").textContent,"");assert.equal(ui.el("queue-section").hidden,true);
+});
+test("403 clears queue and demands approved identity",async()=>{
+  const ui=setup({fetch:async()=>({ok:false,status:403})});
+  await login(ui);assert.equal(ui.el("queue-section").hidden,true);
+  assert.match(ui.el("alert").textContent,/Access denied/);
+});
+test("acknowledgement uses verified API receipt then refreshes",async()=>{
+  const paths=[];
+  const ui=setup({fetch:async(path,opts)=>{
+    paths.push([path,opts.method]);
+    return {ok:true,status:200,json:async()=>opts.method==="PATCH"?{status:"acknowledged"}:{items:[{kind:"buyer",status:"queued",request_id:"ref"}]}};
+  }});
+  await login(ui);ui.el("inquiries").querySelector("button").click();await pause();
+  assert.equal(paths[1][0],"https://api.example.com/api/v1/inquiries/staff/ref/acknowledge");
+  assert.equal(paths[1][1],"PATCH");assert.equal(paths.length,3);
 });

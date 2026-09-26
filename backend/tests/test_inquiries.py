@@ -1,252 +1,205 @@
-import asyncio
 import copy
-import hashlib
 import sys
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from threading import Lock
 from types import SimpleNamespace
-
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from pydantic import ValidationError
-from pymongo.errors import DuplicateKeyError
-
+from google.api_core.exceptions import AlreadyExists
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-from inquiries.models import InquiryCreate  # noqa: E402
-from inquiries.router import router  # noqa: E402
-from inquiries.service import (  # noqa: E402
-    IdempotencyConflict, QueueUnavailable, StaffUnauthorized, authorize_staff,
-    submit_inquiry,
-)
-
-
-STAFF_KEY = "queue-test-key-" + "a" * 48
-
+import inquiries.router as routes
+from inquiries.firebase import verify_staff, queue_settings, FirestoreInquiryStore
+from inquiries.models import InquiryCreate
+from inquiries.service import submit_inquiry, QueueUnavailable, StaffUnauthorized, StaffForbidden
+from firebase_admin import auth
 
 @pytest.fixture(autouse=True)
-def configured_queue(monkeypatch):
-    monkeypatch.setenv("INQUIRY_STAFF_QUEUE_ENABLED", "true")
-    monkeypatch.setenv("INQUIRY_STAFF_ACCOUNT_NAME", "Gbenga")
-    monkeypatch.setenv("INQUIRY_STAFF_ACCESS_KEY_SHA256", hashlib.sha256(STAFF_KEY.encode()).hexdigest())
+def configured(monkeypatch):
+    for name, value in {
+        "INQUIRY_STAFF_QUEUE_ENABLED": "true", "FIREBASE_PROJECT_ID": "demo-diamondecho",
+        "INQUIRY_STAFF_UIDS": "staff-1", "PUBLIC_ORIGIN": "https://public.example.com",
+        "STAFF_ORIGIN": "https://staff.example.com"
+    }.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.delenv("K_SERVICE", raising=False)
 
+def claims(**changes):
+    return dict(uid="staff-1", email_verified=True, firebase={"sign_in_second_factor": "totp"}, **changes) if not changes else {
+        **claims(), **changes}
 
-class FakeCursor:
-    def __init__(self, documents):
-        self.documents = documents
-
-    def sort(self, field, order):
-        self.documents.sort(key=lambda document: document[field], reverse=order == -1)
-        return self
-
-    def limit(self, count):
-        self.documents = self.documents[:count]
-        return self
-
-    async def to_list(self, length):
-        return copy.deepcopy(self.documents[:length])
-
-
-class FakeCollection:
+class Store:
     def __init__(self):
         self.documents = {}
-        self.fail_insert = False
-        self.fail_ack = False
-        self.unacknowledged = False
-        self.write_concern = None
+        self.lock = Lock()
+        self.fail = False
+    def create_once(self, key, document):
+        if self.fail: raise RuntimeError("private provider detail")
+        with self.lock:
+            replay = key in self.documents
+            if not replay: self.documents[key] = copy.deepcopy(document)
+            return copy.deepcopy(self.documents[key]), replay
+    def list_newest(self, limit):
+        if self.fail: raise RuntimeError("unavailable")
+        return sorted(copy.deepcopy(list(self.documents.values())), key=lambda d:d["submitted_at"], reverse=True)[:limit]
+    def acknowledge(self, key, account, timestamp):
+        if self.fail: raise RuntimeError("unavailable")
+        with self.lock:
+            d = self.documents.get(key)
+            if d is None: return None
+            if d["status"] == "queued":
+                d.update(status="acknowledged", acknowledged_at=timestamp, acknowledged_by=account)
+            return copy.deepcopy(d)
 
-    def with_options(self, write_concern):
-        self.write_concern = write_concern
-        return self
-
-    async def insert_one(self, document):
-        if self.fail_insert:
-            raise RuntimeError("database unavailable")
-        if document["_id"] in self.documents:
-            raise DuplicateKeyError("duplicate")
-        self.documents[document["_id"]] = copy.deepcopy(document)
-        return SimpleNamespace(acknowledged=not self.unacknowledged)
-
-    async def find_one(self, query):
-        for document in self.documents.values():
-            if all(document.get(key) == value for key, value in query.items()):
-                return copy.deepcopy(document)
-        return None
-
-    def find(self, query):
-        allowed = query["status"]["$in"]
-        return FakeCursor([copy.deepcopy(d) for d in self.documents.values() if d["status"] in allowed])
-
-    async def find_one_and_update(self, query, update, return_document=None):
-        if self.fail_ack:
-            raise RuntimeError("database unavailable")
-        for document in self.documents.values():
-            if all(document.get(key) == value for key, value in query.items()):
-                document.update(update["$set"])
-                return copy.deepcopy(document)
-        return None
-
-
-def buyer(**changes):
-    fields = dict(kind="buyer", full_name="Test Buyer", email="buyer@example.com", message="Please contact me.", consent=True)
-    fields.update(changes)
-    return InquiryCreate(**fields)
-
-
-def client_for(collection):
+@pytest.fixture
+def client(monkeypatch):
     app = FastAPI()
-    app.state.db = SimpleNamespace(inquiries=collection)
-    app.include_router(router, prefix="/api")
-    return TestClient(app)
+    app.include_router(routes.router, prefix="/api")
+    store = Store()
+    monkeypatch.setattr(routes, "get_store", lambda: store)
+    monkeypatch.setattr(routes, "verify_staff", lambda header: verify_staff(header, verifier=lambda token: claims() if token == "approved" else claims(uid="stranger")))
+    with TestClient(app) as c:
+        yield c, store
 
+def payload(kind="buyer"):
+    result = dict(kind=kind, full_name="Test Visitor", email="visitor@example.com", message="Please contact me", consent=True)
+    if kind == "seller": result["property_address"] = "123 Test Road"
+    if kind == "tour":
+        result.update(property_id="test-listing", preferred_tour_time=(datetime.now(timezone.utc)+timedelta(days=2)).isoformat())
+    return result
 
-@pytest.mark.parametrize("fields", [
-    {"consent": False}, {"message": "  "}, {"email": "invalid"}, {"full_name": " "},
+def post(client, body=None, key=None):
+    return client.post("/api/v1/inquiries", json=body or payload(), headers={"X-Idempotency-Key": str(key or uuid.uuid4())})
+
+@pytest.mark.parametrize("kind", ["buyer", "seller", "tour"])
+def test_store_before_success(client, kind):
+    c, store = client
+    r = post(c, payload(kind))
+    assert r.status_code == 201
+    assert r.json()["status"] == "queued"
+    assert len(store.documents) == 1
+    assert r.headers["cache-control"] == "no-store"
+    assert "email" not in r.json()
+    assert next(iter(store.documents.values()))["consent_version"]
+
+def test_replay_and_conflict(client):
+    c, store = client
+    key = uuid.uuid4()
+    a, b = post(c, key=key), post(c, key=key)
+    assert a.status_code == 201 and b.status_code == 200
+    assert a.json() == b.json()
+    changed = payload(); changed["message"] = "Changed"
+    assert post(c, changed, key).status_code == 409
+    assert len(store.documents) == 1
+
+def test_failed_storage_is_not_success(client):
+    c, store = client
+    store.fail = True
+    r = post(c)
+    assert r.status_code == 503
+    assert "private provider detail" not in r.text
+    assert not store.documents
+
+@pytest.mark.parametrize("change", [{"consent":False}, {"email":"invalid"}, {"message":""}, {"full_name":" "}, {"message":"x"*2001}])
+def test_validation(client, change):
+    c, _ = client
+    assert post(c, {**payload(), **change}).status_code == 422
+
+def test_invalid_submission_key(client):
+    c, _ = client
+    assert c.post("/api/v1/inquiries", json=payload()).status_code == 422
+
+def test_staff_access_and_acknowledgement(client):
+    c, store = client
+    receipt = post(c).json()
+    endpoint = "/api/v1/inquiries/staff"
+    assert c.get(endpoint).status_code == 401
+    assert c.get(endpoint, headers={"Authorization":"Bearer stranger"}).status_code == 403
+    headers = {"Authorization":"Bearer approved"}
+    r = c.get(endpoint, headers=headers)
+    assert r.status_code == 200 and r.json()["items"][0]["email"] == "visitor@example.com"
+    assert c.get(endpoint+"?limit=101", headers=headers).status_code == 422
+    path = endpoint+"/"+receipt["request_id"]+"/acknowledge"
+    a, b = c.patch(path, headers=headers), c.patch(path, headers=headers)
+    assert a.status_code == 200 and a.json() == b.json()
+    assert store.documents[receipt["request_id"]]["acknowledged_by"] == "staff-1"
+    assert c.patch(endpoint+"/"+str(uuid.uuid4())+"/acknowledge", headers=headers).status_code == 404
+
+@pytest.mark.parametrize("decoded", [claims(uid="other"), claims(email_verified=False), claims(firebase={}), claims(firebase={"sign_in_second_factor":"phone"})])
+def test_identity_requires_named_verified_totp(decoded):
+    with pytest.raises(StaffForbidden):
+        verify_staff("Bearer token", verifier=lambda _: decoded)
+
+@pytest.mark.parametrize("error", [auth.InvalidIdTokenError("bad"), auth.ExpiredIdTokenError("expired", None), auth.RevokedIdTokenError("revoked"), auth.UserDisabledError("disabled")])
+def test_invalid_revoked_disabled_tokens(error):
+    def fail(_): raise error
+    with pytest.raises(StaffUnauthorized): verify_staff("Bearer token", verifier=fail)
+
+def test_identity_outage_is_unavailable():
+    def fail(_): raise RuntimeError("provider unavailable")
+    with pytest.raises(QueueUnavailable): verify_staff("Bearer token", verifier=fail)
+
+def test_sdk_verifies_token_and_revocation(monkeypatch):
+    import inquiries.firebase as identity
+    app = object()
+    monkeypatch.setattr(identity, "firebase_app", lambda project: app)
+    calls = []
+    def verify(token, **kwargs):
+        calls.append((token, kwargs))
+        return claims()
+    monkeypatch.setattr(auth, "verify_id_token", verify)
+    assert verify_staff("Bearer signed-token") == "staff-1"
+    assert calls == [("signed-token", {"app":app, "check_revoked":True})]
+
+@pytest.mark.parametrize("name,value", [
+    ("INQUIRY_STAFF_QUEUE_ENABLED","false"), ("FIREBASE_PROJECT_ID",""),
+    ("INQUIRY_STAFF_UIDS",""), ("STAFF_ORIGIN","https://public.example.com"),
+    ("PUBLIC_ORIGIN","http://public.example.com"), ("STAFF_ORIGIN","https://staff.example.com/path")
 ])
-def test_buyer_rejects_invalid_required_fields(fields):
-    with pytest.raises(ValidationError):
-        buyer(**fields)
+def test_configuration_fails_closed(monkeypatch,name,value):
+    monkeypatch.setenv(name,value)
+    with pytest.raises(QueueUnavailable): queue_settings()
 
+def test_cloud_run_forbids_emulator(monkeypatch):
+    monkeypatch.setenv("K_SERVICE","diamondecho-api")
+    monkeypatch.setenv("FIREBASE_AUTH_EMULATOR_HOST","localhost:9099")
+    with pytest.raises(QueueUnavailable): queue_settings()
 
-def test_seller_needs_address_and_details():
-    with pytest.raises(ValidationError):
-        buyer(kind="seller", property_address="", message="Please consult")
-    with pytest.raises(ValidationError):
-        buyer(kind="seller", property_address="1 Main St", message="")
+def test_concurrent_submission_is_single_record():
+    store, key, inquiry = Store(), uuid.uuid4(), InquiryCreate(**payload())
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        receipts = list(pool.map(lambda _:submit_inquiry(store,inquiry,key), range(24)))
+    assert len(store.documents) == 1
+    assert sum(not replay for _,replay in receipts) == 1
+    assert len({r.request_id for r,_ in receipts}) == 1
 
+def test_firestore_create_requires_write_confirmation():
+    ref = SimpleNamespace(create=lambda *a,**k:SimpleNamespace(update_time=None))
+    store = FirestoreInquiryStore(SimpleNamespace(collection=lambda _:SimpleNamespace(document=lambda _:ref)))
+    with pytest.raises(RuntimeError): store.create_once("key", {})
 
-def test_tour_needs_listing_and_timezone_aware_time():
-    future = (datetime.now(timezone.utc) + timedelta(days=3)).isoformat()
-    past = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
-    with pytest.raises(ValidationError):
-        buyer(kind="tour", preferred_tour_time=future)
-    with pytest.raises(ValidationError):
-        buyer(kind="tour", property_id="listing-1", preferred_tour_time="2026-10-01T12:00:00")
-    with pytest.raises(ValidationError):
-        buyer(kind="tour", property_id="listing-1", preferred_tour_time=past)
-    assert buyer(kind="tour", property_id="listing-1", preferred_tour_time=future).property_id == "listing-1"
+def test_firestore_already_exists_reads_original():
+    def duplicate(*a,**k): raise AlreadyExists("exists")
+    ref = SimpleNamespace(create=duplicate, get=lambda **k:SimpleNamespace(exists=True,to_dict=lambda:{"original":True}))
+    store = FirestoreInquiryStore(SimpleNamespace(collection=lambda _:SimpleNamespace(document=lambda _:ref)))
+    assert store.create_once("key", {}) == ({"original":True}, True)
 
-
-def test_majority_persistence_replay_and_conflict():
-    collection = FakeCollection()
-    key = uuid.uuid4()
-    first, replay = asyncio.run(submit_inquiry(collection, buyer(), key))
-    second, replay_again = asyncio.run(submit_inquiry(collection, buyer(), key))
-    assert (replay, replay_again) == (False, True)
-    assert first == second
-    assert first.status == "queued"
-    assert len(collection.documents) == 1
-    assert collection.write_concern.document == {"w": "majority", "j": True, "wtimeout": 5000}
-    saved = next(iter(collection.documents.values()))
-    assert saved["consent_at"] and saved["consent_version"]
-    with pytest.raises(IdempotencyConflict):
-        asyncio.run(submit_inquiry(collection, buyer(message="Changed"), key))
-
-
-def test_unconfigured_staff_access_fails_closed_before_storage(monkeypatch):
-    monkeypatch.delenv("INQUIRY_STAFF_ACCESS_KEY_SHA256")
-    collection = FakeCollection()
-    with pytest.raises(QueueUnavailable):
-        asyncio.run(submit_inquiry(collection, buyer(), uuid.uuid4()))
-    assert not collection.documents
-
-
-def test_storage_failure_or_unconfirmed_write_has_no_success_receipt():
-    collection = FakeCollection()
-    collection.fail_insert = True
-    with pytest.raises(QueueUnavailable):
-        asyncio.run(submit_inquiry(collection, buyer(), uuid.uuid4()))
-    collection.fail_insert = False
-    collection.unacknowledged = True
-    key = uuid.uuid4()
-    with pytest.raises(QueueUnavailable):
-        asyncio.run(submit_inquiry(collection, buyer(), key))
-    collection.unacknowledged = False
-    receipt, replay = asyncio.run(submit_inquiry(collection, buyer(), key))
-    assert replay is True and receipt.status == "queued"
-    assert len(collection.documents) == 1
-
-
-def test_staff_authentication_rejects_missing_short_and_wrong_key(monkeypatch):
-    for token in (None, "", "Bearer short", "Bearer " + "z" * 64, "Basic " + STAFF_KEY):
-        with pytest.raises(StaffUnauthorized):
-            authorize_staff(token)
-    assert authorize_staff("Bearer " + STAFF_KEY) == "Gbenga"
-    monkeypatch.setenv("INQUIRY_STAFF_QUEUE_ENABLED", "false")
-    with pytest.raises(QueueUnavailable):
-        authorize_staff("Bearer " + STAFF_KEY)
-
-
-def test_http_public_staff_list_and_acknowledge():
-    collection = FakeCollection()
-    client = client_for(collection)
-    key = str(uuid.uuid4())
-    headers = {"X-Idempotency-Key": key}
-    payload = buyer().model_dump(mode="json")
-    first = client.post("/api/v1/inquiries", headers=headers, json=payload)
-    replay = client.post("/api/v1/inquiries", headers=headers, json=payload)
-    changed = client.post("/api/v1/inquiries", headers=headers, json={**payload, "message": "Changed"})
-    invalid = client.post("/api/v1/inquiries", headers={"X-Idempotency-Key": str(uuid.uuid4())}, json={**payload, "consent": False})
-    assert first.status_code == 201
-    assert replay.status_code == 200
-    assert first.json() == replay.json()
-    assert first.json()["status"] == "queued"
-    assert changed.status_code == 409
-    assert invalid.status_code == 422
-    assert len(collection.documents) == 1
-
-    staff_url = "/api/v1/inquiries/staff"
-    assert client.get(staff_url).status_code == 401
-    assert client.get(staff_url, headers={"Authorization": "Bearer " + "z" * 64}).status_code == 401
-    staff_headers = {"Authorization": "Bearer " + STAFF_KEY}
-    listed = client.get(staff_url, headers=staff_headers)
-    assert listed.status_code == 200
-    assert listed.headers["cache-control"] == "no-store"
-    item = listed.json()["items"][0]
-    assert item["request_id"] == first.json()["request_id"]
-    assert item["email"] == payload["email"]
-    assert item["status"] == "queued"
-    assert "payload_hash" not in item and "_id" not in item
-    ack_url = f"{staff_url}/{item['request_id']}/acknowledge"
-    assert client.patch(ack_url).status_code == 401
-    ack = client.patch(ack_url, headers=staff_headers)
-    repeat_ack = client.patch(ack_url, headers=staff_headers)
-    assert ack.status_code == repeat_ack.status_code == 200
-    assert ack.headers["cache-control"] == "no-store"
-    assert ack.json() == repeat_ack.json()
-    assert ack.json()["status"] == "acknowledged"
-    assert client.get(staff_url, headers=staff_headers).json()["items"][0]["status"] == "acknowledged"
-    assert client.post("/api/v1/inquiries", headers=headers, json=payload).json()["status"] == "queued"
-
-
-def test_staff_route_disabled_and_missing_record(monkeypatch):
-    client = client_for(FakeCollection())
-    headers = {"Authorization": "Bearer " + STAFF_KEY}
-    missing = client.patch(f"/api/v1/inquiries/staff/{uuid.uuid4()}/acknowledge", headers=headers)
-    assert missing.status_code == 404
-    monkeypatch.delenv("INQUIRY_STAFF_ACCOUNT_NAME")
-    assert client.get("/api/v1/inquiries/staff", headers=headers).status_code == 503
-    response = client.post(
-        "/api/v1/inquiries", headers={"X-Idempotency-Key": str(uuid.uuid4())},
-        json=buyer().model_dump(mode="json"),
-    )
-    assert response.status_code == 503
-    assert "request_id" not in response.json()
-
-
-def test_acknowledgement_database_failure_is_not_success():
-    collection = FakeCollection()
-    client = client_for(collection)
-    public = client.post(
-        "/api/v1/inquiries", headers={"X-Idempotency-Key": str(uuid.uuid4())},
-        json=buyer().model_dump(mode="json"),
-    )
-    collection.fail_ack = True
-    response = client.patch(
-        f"/api/v1/inquiries/staff/{public.json()['request_id']}/acknowledge",
-        headers={"Authorization": "Bearer " + STAFF_KEY},
-    )
-    assert response.status_code == 503
-    assert next(iter(collection.documents.values()))["status"] == "queued"
+def test_server_boot_and_origin_guard(monkeypatch):
+    monkeypatch.delenv("MONGO_URL",raising=False)
+    # A fresh interpreter avoids the tests/deal_intelligence package shadowing the runtime package.
+    import subprocess
+    script = """
+import sys
+sys.path.insert(0, sys.argv[1])
+import server
+from fastapi.testclient import TestClient
+with TestClient(server.app) as c:
+    assert c.get('/healthz').status_code == 200
+    r = c.get('/api/v1/inquiries/staff', headers={'Origin':'https://public.example.com','Authorization':'Bearer token'})
+    assert r.status_code == 403 and r.headers['cache-control'] == 'no-store'
+    assert c.get('/api/status').status_code == 401
+"""
+    subprocess.run([sys.executable, "-c", script, str(Path(__file__).resolve().parents[1])], check=True)
