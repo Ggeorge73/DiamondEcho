@@ -103,6 +103,20 @@ def test_failed_storage_is_not_success(client):
     assert "private provider detail" not in r.text
     assert not store.documents
 
+def test_lost_write_response_retries_original_record(client, monkeypatch):
+    c, store = client
+    key = uuid.uuid4()
+    original = store.create_once
+    def ambiguous(key, document):
+        original(key, document)
+        raise RuntimeError("response lost after commit")
+    monkeypatch.setattr(store, "create_once", ambiguous)
+    assert post(c, key=key).status_code == 503
+    monkeypatch.setattr(store, "create_once", original)
+    replay = post(c, key=key)
+    assert replay.status_code == 200
+    assert len(store.documents) == 1
+
 @pytest.mark.parametrize("change", [{"consent":False}, {"email":"invalid"}, {"message":""}, {"full_name":" "}, {"message":"x"*2001}])
 def test_validation(client, change):
     c, _ = client
