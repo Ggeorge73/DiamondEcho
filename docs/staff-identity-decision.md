@@ -1,5 +1,11 @@
 # Staff queue identity decision (Type 7, 2026-09-24)
 
+> Superseded on 2026-09-26: Gbenga selected Cloudflare Pages hosting and
+> Firebase Authentication + Firestore. Cloudflare Access and the MongoDB
+> inquiry queue are no longer the target design. See
+> `docs/cloudflare-firebase-deployment-plan.md`. The code in draft PR #9 is
+> still the old, disabled prototype and must not be treated as the new design.
+
 Decision owner: Gbenga. Approved interim approach: Cloudflare Access for an
 individual DiamondEcho staff account. This is an architecture decision, **not**
 a claim that the account, Access application, deployment, or end-to-end queue
