@@ -1,0 +1,17 @@
+{
+  "name": "diamondecho-staff",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test staff.test.cjs"
+  },
+  "dependencies": {
+    "firebase": "12.19.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "jsdom": "16.7.0",
+    "@firebase/rules-unit-testing": "5.0.2"
+  }
+}

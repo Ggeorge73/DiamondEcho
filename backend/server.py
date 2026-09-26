@@ -1,104 +1,81 @@
-from fastapi import FastAPI, APIRouter
-from dotenv import load_dotenv
-from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
+"""Cloud Run entry point: calculators work without a database at startup."""
 import os
-import logging
 from pathlib import Path
-from pydantic import BaseModel, Field, ConfigDict
-from typing import List
-import uuid
+from uuid import uuid4
 from datetime import datetime, timezone
-from deal_intelligence.router import router as deal_intelligence_router
+from dotenv import load_dotenv
+from fastapi import FastAPI, APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
+from starlette.middleware.cors import CORSMiddleware
+from deal_intelligence.router import router as deal_router
 from routes.assistant import router as assistant_router
-from property_data.router import router as property_data_router
-from inquiries.router import router as inquiries_router
+from property_data.router import router as property_router
+from inquiries.router import router as inquiries_router, require_staff, require_store
+from inquiries.firebase import queue_settings
 
-
-ROOT_DIR = Path(__file__).parent
-load_dotenv(ROOT_DIR / '.env')
-
-# MongoDB connection
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
-
-# Create the main app without a prefix
+load_dotenv(Path(__file__).parent / ".env")
 app = FastAPI()
-app.state.db = db
+api = APIRouter(prefix="/api")
 
-# Create a router with the /api prefix
-api_router = APIRouter(prefix="/api")
+@api.get("/")
+def root():
+    return {"service": "DiamondEcho API"}
 
+@app.get("/healthz")
+def health():
+    # Liveness only, not proof of Firebase configuration or queue delivery.
+    return {"status": "ok"}
 
-# Define Models
 class StatusCheck(BaseModel):
-    model_config = ConfigDict(extra="ignore")  # Ignore MongoDB's _id field
-    
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    client_name: str
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    client_name: str = Field(min_length=1, max_length=120)
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class StatusCheckCreate(BaseModel):
-    client_name: str
+    client_name: str = Field(min_length=1, max_length=120)
 
-# Add your routes to the router instead of directly to app
-@api_router.get("/")
-async def root():
-    return {"message": "Hello World"}
+@api.post("/status", response_model=StatusCheck)
+def create_status_check(value: StatusCheckCreate, account=Depends(require_staff), store=Depends(require_store)):
+    check = StatusCheck(client_name=value.client_name)
+    try:
+        store.db.collection("status_checks").document(check.id).create(check.model_dump(mode="json"), timeout=5)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Status storage unavailable.") from exc
+    return check
 
-@api_router.post("/status", response_model=StatusCheck)
-async def create_status_check(input: StatusCheckCreate):
-    status_dict = input.model_dump()
-    status_obj = StatusCheck(**status_dict)
-    
-    # Convert to dict and serialize datetime to ISO string for MongoDB
-    doc = status_obj.model_dump()
-    doc['timestamp'] = doc['timestamp'].isoformat()
-    
-    _ = await db.status_checks.insert_one(doc)
-    return status_obj
+@api.get("/status", response_model=list[StatusCheck])
+def get_status_checks(account=Depends(require_staff), store=Depends(require_store)):
+    try:
+        return [StatusCheck(**row.to_dict()) for row in store.db.collection("status_checks").limit(100).stream(timeout=5)]
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Status storage unavailable.") from exc
 
-@api_router.get("/status", response_model=List[StatusCheck])
-async def get_status_checks():
-    # Exclude MongoDB's _id field from the query results
-    status_checks = await db.status_checks.find({}, {"_id": 0}).to_list(1000)
-    
-    # Convert ISO string timestamps back to datetime objects
-    for check in status_checks:
-        if isinstance(check['timestamp'], str):
-            check['timestamp'] = datetime.fromisoformat(check['timestamp'])
-    
-    return status_checks
+for router in (deal_router, assistant_router, property_router, inquiries_router):
+    api.include_router(router)
+app.include_router(api)
 
-# Register product modules before mounting the shared /api router.
-api_router.include_router(deal_intelligence_router)
-api_router.include_router(assistant_router)
-api_router.include_router(property_data_router)
-api_router.include_router(inquiries_router)
+origins = [value.strip() for value in os.getenv(
+    "CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000"
+).split(",") if value.strip()]
+if "*" in origins:
+    raise RuntimeError("Wildcard API CORS is forbidden.")
+app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=False,
+                   allow_methods=["GET", "POST", "PATCH"], allow_headers=["Authorization", "Content-Type", "X-Idempotency-Key"])
 
-# Include the router in the main app
-app.include_router(api_router)
-
-cors_origins = [origin.strip() for origin in os.environ.get(
-    'CORS_ORIGINS', 'http://localhost:3000,http://127.0.0.1:3000'
-).split(',') if origin.strip()]
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_credentials='*' not in cors_origins,
-    allow_origins=cors_origins,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    client.close()
+@app.middleware("http")
+async def protect_staff_surface(request, call_next):
+    path = request.url.path
+    protected = path.startswith("/api/v1/inquiries/staff") or path == "/api/status"
+    if protected and request.headers.get("origin"):
+        try:
+            _, _, _, staff_origin = queue_settings()
+            if request.headers["origin"] != staff_origin:
+                from fastapi.responses import JSONResponse
+                return JSONResponse({"detail": "Staff origin denied."}, status_code=403, headers={"Cache-Control": "no-store"})
+        except Exception:
+            from fastapi.responses import JSONResponse
+            return JSONResponse({"detail": "Staff access unavailable."}, status_code=503, headers={"Cache-Control": "no-store"})
+    response = await call_next(request)
+    if path.startswith("/api/v1/inquiries") or path == "/api/status":
+        response.headers["Cache-Control"] = "no-store"
+    return response
