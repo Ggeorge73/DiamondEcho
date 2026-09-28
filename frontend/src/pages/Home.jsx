@@ -15,16 +15,16 @@ const divisions = [
     index: '01',
     name: 'Residences',
     to: '/search',
-    cta: 'Explore the collection',
-    copy: 'A private collection of exceptional homes — waterfront estates, penthouses, and architectural landmarks across America’s signature markets.',
+    cta: 'Search Georgia MLS',
+    copy: 'Explore homes through Georgia MLS and choose the location, price, and property features that matter to you.',
     image: 'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=2200&q=88',
   },
   {
     index: '02',
     name: 'Rentals',
     to: '/search?status=rent',
-    cta: 'View curated rentals',
-    copy: 'Curated leases managed with the same discretion as our sales portfolio — furnished residences, seasonal homes, and executive placements.',
+    cta: 'Explore rental options',
+    copy: 'Explore available rental options in Georgia MLS. Select rental criteria within the provider’s search.',
     image: 'https://images.unsplash.com/photo-1600566753086-00f18fb6b3ea?auto=format&fit=crop&w=2200&q=88',
   },
   {
@@ -119,8 +119,8 @@ const explorerData = {
 
 const portalTiles = [
   {
-    index: '01', icon: Search, title: 'Search the collection',
-    copy: 'Browse residences by market, price, size, and character.',
+    index: '01', icon: Search, title: 'Search Georgia MLS',
+    copy: 'Explore Georgia MLS listings by location, price, and property preferences.',
     action: 'search',
   },
   {
@@ -439,18 +439,19 @@ const Home = () => {
       <section className="mf-collection" id="collection">
         <div className="mf-collection__head">
           <div>
-            <p className="eyebrow" data-reveal>The private collection</p>
-            <h2 data-reveal>Remarkable by nature.<br /><em>Rare by definition.</em></h2>
+            <p className="eyebrow" data-reveal>Illustrative properties</p>
+            <h2 data-reveal>Explore the design.<br /><em>Try a sample property.</em></h2>
           </div>
           <div className="mf-collection__controls" data-reveal>
             <button onClick={() => nudgeStrip(-1)} aria-label="Previous properties"><ChevronLeft /></button>
             <button onClick={() => nudgeStrip(1)} aria-label="Next properties"><ChevronRight /></button>
             <button className="mf-btn" onClick={() => navigate('/search')} style={{ marginLeft: 10 }}>
-              View all <ArrowUpRight />
+              Search Georgia MLS <ArrowUpRight />
             </button>
           </div>
         </div>
 
+        <p style={{ padding: '0 24px' }}>These sample properties demonstrate the site and Deal Studio. They are not live listings. Use Georgia MLS search for available properties.</p>
         <div className="mf-strip" ref={stripRef} onScroll={onStripScroll}>
           {collection.map((property, index) => (
             <article
@@ -465,7 +466,7 @@ const Home = () => {
             >
               <div className="mf-prop-card__media">
                 <img src={`${property.images[0]}?auto=format&fit=crop&w=1200&q=82`} alt={property.title} loading="lazy" />
-                <span className="mf-prop-card__status">{property.status}</span>
+                <span className="mf-prop-card__status">Sample property</span>
               </div>
               <div className="mf-prop-card__body">
                 <small>{property.city}, {property.state}</small>
@@ -519,7 +520,7 @@ const Home = () => {
       <section className="mf-markets" id="markets">
         <div className="mf-markets__inner">
           <div className="mf-markets__list">
-            <p className="eyebrow" data-reveal>Signature markets</p>
+            <p className="eyebrow" data-reveal>Illustrative markets</p>
             <h2 data-reveal>The world&apos;s most<br /><em>considered addresses.</em></h2>
             <div className="mf-markets__rows" data-reveal style={{ '--reveal-delay': '.1s' }}>
               {neighborhoods.map((place, index) => (
@@ -528,11 +529,11 @@ const Home = () => {
                   className={marketIndex === index ? 'is-active' : ''}
                   onMouseEnter={() => setMarketIndex(index)}
                   onFocus={() => setMarketIndex(index)}
-                  onClick={() => navigate(`/search?q=${encodeURIComponent(place.name)}`)}
+                  onClick={() => navigate('/inquire?type=buyer')}
                 >
                   <span>0{index + 1}</span>
                   <strong>{place.name}</strong>
-                  <small>{place.properties} residences · avg {formatPrice(place.avgPrice)}</small>
+                  <small>Sample market — ask about your location</small>
                   <ArrowUpRight />
                 </button>
               ))}

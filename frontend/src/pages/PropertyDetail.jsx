@@ -25,8 +25,8 @@ const PropertyDetail = () => {
       <div className="mf-page">
         <div className="mf-empty" style={{ paddingTop: 220 }}>
           <h3>Residence not found</h3>
-          <p>This listing may have been withdrawn or privately placed.</p>
-          <button className="mf-btn mf-btn--solid" onClick={() => navigate('/search')}>Back to the collection</button>
+          <p>This sample property could not be found. Use Georgia MLS search for available properties.</p>
+          <button className="mf-btn mf-btn--solid" onClick={() => navigate('/search')}>Back to Georgia MLS search</button>
         </div>
       </div>
     );
@@ -38,15 +38,16 @@ const PropertyDetail = () => {
     <div className="mf-page">
       <div className="mf-detail">
         <button className="mf-back" onClick={() => navigate('/search')}>
-          <ArrowLeft /> Back to the collection
+          <ArrowLeft /> Back to Georgia MLS search
         </button>
 
+        <p role="note">Sample property for demonstration only — not a live Georgia MLS listing. Prices, photos, and advisor details are illustrative.</p>
         <div className="mf-detail__layout">
           <div>
             {/* Gallery */}
             <div className="mf-gallery__main">
               <img src={`${property.images[selectedImage]}?auto=format&fit=crop&w=1800&q=86`} alt={property.title} />
-              <span className="mf-gallery__status">{property.status}</span>
+              <span className="mf-gallery__status">Sample property</span>
             </div>
             <div className="mf-gallery__thumbs">
               {property.images.map((image, index) => (

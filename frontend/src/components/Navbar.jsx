@@ -3,7 +3,7 @@ import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowUpRight, Diamond, LayoutGrid, Menu, X } from 'lucide-react';
 
 const navItems = [
-  { label: 'Residences', to: '/search' },
+  { label: 'Search homes', to: '/search' },
   { label: 'Rentals', to: '/search?status=rent' },
   { label: 'Intelligence', to: '/investment-calculator' },
   { label: 'Advisors', to: '/agents' },
@@ -11,7 +11,7 @@ const navItems = [
 ];
 
 const menuItems = [
-  { index: '01', label: 'Residences', to: '/search' },
+  { index: '01', label: 'Search homes', to: '/search' },
   { index: '02', label: 'Rentals', to: '/search?status=rent' },
   { index: '03', label: 'Deal Intelligence', to: '/investment-calculator' },
   { index: '04', label: 'Advisors', to: '/agents' },
@@ -68,7 +68,7 @@ const Navbar = () => {
 
           <div className="mf-nav__actions">
             <button className="mf-nav__portal" onClick={() => navigate('/search')}>
-              <LayoutGrid size={14} /> Browse residences
+              <LayoutGrid size={14} /> Search homes
             </button>
             <button
               className="mf-nav__burger"
@@ -100,7 +100,7 @@ const Navbar = () => {
             <div>
               <h4>Explore DiamondEcho</h4>
               <nav>
-                <button onClick={() => closeAndNavigate('/search')}>Search the collection</button>
+                <button onClick={() => closeAndNavigate('/search')}>Search Georgia MLS</button>
                 <button onClick={() => closeAndNavigate('/investment-calculator')}>Run a deal analysis</button>
                 <button onClick={() => { setIsMenuOpen(false); window.dispatchEvent(new CustomEvent('open-diamond-assistant')); }}>
                   Ask the concierge
