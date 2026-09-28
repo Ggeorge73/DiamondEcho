@@ -1,200 +1,126 @@
-/* Standalone staff surface. No frameworks, analytics, recorder, or client-side storage. */
 (() => {
-  'use strict';
-
-  const config = window.DIAMOND_ECHO_STAFF_CONFIG;
-  const $ = (id) => document.getElementById(id);
-  const alert = $('alert');
-  const notice = $('notice');
-  const signin = $('signin-section');
-  const queue = $('queue-section');
-  const credentialInput = $('credential');
-  const signinButton = $('signin-button');
-  const refreshButton = $('refresh-button');
-  const list = $('inquiries');
-  let accessKey = '';
-  let accessEpoch = 0;
-  let busy = false;
-
-  const apiBase = (() => {
-    if (!config || config.enabled !== true || typeof config.apiBase !== 'string') return null;
-    try {
-      const url = new URL(config.apiBase);
-      if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || url.pathname !== '/' || url.hostname.endsWith('.invalid')) return null;
-      return url.origin;
-    } catch { return null; }
-  })();
-
-  function showError(message) {
-    notice.hidden = true;
-    alert.textContent = message;
-    alert.hidden = false;
-    alert.focus();
+  "use strict";
+  const config = window.DIAMOND_ECHO_STAFF_CONFIG || {};
+  const auth = window.DIAMOND_ECHO_STAFF_AUTH;
+  const configured = config.enabled && auth && window.location.origin === config.staffOrigin;
+  const el = id => document.getElementById(id);
+  let epoch = 0, mode = "", busy = false;
+  function message(text, notice = false) {
+    el("alert").hidden = true; el("notice").hidden = true;
+    const target = el(notice ? "notice" : "alert");
+    target.textContent = text; target.hidden = false;
+    if (!notice) target.focus();
   }
-
-  function clearMessages() {
-    alert.textContent = '';
-    alert.hidden = true;
-    notice.textContent = '';
-    notice.hidden = true;
+  function clear() {
+    el("inquiries").replaceChildren(); el("count").textContent = "";
+    el("secret").textContent = ""; el("secret").hidden = true;
+    el("code").value = ""; el("password").value = "";
+    el("enrollment").hidden = true; el("mfa-form").hidden = true;
+    el("signin-form").hidden = false; el("signin-section").hidden = false;
+    el("queue-section").hidden = true; mode = "";
   }
-
-  function clearAccess() {
-    accessEpoch += 1;
-    accessKey = '';
-    credentialInput.value = '';
-    list.replaceChildren();
-    $('count').textContent = '';
-    queue.hidden = true;
-    signin.hidden = false;
-    busy = false;
-    signinButton.disabled = false;
-    refreshButton.disabled = false;
+  async function logout() {
+    epoch++; clear();
+    try { await auth?.signOut(); } catch { /* Local data is already cleared. */ }
   }
-
-  function errorMessage(response) {
-    if (response?.status === 401 || response?.status === 403) return 'Access denied. Use your approved DiamondEcho staff account credential.';
-    if (response?.status === 503) return 'The staff queue is not configured or temporarily unavailable. Contact the operations owner.';
-    return 'The staff queue could not be reached. Try again later.';
+  function toggle(value) {
+    busy = value;
+    for (const id of ["signin-button", "mfa-button", "refresh-button"]) el(id).disabled = value;
   }
-
-  function dateLabel(value) {
-    if (!value) return 'Not provided';
-    const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? 'Not provided' : date.toLocaleString();
-  }
-
-  function field(dl, label, value) {
-    if (value === undefined || value === null || value === '') return;
-    const row = document.createElement('div');
-    const dt = document.createElement('dt');
-    const dd = document.createElement('dd');
-    dt.textContent = label;
-    dd.textContent = String(value);
-    row.append(dt, dd);
-    dl.append(row);
-  }
-
-  async function acknowledge(requestId, button) {
-    if (!accessKey || busy) return;
-    const epoch = accessEpoch;
-    busy = true;
-    clearMessages();
-    refreshButton.disabled = true;
-    try {
-      const response = await fetch(`${apiBase}/api/v1/inquiries/staff/${encodeURIComponent(requestId)}/acknowledge`, {
-        method: 'PATCH',
-        headers: { Authorization: `Bearer ${accessKey}`, Accept: 'application/json' },
-        credentials: 'omit',
-        cache: 'no-store',
-        referrerPolicy: 'no-referrer',
-      });
-      if (epoch !== accessEpoch) return;
-      if (response.status === 401 || response.status === 403) {
-        clearAccess();
-        showError(errorMessage(response));
-        return;
-      }
-      if (!response.ok) throw new Error(errorMessage(response));
-      const receipt = await response.json();
-      if (epoch !== accessEpoch) return;
-      if (receipt.request_id !== requestId || receipt.status !== 'acknowledged') throw new Error('The acknowledgement could not be verified. Refresh before trying again.');
-      notice.textContent = `Request ${requestId} acknowledged.`;
-      notice.hidden = false;
-      button.textContent = 'Acknowledged';
-      button.disabled = true;
-      button.closest('.inquiry').querySelector('.inquiry-head span').textContent = 'acknowledged';
-    } catch (error) {
-      if (epoch === accessEpoch) showError(error.message || 'The request could not be acknowledged. Refresh before trying again.');
-    } finally {
-      if (epoch === accessEpoch) { busy = false; refreshButton.disabled = false; }
+  async function api(path, method = "GET") {
+    const generation = epoch;
+    const token = await auth.getToken();
+    if (generation !== epoch) return null;
+    const response = await fetch(config.apiBase + "/api/v1/inquiries/staff" + path, {
+      method, headers: { Authorization: "Bearer " + token }, cache: "no-store",
+      credentials: "omit", redirect: "error"
+    });
+    if (generation !== epoch) return null;
+    if (response.status === 401 || response.status === 403) {
+      await logout(); throw Object.assign(new Error("Access denied. Sign in with the approved staff account and authenticator."), { queueError: true });
     }
+    if (!response.ok) throw Object.assign(new Error("The queue is temporarily unavailable. No action was confirmed."), { queueError: true });
+    const data = await response.json();
+    return generation === epoch ? data : null;
   }
-
   function render(items) {
-    list.replaceChildren();
-    $('count').textContent = `${items.length} ${items.length === 1 ? 'request' : 'requests'}`;
+    el("inquiries").replaceChildren();
+    el("count").textContent = items.length + " recent request(s)";
     for (const item of items) {
-      if (!item || typeof item.request_id !== 'string') continue;
-      const card = document.createElement('li');
-      card.className = 'inquiry';
-      const head = document.createElement('div');
-      head.className = 'inquiry-head';
-      const title = document.createElement('h2');
-      title.textContent = `${item.kind || 'Visitor'} inquiry`;
-      const status = document.createElement('span');
-      status.textContent = item.status || 'queued';
-      head.append(title, status);
-      const dl = document.createElement('dl');
-      field(dl, 'Reference', item.request_id);
-      field(dl, 'Submitted', dateLabel(item.submitted_at));
-      field(dl, 'Name', item.full_name);
-      field(dl, 'Email', item.email);
-      field(dl, 'Phone', item.phone);
-      field(dl, 'Property', item.property_address);
-      field(dl, 'Listing ID', item.property_id);
-      if (item.preferred_tour_time) field(dl, 'Requested tour time (not confirmed)', dateLabel(item.preferred_tour_time));
-      field(dl, 'Message', item.message);
-      field(dl, 'Consent recorded', dateLabel(item.consent_at));
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.textContent = item.status === 'acknowledged' ? 'Acknowledged' : 'Acknowledge request';
-      button.disabled = item.status === 'acknowledged';
-      button.addEventListener('click', () => acknowledge(item.request_id, button));
-      card.append(head, dl, button);
-      list.append(card);
-    }
-  }
-
-  async function loadQueue(key) {
-    if (busy) return;
-    const epoch = ++accessEpoch;
-    busy = true;
-    signinButton.disabled = true;
-    refreshButton.disabled = true;
-    clearMessages();
-    try {
-      const response = await fetch(`${apiBase}/api/v1/inquiries/staff?limit=50`, {
-        headers: { Authorization: `Bearer ${key}`, Accept: 'application/json' },
-        credentials: 'omit',
-        cache: 'no-store',
-        referrerPolicy: 'no-referrer',
-      });
-      if (epoch !== accessEpoch) return;
-      if (!response.ok) throw response;
-      const payload = await response.json();
-      if (epoch !== accessEpoch) return;
-      if (!Array.isArray(payload.items)) throw new Error('The staff queue returned an invalid response.');
-      accessKey = key;
-      credentialInput.value = '';
-      render(payload.items);
-      signin.hidden = true;
-      queue.hidden = false;
-    } catch (error) {
-      if (epoch !== accessEpoch) return;
-      clearAccess();
-      showError(error instanceof Error ? error.message : errorMessage(error));
-    } finally {
-      if (epoch === accessEpoch) {
-        busy = false;
-        signinButton.disabled = false;
-        refreshButton.disabled = false;
+      const li = document.createElement("li"); li.className = "inquiry";
+      const heading = document.createElement("h2"); heading.textContent = item.kind + " — " + item.status; li.append(heading);
+      const dl = document.createElement("dl");
+      for (const [label, value] of [
+        ["Reference", item.request_id], ["Name", item.full_name], ["Email", item.email],
+        ["Phone", item.phone], ["Message", item.message], ["Property", item.property_address || item.property_id],
+        ["Tour time", item.preferred_tour_time], ["Submitted", item.submitted_at],
+        ["Consent version", item.consent_version]]) {
+        if (!value) continue;
+        const dt = document.createElement("dt"); dt.textContent = label;
+        const dd = document.createElement("dd"); dd.textContent = value;
+        dl.append(dt, dd);
       }
+      li.append(dl);
+      if (item.status === "queued") {
+        const button = document.createElement("button"); button.textContent = "Acknowledge";
+        button.addEventListener("click", async () => {
+          if (busy) return; toggle(true); button.disabled = true;
+          try {
+            const result = await api("/" + encodeURIComponent(item.request_id) + "/acknowledge", "PATCH");
+            if (result) { message("Request acknowledged.", true); await refresh(); }
+          } catch (error) { message(error.message); } finally { toggle(false); button.disabled = false; }
+        });
+        li.append(button);
+      }
+      el("inquiries").append(li);
     }
   }
-
-  $('signin-form').addEventListener('submit', (event) => {
-    event.preventDefault();
-    if (!apiBase) { showError('The staff queue is disabled until its isolated site and API are configured.'); return; }
-    const key = credentialInput.value.trim();
-    if (!key) { showError('Enter your approved staff credential.'); return; }
-    loadQueue(key);
+  async function refresh() {
+    const data = await api("?limit=50");
+    if (!data) return;
+    render(data.items);
+    el("signin-section").hidden = true; el("queue-section").hidden = false;
+  }
+  async function handle(result) {
+    if (result.type === "ready") { el("secret").textContent = ""; await refresh(); return; }
+    if (result.type === "enrolled") {
+      clear(); message("Authenticator enrolled. Sign in again with your password and authenticator.", true); return;
+    }
+    mode = result.type; el("signin-form").hidden = true; el("mfa-form").hidden = false;
+    if (mode === "enroll") {
+      el("secret").textContent = result.secret; el("secret").hidden = false; el("enrollment").hidden = false;
+    }
+    el("code").focus();
+  }
+  el("signin-form").addEventListener("submit", async event => {
+    event.preventDefault(); if (busy || !configured) return;
+    toggle(true); const generation = ++epoch;
+    const password = el("password").value; el("password").value = "";
+    try {
+      const result = await auth.signIn(el("email").value.trim(), password);
+      if (generation !== epoch) { await auth.signOut(); return; }
+      await handle(result);
+    } catch (error) { await logout(); message(error.queueError ? error.message : "Sign-in failed. Check your credentials, verified email and staff configuration."); }
+    finally { toggle(false); }
   });
-  refreshButton.addEventListener('click', () => { if (accessKey) loadQueue(accessKey); });
-  $('signout-button').addEventListener('click', () => { clearAccess(); clearMessages(); credentialInput.focus(); });
-  window.addEventListener('pagehide', clearAccess);
-  if (!apiBase) {
-    signinButton.disabled = true;
-    showError('The staff queue is disabled until its isolated site and API are configured.');
+  el("mfa-form").addEventListener("submit", async event => {
+    event.preventDefault(); if (busy) return; toggle(true);
+    const generation = epoch, code = el("code").value; el("code").value = "";
+    try {
+      const result = mode === "enroll" ? await auth.completeEnrollment(code) : await auth.completeMfa(code);
+      if (generation !== epoch) { await auth.signOut(); return; }
+      await handle(result);
+    } catch (error) { message(error.queueError ? error.message : "Verification failed. Retry the current authenticator code or cancel and sign in again."); }
+    finally { toggle(false); }
+  });
+  el("refresh-button").addEventListener("click", async () => {
+    if (busy) return; toggle(true);
+    try { await refresh(); } catch (error) { message(error.message); } finally { toggle(false); }
+  });
+  for (const id of ["cancel-button", "signout-button"]) el(id).addEventListener("click", async () => { await logout(); message("Signed out.", true); });
+  window.addEventListener("pagehide", () => { void logout(); });
+  if (!configured) {
+    el("signin-button").disabled = true;
+    message("Staff access is disabled until the isolated deployment is configured.");
   }
 })();

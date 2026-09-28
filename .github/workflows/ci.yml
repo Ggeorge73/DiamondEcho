@@ -62,3 +62,63 @@ jobs:
 
       - name: Run backend tests
         run: python -m pytest backend/tests
+
+      - name: Build Cloud Run container (no push or deployment)
+        run: docker build -t diamondecho-api:ci backend
+
+      - name: Smoke-test unconfigured container
+        run: |
+          docker run -d --name diamondecho-api -p 8080:8080 diamondecho-api:ci
+          for attempt in {1..20}; do
+            if curl --fail http://localhost:8080/healthz; then break; fi
+            sleep 1
+          done
+          curl --fail http://localhost:8080/healthz
+          docker stop diamondecho-api
+
+  staff:
+    name: Staff tests and isolated build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm install --global npm@10.9.3
+      - run: npm ci
+      - run: npm run test:staff
+      - run: npm run build:staff
+      - name: Build configured bundle with synthetic public configuration
+        run: npm run build:staff
+        env:
+          STAFF_QUEUE_ENABLED: 'true'
+          STAFF_API_ORIGIN: https://api.example.com
+          STAFF_ORIGIN: https://staff.example.com
+          PUBLIC_ORIGIN: https://public.example.com
+          FIREBASE_PROJECT_ID: demo-diamondecho
+          FIREBASE_AUTH_DOMAIN: demo-diamondecho.firebaseapp.com
+          FIREBASE_WEB_API_KEY: synthetic-ci-public-key
+          FIREBASE_WEB_APP_ID: synthetic-ci-public-app
+
+  firestore:
+    name: Firestore emulator contracts and rules
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm install --global npm@10.9.3
+      - run: npm ci
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r backend/requirements.txt
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Test rules and real Firestore transactions without cloud credentials
+        run: npx --yes firebase-tools@15.31.0 emulators:exec --project demo-diamondecho --only firestore "node --test staff-queue/firestore-rules.test.mjs && python -m pytest backend/tests/test_firestore_emulator.py -q"

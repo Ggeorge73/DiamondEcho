@@ -1,0 +1,44 @@
+# TEMPLATE ONLY. Replace all CHANGE_ME values after Gbenga approves project/region/IAM.
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: diamondecho-api
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: '0'
+        autoscaling.knative.dev/maxScale: '3'
+        run.googleapis.com/cpu-throttling: 'true'
+    spec:
+      serviceAccountName: CHANGE_ME_SERVICE_ACCOUNT
+      containerConcurrency: 1
+      timeoutSeconds: 30
+      containers:
+        - image: CHANGE_ME_IMAGE_DIGEST
+          ports:
+            - containerPort: 8080
+          resources:
+            limits:
+              cpu: '1'
+              memory: 1Gi
+          env:
+            - name: FIREBASE_PROJECT_ID
+              value: CHANGE_ME_PROJECT_ID
+            - name: INQUIRY_STAFF_QUEUE_ENABLED
+              value: 'false'
+            - name: INQUIRY_STAFF_UIDS
+              value: CHANGE_ME_APPROVED_UID
+            - name: PUBLIC_ORIGIN
+              value: https://diamondecho.com
+            - name: STAFF_ORIGIN
+              value: https://staff.diamondecho.com
+            - name: CORS_ORIGINS
+              value: https://diamondecho.com,https://staff.diamondecho.com
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 1
+            periodSeconds: 3
+            failureThreshold: 20

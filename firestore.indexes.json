@@ -1,0 +1,7 @@
+{
+  "indexes": [],
+  "fieldOverrides": [
+    {"collectionGroup": "inquiries", "fieldPath": "payload", "indexes": []},
+    {"collectionGroup": "inquiries", "fieldPath": "payload_hash", "indexes": []}
+  ]
+}

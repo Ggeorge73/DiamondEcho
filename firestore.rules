@@ -1,0 +1,10 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // API-only storage. Even authenticated browsers cannot read or write PII.
+    // Admin SDK bypasses these rules: API UID/MFA authorization and IAM are mandatory.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

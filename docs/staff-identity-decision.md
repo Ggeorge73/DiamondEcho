@@ -1,5 +1,11 @@
 # Staff queue identity decision (Type 7, 2026-09-24)
 
+> Superseded on 2026-09-26: Gbenga selected Cloudflare Pages hosting and
+> Firebase Authentication + Firestore. Cloudflare Access and the MongoDB
+> inquiry queue are no longer the target design. See
+> `docs/cloudflare-firebase-deployment-plan.md`. The code in draft PR #9 is
+> still the old, disabled prototype and must not be treated as the new design.
+
 Decision owner: Gbenga. Approved interim approach: Cloudflare Access for an
 individual DiamondEcho staff account. This is an architecture decision, **not**
 a claim that the account, Access application, deployment, or end-to-end queue
@@ -43,9 +49,9 @@ and draft PR #9 is not production-ready.
 
 ## Domain discovery (read-only, 2026-09-24)
 
-Gbenga identified `diamondecho.com` and confirmed GoDaddy also hosts the
-website; the specific GoDaddy hosting product is not yet known. Public DNS
-currently delegates to
+Gbenga identified `diamondecho.com` and confirmed GoDaddy as the intended
+website host. On 2026-09-26 he identified the product as **Websites +
+Marketing**. The 2026-09-24 public DNS lookup delegates to
 `ns55.domaincontrol.com` and `ns56.domaincontrol.com` (GoDaddy-managed DNS).
 The apex has A records, `www` is a CNAME to the apex, and the domain has MX
 and TXT records used for email. These records alone do not establish the
@@ -67,3 +73,26 @@ any cutover. Cloudflare's full DNS setup would leave domain registration at
 GoDaddy but change authoritative nameservers; a partial CNAME setup would
 retain GoDaddy DNS but currently requires Cloudflare Business or Enterprise.
 Gbenga must approve the selected cost and migration risk before either path.
+
+## Hosting compatibility gate (2026-09-26)
+
+Websites + Marketing is a template-based website builder. GoDaddy documents
+HTML/CSS/JavaScript sections for that product, while full website-file uploads
+are documented for the separate Web Hosting (cPanel) product. Based on this
+documented deployment model, Websites + Marketing is **not a supported
+deployment target for this repository's React/FastAPI/MongoDB application**.
+Do not treat an HTML section or iframe as deployment of the application or
+protection of the staff queue.
+
+Sources: [custom-code sections](https://www.godaddy.com/en-ca/help/add-html-or-custom-code-to-my-site-27252)
+and [cPanel website-file upload](https://www.godaddy.com/en-uk/help/upload-files-using-my-web-hosting-cpanel-file-manager-3239).
+
+DE-13 now needs a Gbenga-approved compatible hosting plan: either additional
+GoDaddy hosting with verified runtime capabilities, or another application
+host while leaving `diamondecho.com` registered at GoDaddy. A static React
+host alone does not run FastAPI or supply MongoDB. Adeoba evaluates runtime
+and deployment compatibility; Lara evaluates cost, backup, monitoring and
+DNS/email continuity; Tiara verifies the complete deployed journey. No new
+subscription, cancellation, purchase, DNS cutover or deployment is authorized
+by the product clarification alone. Cloudflare Access remains the approved
+interim identity direction, not an implemented sign-in.
