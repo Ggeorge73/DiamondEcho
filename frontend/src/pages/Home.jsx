@@ -1,10 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ArrowRight, ArrowUpRight, BarChart3, Building2,
+  ArrowRight, ArrowUpRight, BarChart3, Building2, ChevronLeft, ChevronRight,
   LineChart, MessageCircle, Plus, Search, Users,
 } from 'lucide-react';
-import GamlsSearch from '../components/GamlsSearch';
+import { featuredProperties, neighborhoods, properties } from '../data/mockData';
 
 /* ------------------------------------------------------------------ */
 /* Content                                                             */
@@ -48,24 +48,44 @@ const divisions = [
 const sections = [
   { id: 'overview', label: 'Overview' },
   { id: 'portfolio', label: 'Portfolio' },
-  { id: 'collection', label: 'Property search' },
+  { id: 'collection', label: 'Collection' },
   { id: 'intelligence', label: 'Intelligence' },
+  { id: 'markets', label: 'Markets' },
   { id: 'portal', label: 'Explore' },
   { id: 'contact', label: 'Contact' },
+];
+
+const stats = [
+  { value: 2500, suffix: '+', label: 'Residences represented' },
+  { value: 12, suffix: '', label: 'Signature markets' },
+  { value: 4.2, suffix: 'B', prefix: '$', decimals: 1, label: 'Assets under advisement' },
+  { value: 98, suffix: '%', label: 'Client retention' },
 ];
 
 const explorerData = {
   Residences: [
     {
-      title: 'Homes for sale',
-      copy: 'Search available properties through Georgia MLS. Set your city, county, price, and preferred features within the search form.',
-      facts: [{ k: 'Source', v: 'Georgia MLS' }, { k: 'Search', v: 'Location and property criteria' }],
+      title: 'Waterfront Estates',
+      copy: 'Oceanfront, lakefront, and dockside estates where land is finite and provenance matters. Privately marketed, precisely valued, and quietly transacted.',
+      facts: [{ k: 'From', v: '$3.8M' }, { k: 'Markets', v: 'Miami · Chicago · Malibu' }],
+      to: '/search?q=waterfront',
+    },
+    {
+      title: 'Penthouses & Skyline',
+      copy: 'Full-floor residences and towers-in-the-sky across New York, Chicago, and San Francisco — engineered views, private elevators, hotel-grade service.',
+      facts: [{ k: 'From', v: '$2.1M' }, { k: 'Markets', v: 'New York · SF · Chicago' }],
+      to: '/search?q=penthouse',
+    },
+    {
+      title: 'Architectural Estates',
+      copy: 'Signature homes by name architects — Trousdale moderns, Mediterranean landmarks, and new builds of consequence, documented like the assets they are.',
+      facts: [{ k: 'From', v: '$4.5M' }, { k: 'Markets', v: 'Beverly Hills · Austin' }],
       to: '/search',
     },
     {
-      title: 'Rental properties',
-      copy: 'Choose Rental (Residential) or Rental (Commercial) under Type in the Georgia MLS search form.',
-      facts: [{ k: 'Source', v: 'Georgia MLS' }, { k: 'Filter', v: 'Select rental type in search' }],
+      title: 'Curated Rentals',
+      copy: 'Furnished residences and executive leases held to sale-grade standards — inspected, managed, and represented end to end.',
+      facts: [{ k: 'From', v: '$8K/mo' }, { k: 'Terms', v: 'Seasonal · Annual' }],
       to: '/search?status=rent',
     },
   ],
@@ -120,6 +140,10 @@ const portalTiles = [
   },
 ];
 
+const formatPrice = (price) => new Intl.NumberFormat('en-US', {
+  style: 'currency', currency: 'USD', maximumFractionDigits: 0,
+}).format(price);
+
 /* ------------------------------------------------------------------ */
 /* Hooks                                                               */
 /* ------------------------------------------------------------------ */
@@ -138,6 +162,40 @@ const useReveal = () => {
     nodes.forEach((node) => observer.observe(node));
     return () => observer.disconnect();
   }, []);
+};
+
+const Counter = ({ value, prefix = '', suffix = '', decimals = 0 }) => {
+  const ref = useRef(null);
+  const [display, setDisplay] = useState(0);
+  const started = useRef(false);
+
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return undefined;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!entry.isIntersecting || started.current) return;
+      started.current = true;
+      const duration = 1800;
+      const t0 = performance.now();
+      const tick = (now) => {
+        const p = Math.min((now - t0) / duration, 1);
+        const eased = 1 - Math.pow(1 - p, 3);
+        setDisplay(value * eased);
+        if (p < 1) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    }, { threshold: 0.4 });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [value]);
+
+  return (
+    <strong ref={ref}>
+      {prefix && <i>{prefix}</i>}
+      {display.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}
+      {suffix && <i>{suffix}</i>}
+    </strong>
+  );
 };
 
 /* ------------------------------------------------------------------ */
@@ -176,6 +234,43 @@ const Home = () => {
   /* Explorer accordion */
   const [explorerTab, setExplorerTab] = useState('Residences');
   const [openItem, setOpenItem] = useState(0);
+
+  /* Collection strip */
+  const stripRef = useRef(null);
+  const [stripProgress, setStripProgress] = useState(0.2);
+  const onStripScroll = useCallback(() => {
+    const node = stripRef.current;
+    if (!node) return;
+    const max = node.scrollWidth - node.clientWidth;
+    setStripProgress(max > 0 ? Math.max(0.08, node.scrollLeft / max) : 1);
+  }, []);
+  const nudgeStrip = (direction) => {
+    const node = stripRef.current;
+    if (!node) return;
+    node.scrollBy({ left: direction * Math.min(500, node.clientWidth * 0.85), behavior: 'smooth' });
+  };
+
+  /* Markets hover preview */
+  const [marketIndex, setMarketIndex] = useState(0);
+  const marketImages = useMemo(
+    () => neighborhoods.map((n) => `${n.image}?auto=format&fit=crop&w=1400&q=82`),
+    []
+  );
+
+  /* Deal card metric animation on view */
+  const dealRef = useRef(null);
+  const [dealLive, setDealLive] = useState(false);
+  useEffect(() => {
+    const node = dealRef.current;
+    if (!node) return undefined;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) setDealLive(true);
+    }, { threshold: 0.4 });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  const collection = featuredProperties.length >= 4 ? properties.slice(0, 6) : featuredProperties;
 
   const onPortalTile = (action) => {
     if (action === 'search') navigate('/search');
@@ -264,10 +359,19 @@ const Home = () => {
             <em>Leading with intelligence.</em>
           </h2>
           <p data-reveal style={{ '--reveal-delay': '.12s' }}>
-            Search Georgia MLS listings, explore property questions, and model potential
-            purchases with DiamondEcho. Start with a location, compare available properties,
-            and contact us to discuss your next step.
+            DiamondEcho manages a portfolio of exceptional residences and investment assets across
+            America&apos;s signature markets. With deep local expertise and an institutional intelligence
+            layer, we turn complex property economics into clear, explainable decisions — for first
+            homes and for global portfolios alike.
           </p>
+          <div className="mf-counters" data-reveal style={{ '--reveal-delay': '.2s' }}>
+            {stats.map((stat) => (
+              <article key={stat.label}>
+                <Counter value={stat.value} prefix={stat.prefix} suffix={stat.suffix} decimals={stat.decimals || 0} />
+                <span>{stat.label}</span>
+              </article>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -275,11 +379,11 @@ const Home = () => {
       <section className="mf-explorer" id="portfolio">
         <div className="mf-explorer__inner">
           <div className="mf-explorer__intro">
-            <p className="eyebrow" data-reveal>Explore your options</p>
+            <p className="eyebrow" data-reveal>Explore our portfolio</p>
             <h2 data-reveal>Every asset class,<br /><em>one standard.</em></h2>
             <p data-reveal style={{ '--reveal-delay': '.1s' }}>
-              Search properties through Georgia MLS, or explore tools for evaluating
-              a potential investment. Choose the path that fits your goals.
+              From landmark residences to income-producing assets, each vertical is run with the same
+              discipline: private access, rigorous underwriting, and representation without compromise.
             </p>
             <div className="mf-explorer__tabs" data-reveal style={{ '--reveal-delay': '.15s' }} role="tablist">
               {Object.keys(explorerData).map((tab) => (
@@ -331,15 +435,51 @@ const Home = () => {
         </div>
       </section>
 
-      {/* Georgia MLS search */}
-      <section className="mf-collection" id="collection" aria-labelledby="home-search-heading">
+      {/* Collection strip */}
+      <section className="mf-collection" id="collection">
         <div className="mf-collection__head">
           <div>
-            <p className="eyebrow">Georgia MLS property search</p>
-            <h2 id="home-search-heading">Find your next home.<br /><em>Search right here.</em></h2>
+            <p className="eyebrow" data-reveal>Illustrative properties</p>
+            <h2 data-reveal>Explore the design.<br /><em>Try a sample property.</em></h2>
+          </div>
+          <div className="mf-collection__controls" data-reveal>
+            <button onClick={() => nudgeStrip(-1)} aria-label="Previous properties"><ChevronLeft /></button>
+            <button onClick={() => nudgeStrip(1)} aria-label="Next properties"><ChevronRight /></button>
+            <button className="mf-btn" onClick={() => navigate('/search')} style={{ marginLeft: 10 }}>
+              Search Georgia MLS <ArrowUpRight />
+            </button>
           </div>
         </div>
-        <GamlsSearch loading="lazy" />
+
+        <p style={{ padding: '0 24px' }}>These sample properties demonstrate the site and Deal Studio. They are not live listings. Use Georgia MLS search for available properties.</p>
+        <div className="mf-strip" ref={stripRef} onScroll={onStripScroll}>
+          {collection.map((property, index) => (
+            <article
+              key={property.id}
+              className="mf-prop-card"
+              data-reveal
+              style={{ '--reveal-delay': `${index * 0.07}s` }}
+              onClick={() => navigate(`/property/${property.id}`)}
+              onKeyDown={(event) => event.key === 'Enter' && navigate(`/property/${property.id}`)}
+              role="button"
+              tabIndex={0}
+            >
+              <div className="mf-prop-card__media">
+                <img src={`${property.images[0]}?auto=format&fit=crop&w=1200&q=82`} alt={property.title} loading="lazy" />
+                <span className="mf-prop-card__status">Sample property</span>
+              </div>
+              <div className="mf-prop-card__body">
+                <small>{property.city}, {property.state}</small>
+                <h3>{property.title}</h3>
+                <div className="mf-prop-card__meta">
+                  <strong>{formatPrice(property.price)}</strong>
+                  <span>{property.beds} bd · {property.baths} ba · {property.sqft.toLocaleString()} sf</span>
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
+        <div className="mf-strip-progress"><i style={{ '--w': `${stripProgress * 100}%` }} /></div>
       </section>
 
       {/* Intelligence */}
@@ -357,14 +497,58 @@ const Home = () => {
           </button>
         </div>
         <div className="mf-intel__visual">
-          <div className="mf-deal-card">
-            <div className="mf-deal-card__head"><span><BarChart3 /> Deal Studio</span></div>
-            <div className="mf-deal-card__props">
-              <div><small>Step 1</small><strong>Enter a property</strong></div>
-              <div><small>Step 2</small><strong>Review assumptions</strong></div>
-              <div><small>Step 3</small><strong>Compare scenarios</strong></div>
+          <div ref={dealRef} className={`mf-deal-card ${dealLive ? '' : 'is-idle'}`} data-reveal>
+            <div className="mf-deal-card__head">
+              <span><BarChart3 /> Deal studio — live model</span>
+              <span className="mf-deal-card__verdict">Strong fit</span>
             </div>
-            <p>Use your own property information and financial assumptions. Georgia MLS search selections are not automatically imported into Deal Studio.</p>
+            <div className="mf-deal-card__props">
+              <div><small>Asset</small><strong>12-unit multifamily</strong></div>
+              <div><small>Market</small><strong>Austin, TX</strong></div>
+              <div><small>Strategy</small><strong>Value-add rental</strong></div>
+            </div>
+            <div className="mf-deal-card__metrics">
+              <div><small>Projected IRR</small><strong>18.4%</strong><i style={{ '--fill': '84%' }} /></div>
+              <div><small>Cash-on-cash</small><strong>9.7%</strong><i style={{ '--fill': '69%' }} /></div>
+              <div><small>DSCR</small><strong>1.46×</strong><i style={{ '--fill': '74%' }} /></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Markets */}
+      <section className="mf-markets" id="markets">
+        <div className="mf-markets__inner">
+          <div className="mf-markets__list">
+            <p className="eyebrow" data-reveal>Illustrative markets</p>
+            <h2 data-reveal>The world&apos;s most<br /><em>considered addresses.</em></h2>
+            <div className="mf-markets__rows" data-reveal style={{ '--reveal-delay': '.1s' }}>
+              {neighborhoods.map((place, index) => (
+                <button
+                  key={place.name}
+                  className={marketIndex === index ? 'is-active' : ''}
+                  onMouseEnter={() => setMarketIndex(index)}
+                  onFocus={() => setMarketIndex(index)}
+                  onClick={() => navigate('/inquire?type=buyer')}
+                >
+                  <span>0{index + 1}</span>
+                  <strong>{place.name}</strong>
+                  <small>Sample market — ask about your location</small>
+                  <ArrowUpRight />
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="mf-markets__preview" data-reveal style={{ '--reveal-delay': '.15s' }}>
+            <div className="mf-markets__frame">
+              {marketImages.map((src, index) => (
+                <img key={src} src={src} alt={neighborhoods[index].name} className={marketIndex === index ? 'is-active' : ''} loading="lazy" />
+              ))}
+            </div>
+            <div className="mf-markets__caption">
+              <strong>{neighborhoods[marketIndex].name}</strong>
+              <span>{neighborhoods[marketIndex].city}</span>
+            </div>
           </div>
         </div>
       </section>
