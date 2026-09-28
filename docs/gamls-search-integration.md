@@ -3,10 +3,12 @@
 The public /search route embeds the owner-supplied URL:
 https://georgeolugbe.georgiamls.com/idxsearch/
 
-An always-visible link opens the same search in a new tab. This remains available
-when privacy settings or provider frame restrictions prevent embedding.
+Search remains embedded at the owner's request; there is no external-search button.
 An iframe load event cannot prove usable search; the page does not report success
-based on that event.
+based on that event. Host notices and the iframe canvas use the DiamondEcho palette.
+GAMLS controls the document inside the cross-origin iframe, including its input
+colors and opaque backgrounds. Those require provider-supported theme settings
+or a provider fix; host CSS cannot change them.
 
 Existing q and status=rent links show intent guidance only. No undocumented query
 parameters are passed to GAMLS. Automatic filters require provider verification.
@@ -27,13 +29,13 @@ on the deployed DiamondEcho origin.
 
 ## Acceptance
 
-Regression tests cover the member URL, direct fallback, removal of mock search
+Regression tests cover the member URL, absence of external search links, removal of mock search
 results, inquiry link, and truthful legacy filter handling.
 Run the full frontend suite and production build through repository CI.
 
 Before launch, verify on the actual HTTPS staging origin:
 - Frame displays and property search/detail navigation works.
-- Direct fallback works independently, including when the iframe is blocked.
+- No external-search button appears; verify provider navigation separately.
 - Keyboard navigation and 320/390/430/768 px layouts are usable.
 - Rental and location controls reflect actual provider capabilities.
 - GAMLS attribution remains visible; no overlay hides provider content.

@@ -20,13 +20,12 @@ const render = async (route) => {
     <MemoryRouter initialEntries={[route]}><Search /></MemoryRouter>
   ));
 };
-test('search provides the member IDX frame and an always available direct fallback', async () => {
+test('search stays embedded without an external search link', async () => {
   await render('/search');
   expect(container.querySelector('iframe').getAttribute('src')).toBe(GAMLS_SEARCH_URL);
   expect(container.querySelector('iframe').title).toBe('Georgia MLS property search');
-  const fallback = container.querySelector('a[target="_blank"]');
-  expect(fallback.href).toBe(GAMLS_SEARCH_URL);
-  expect(fallback.rel).toContain('noopener');
+  expect(container.querySelector('a[target="_blank"]')).toBeNull();
+  expect(container.querySelector('a[href="' + GAMLS_SEARCH_URL + '"]')).toBeNull();
   expect(container.textContent).not.toContain('Listings live');
   expect(container.querySelector('.mf-prop-card')).toBeNull();
   expect(container.querySelector('a[href="/inquire?type=buyer"]')).not.toBeNull();

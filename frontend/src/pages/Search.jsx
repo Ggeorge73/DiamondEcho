@@ -31,13 +31,8 @@ const Search = () => {
         )}
         <div className="de-idx__toolbar">
           <p id="idx-help">
-            Search provided by Georgia MLS. If the search is blank or difficult to
-            use on your device, open it directly.
+            Search properties below, powered by Georgia MLS.
           </p>
-          <a className="mf-btn mf-btn--solid" href={GAMLS_SEARCH_URL}
-            target="_blank" rel="noopener noreferrer">
-            Open Georgia MLS search (new tab)
-          </a>
         </div>
         <iframe className="de-idx__frame" src={GAMLS_SEARCH_URL}
           title="Georgia MLS property search" aria-describedby="idx-help" />
