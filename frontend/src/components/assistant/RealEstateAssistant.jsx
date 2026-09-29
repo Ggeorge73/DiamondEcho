@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { Bot, ExternalLink, Loader2, MessageCircle, Send, ShieldCheck, X } from "lucide-react";
 
@@ -14,6 +14,8 @@ const RealEstateAssistant = () => {
   const [state, setState] = useState("");
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState([]);
+  const promptRef = useRef(null);
+  const triggerRef = useRef(null);
   const backendUrl = useMemo(() => (process.env.REACT_APP_BACKEND_URL || "").replace(/\/$/, ""), []);
 
   useEffect(() => {
@@ -21,6 +23,11 @@ const RealEstateAssistant = () => {
     window.addEventListener("open-diamond-assistant", openAssistant);
     return () => window.removeEventListener("open-diamond-assistant", openAssistant);
   }, []);
+  useEffect(() => { if (open) promptRef.current?.focus(); }, [open]);
+  const closeAssistant = () => {
+    setOpen(false);
+    triggerRef.current?.focus();
+  };
 
   const sendMessage = async (text = message) => {
     const clean = text.trim();
@@ -64,7 +71,7 @@ const RealEstateAssistant = () => {
                 <p className="text-xs text-white/65">Grounded guidance · cited sources</p>
               </div>
             </div>
-            <button onClick={() => setOpen(false)} aria-label="Close assistant" className="rounded-full p-2 hover:bg-white/10"><X className="h-5 w-5" /></button>
+            <button onClick={closeAssistant} aria-label="Close assistant" className="rounded-full p-2 hover:bg-white/10"><X className="h-5 w-5" /></button>
           </header>
 
           <div className="border-b border-[#dce8f2]/10 bg-[#0f1c2a]/70 px-4 py-3">
@@ -110,7 +117,7 @@ const RealEstateAssistant = () => {
 
           <form onSubmit={(event) => { event.preventDefault(); sendMessage(); }} className="border-t border-[#dce8f2]/10 bg-[#142434] p-3">
             <div className="flex items-end gap-2 rounded-xl border border-[#dce8f2]/15 bg-[#142434] p-2 focus-within:border-[#5e9cd0]">
-              <textarea value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); sendMessage(); } }} placeholder="Ask a real-estate question…" rows={2} maxLength={6000} className="max-h-28 min-h-12 flex-1 resize-none border-0 bg-transparent px-2 py-1 text-sm outline-none" />
+              <textarea ref={promptRef} value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); sendMessage(); } }} placeholder="Ask a real-estate question…" rows={2} maxLength={6000} className="max-h-28 min-h-12 flex-1 resize-none border-0 bg-transparent px-2 py-1 text-sm outline-none" />
               <button type="submit" disabled={loading || !message.trim()} aria-label="Send message" className="rounded-lg bg-[#5e9cd0] p-3 text-white transition hover:bg-[#7fb3de] disabled:cursor-not-allowed disabled:opacity-40"><Send className="h-4 w-4" /></button>
             </div>
             <p className="mt-2 text-center text-[10px] text-[#dce8f2]/45">Don’t share SSNs, account credentials, or payment-card details.</p>
@@ -118,7 +125,7 @@ const RealEstateAssistant = () => {
         </section>
       )}
 
-      <button onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-label="Open DiamondEcho assistant" className="ml-auto flex h-14 items-center gap-2 border border-[#2d628c]/50 bg-[#0c1826] px-5 text-white shadow-xl transition hover:-translate-y-0.5 hover:bg-[#2d628c]">
+      <button ref={triggerRef} onClick={() => { if (open) closeAssistant(); else setOpen(true); }} aria-expanded={open} aria-label="Open DiamondEcho assistant" className="ml-auto flex h-14 items-center gap-2 border border-[#2d628c]/50 bg-[#0c1826] px-5 text-white shadow-xl transition hover:-translate-y-0.5 hover:bg-[#2d628c]">
         <MessageCircle className="h-5 w-5 text-[#d9c28f]" /><span className="text-[10px] font-semibold uppercase tracking-[0.15em]">Ask DiamondEcho</span>
       </button>
     </div>

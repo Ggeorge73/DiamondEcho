@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowUpRight, Diamond, LayoutGrid, Menu, X } from 'lucide-react';
 
@@ -21,6 +21,10 @@ const menuItems = [
 const Navbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+  const openerRef = useRef(null);
+  const menuRef = useRef(null);
+  const closeRef = useRef(null);
+  const restoreFocusRef = useRef(false);
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const isHomePage = pathname === '/';
@@ -37,13 +41,45 @@ const Navbar = () => {
   }, [isHomePage]);
 
   useEffect(() => {
-    document.body.style.overflow = isMenuOpen ? 'hidden' : '';
-    return () => { document.body.style.overflow = ''; };
+    if (!isMenuOpen) {
+      if (restoreFocusRef.current) openerRef.current?.focus();
+      restoreFocusRef.current = false;
+      return undefined;
+    }
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    closeRef.current?.focus();
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        restoreFocusRef.current = true;
+        setIsMenuOpen(false);
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const focusable = [...menuRef.current.querySelectorAll('a[href], button:not([disabled])')];
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && (document.activeElement === first || !menuRef.current.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !menuRef.current.contains(document.activeElement))) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = previousOverflow;
+    };
   }, [isMenuOpen]);
 
   useEffect(() => { setIsMenuOpen(false); }, [pathname]);
 
   const closeAndNavigate = (to) => {
+    restoreFocusRef.current = false;
     setIsMenuOpen(false);
     navigate(to);
   };
@@ -52,7 +88,7 @@ const Navbar = () => {
     <>
       <header className={`mf-nav ${isScrolled || isMenuOpen ? 'mf-nav--solid' : ''}`}>
         <div className="mf-nav__inner">
-          <Link to="/" className="mf-wordmark" aria-label="DiamondEcho home" onClick={() => setIsMenuOpen(false)}>
+          <Link to="/" className="mf-wordmark" aria-label="DiamondEcho home" onClick={() => { restoreFocusRef.current = false; setIsMenuOpen(false); }}>
             <span className="mf-wordmark__mark"><Diamond aria-hidden="true" /></span>
             <span>
               <strong>DIAMOND ECHO</strong>
@@ -71,8 +107,12 @@ const Navbar = () => {
               <LayoutGrid size={14} /> Search homes
             </button>
             <button
+              ref={openerRef}
               className="mf-nav__burger"
-              onClick={() => setIsMenuOpen((open) => !open)}
+              onClick={() => {
+                if (isMenuOpen) restoreFocusRef.current = true;
+                setIsMenuOpen((open) => !open);
+              }}
               aria-expanded={isMenuOpen}
               aria-controls="mf-overlay-menu"
               aria-label={isMenuOpen ? 'Close menu' : 'Open menu'}
@@ -84,7 +124,10 @@ const Navbar = () => {
       </header>
 
       {isMenuOpen && (
-        <div id="mf-overlay-menu" className="mf-menu" role="dialog" aria-label="Site menu">
+        <div id="mf-overlay-menu" ref={menuRef} className="mf-menu" role="dialog" aria-modal="true" aria-label="Site menu">
+          <button ref={closeRef} className="mf-menu__close" type="button" onClick={() => { restoreFocusRef.current = true; setIsMenuOpen(false); }} aria-label="Close site menu">
+            <X aria-hidden="true" /> Close menu
+          </button>
           <div className="mf-menu__primary">
             {menuItems.map((item) => (
               <a
@@ -102,7 +145,7 @@ const Navbar = () => {
               <nav>
                 <button onClick={() => closeAndNavigate('/search')}>Search Georgia MLS</button>
                 <button onClick={() => closeAndNavigate('/investment-calculator')}>Run a deal analysis</button>
-                <button onClick={() => { setIsMenuOpen(false); window.dispatchEvent(new CustomEvent('open-diamond-assistant')); }}>
+                <button onClick={() => { restoreFocusRef.current = false; setIsMenuOpen(false); window.dispatchEvent(new CustomEvent('open-diamond-assistant')); }}>
                   Ask the concierge
                 </button>
                 <button onClick={() => closeAndNavigate('/agents')}>Meet the advisors</button>
