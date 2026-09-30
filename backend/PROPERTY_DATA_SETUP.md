@@ -12,5 +12,5 @@ Endpoints:
 - `GET /api/v1/properties/suggest?q=A&session_token=<uuid>`
 - `GET /api/v1/properties/lookup?address=<encoded-address>`
 
-Without credentials, the service returns clearly labeled curated suggestions and review-mode sample records. Public-record coverage and freshness vary by jurisdiction, so users must verify parcel, tax, rent, financing, and legal details before relying on an analysis.
+These endpoints are for Deal Studio analysis, not public property listings or Georgia MLS search. Without credentials, address autocomplete returns only market suggestions; no fabricated addresses are offered, and property lookup fails closed. Deal Studio's built-in numerical assumptions remain an explicit illustration, not a property record. Public-record coverage and freshness vary by jurisdiction, so users must verify parcel, tax, rent, financing, and legal details before relying on an analysis.
 

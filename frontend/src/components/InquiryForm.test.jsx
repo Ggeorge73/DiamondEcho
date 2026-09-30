@@ -25,8 +25,8 @@ const consent = async () => { await act(async () => { input('consent').click(); 
 const submit = async () => {
   await act(async () => { container.querySelector('button[type="submit"]').click(); });
 };
-const renderForm = async (kind, property) => {
-  await act(async () => { root.render(<InquiryForm kind={kind} property={property} />); });
+const renderForm = async (kind) => {
+  await act(async () => { root.render(<InquiryForm kind={kind} />); });
 };
 
 beforeEach(() => {
@@ -93,11 +93,11 @@ test('seller consultation includes address and details', async () => {
   });
 });
 
-test('tour sends listing context and offset-aware requested time without booking language', async () => {
-  const property = { id: 7, title: 'Test Residence', address: '7 Oak Rd', city: 'Atlanta', state: 'GA', zip: '30301' };
-  await renderForm('tour', property);
+test('tour requires an address and sends offset-aware requested time without booking language', async () => {
+  await renderForm('tour');
   await fill('fullName', 'Tour Guest');
   await fill('email', 'tour@example.com');
+  await fill('propertyAddress', '7 Oak Rd, Atlanta, GA');
   const future = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
   const localFuture = new Date(future.getTime() - future.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
   await fill('preferredTime', localFuture);
@@ -105,8 +105,8 @@ test('tour sends listing context and offset-aware requested time without booking
   axios.post.mockResolvedValueOnce({ status: 201, data: { status: 'queued', request_id: 'REQ-T' } });
   await submit();
   const payload = axios.post.mock.calls[0][1];
-  expect(payload).toMatchObject({ kind: 'tour', property_id: '7', consent: true });
-  expect(payload.property_address).toContain('7 Oak Rd');
+  expect(payload).toMatchObject({ kind: 'tour', property_address: '7 Oak Rd, Atlanta, GA', consent: true });
+  expect(payload).not.toHaveProperty('property_id');
   expect(payload.preferred_tour_time).toMatch(/Z$/);
   expect(container.textContent).toContain('The visit is not booked or confirmed.');
 });

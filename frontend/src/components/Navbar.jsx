@@ -111,10 +111,8 @@ const Navbar = () => {
               </nav>
             </div>
             <div className="mf-menu__contact">
-              <h4>Contact</h4>
-              <p><a href="mailto:concierge@diamondecho.com">concierge@diamondecho.com</a></p>
-              <p><a href="tel:+12125550188">+1 212 555 0188</a></p>
-              <p>New York · Miami · Los Angeles</p>
+              <h4>Georgia office</h4>
+              <p>8735 Dunwoody Place<br />GA 30350, USA</p>
             </div>
           </div>
         </div>

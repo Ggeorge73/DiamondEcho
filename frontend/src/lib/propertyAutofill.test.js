@@ -23,16 +23,17 @@ test('clears all enumerated property assumptions on an address switch while keep
   expect(previous.annualRent).toBe('360000');
 });
 
-test('listing autofill uses only attributable listing facts and marks other inputs for review', () => {
+test('illustrative deal data copies descriptive facts but never supplies an asking price', () => {
   const result = applyPropertyAutofill(previous, {
-    source_listing_id: 2, formatted_address: 'Second home', city: 'Miami', state: 'FL',
+    formatted_address: 'Illustrative address', city: 'Miami', state: 'FL',
     property_type: 'Single Family', square_footage: 6800, price: 4500000,
-    annual_taxes: 0, is_demo: true, provider: 'DiamondEcho listing',
-  }, 'listing');
-  expect(result.form).toMatchObject({ address: 'Second home', market: 'Miami, FL', units: '1', rentableSquareFeet: '6800', purchasePrice: '4500000', propertyTaxes: '0', annualRent: '', insurance: '' });
-  expect(result.provenance.purchasePrice.description).toMatch(/asking price/);
+    annual_taxes: 0, is_demo: true, provider: 'demo',
+  });
+  expect(result.form).toMatchObject({ address: 'Illustrative address', market: 'Miami, FL', units: '1', rentableSquareFeet: '6800', purchasePrice: '', propertyTaxes: '0', annualRent: '', insurance: '' });
+  expect(result.provenance).not.toHaveProperty('purchasePrice');
   expect(result.provenance.propertyTaxes.description).toMatch(/historical/);
-  expect(result.reviewFields).toContain('Annual rent or income');
+  expect(result.reviewFields).toContain('Purchase price or current ask');
+  expect(result.sourceLabel).toMatch(/Illustrative deal example/);
 });
 
 test('public record last sale never becomes current acquisition price', () => {
@@ -51,5 +52,5 @@ test('missing provider values do not silently reuse previous property values', (
   const result = applyPropertyAutofill(previous, { formatted_address: 'Unknown', provider: 'demo' });
   expect(result.form).toMatchObject({ purchasePrice: '', rentableSquareFeet: '', propertyTaxes: '', insurance: '', rehabCost: '' });
   expect(result.reviewFields).toContain('Purchase price or current ask');
-  expect(result.sourceLabel).toMatch(/Demo property record/);
+  expect(result.sourceLabel).toMatch(/Illustrative deal example/);
 });
