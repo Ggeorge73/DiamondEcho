@@ -17,8 +17,9 @@ Legacy /property/:id links redirect to /search rather than display fictional lis
 
 The hosted search does not supply records to Deal Studio or the inquiry queue.
 Visitors must provide an address/MLS number in an inquiry or enter the property
-in Deal Studio. Any no-credentials backend examples are labeled illustrative
-and appear only in the deal-analysis workflow. No scraping, data feed, subscription or DNS change is needed.
+in Deal Studio. With no property-data credentials, Deal Studio accepts manual inputs rather
+than returning fabricated addresses or property records. Its default numerical
+assumptions are labeled illustrative, not listed properties. No scraping, data feed, subscription or DNS change is needed.
 
 ## Deployment coordination
 

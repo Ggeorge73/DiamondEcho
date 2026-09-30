@@ -1,3 +1,5 @@
+import pytest
+
 from backend.property_data.service import lookup, suggest
 
 
@@ -11,13 +13,14 @@ def test_market_suggestions_start_with_first_character(monkeypatch):
     assert result.provider == "curated"
 
 
-def test_review_address_returns_explicit_demo_record(monkeypatch):
+def test_no_sample_addresses_are_suggested_without_mapbox(monkeypatch):
+    monkeypatch.delenv("MAPBOX_ACCESS_TOKEN", raising=False)
+    result = suggest("567 Design Way", "test-session")
+    assert result.suggestions == []
+    assert "enter an address manually" in result.warning
+
+
+def test_lookup_without_provider_never_returns_a_fabricated_record(monkeypatch):
     monkeypatch.delenv("RENTCAST_API_KEY", raising=False)
-    result = lookup("567 Design Way, Austin, TX 78701")
-
-    assert result.formatted_address == "567 Design Way, Austin, TX 78701"
-    assert result.square_footage == 4800
-    assert result.annual_taxes == 32000
-    assert result.is_demo is True
-    assert result.provider == "demo"
-
+    with pytest.raises(LookupError, match="requires RENTCAST_API_KEY"):
+        lookup("567 Design Way, Austin, TX 78701")

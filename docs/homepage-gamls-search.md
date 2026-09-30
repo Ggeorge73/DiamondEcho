@@ -9,9 +9,9 @@ mock neighborhood previews, fictional business/listing counters, starting-price
 claims for sample inventory, and the hard-coded Austin investment example.
 Hero photography remains decorative; it is not presented as MLS inventory.
 The sample property inventory, public property-detail route, and sample-listing
-inquiry/autofill paths have now been removed. Deal Studio may still show
-explicitly labeled illustrative assumptions or example records; those are not
-listed properties or search results.
+inquiry/autofill paths have now been removed. Deal Studio retains explicitly labeled illustrative numerical assumptions;
+without live provider credentials, it does not offer fabricated addresses or
+property records.
 
 Listings and results stay inside the GAMLS document. No data scraping or custom
 listing feed is introduced. The provider's white background is retained as
