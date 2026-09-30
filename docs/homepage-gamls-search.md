@@ -8,8 +8,10 @@ Removed from Home: sample-property carousel and its local property links,
 mock neighborhood previews, fictional business/listing counters, starting-price
 claims for sample inventory, and the hard-coded Austin investment example.
 Hero photography remains decorative; it is not presented as MLS inventory.
-Existing standalone sample property/Deal Studio fixtures are outside this
-homepage change and have not been converted into MLS records.
+The sample property inventory, public property-detail route, and sample-listing
+inquiry/autofill paths have now been removed. Deal Studio may still show
+explicitly labeled illustrative assumptions or example records; those are not
+listed properties or search results.
 
 Listings and results stay inside the GAMLS document. No data scraping or custom
 listing feed is introduced. The provider's white background is retained as
