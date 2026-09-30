@@ -32,30 +32,30 @@ the named real-device run.
 | TC02 | DE-02 / DE-8 | Run base and risk for rental/flip/land, switch every strategy pair; no blank screen, uncaught error or unusable navigation. | DE-8 attachment |
 | TC03 | DE-03 / DE-7 | Clean checkout/install, frontend and backend tests, production build and GitHub CI pass on the release commit. | DE-7 CI run + release commit |
 | TC04 | DE-04 / DE-13 | HTTPS release URL, direct deep links, SPA fallback, configured API/property provider, queue, failure and recovery paths work; no secrets in client build. | DE-13 deployment log + redacted network evidence |
-| TC05 | DE-05 / DE-14 | Mixed sale/rental fixture: Rentals shows rentals only with amount and period; sale collection and detail prices agree; empty state works. | DE-14 attachment |
-| TC06 | DE-06 / DE-15 | Tour action opens truthful request; save survives its approved persistence boundary; share/copy link opens the same listing; keyboard/mobile activation works. | DE-15 attachment |
-| TC07 | DE-07 / DE-11 | Two distinct listings open Deal Studio with matching ID, address, price and supported facts; missing ID and direct entry are labeled. | DE-11 attachment |
+| TC05 | DE-05 / DE-14 | In embedded Georgia MLS, select rental type and verify real results and their displayed price periods; confirm no local sample sale/rental collection appears. Document provider limitations. | DE-14 attachment |
+| TC06 | DE-06 / DE-15 | Tour inquiry requires a visitor-entered property address and future time, and says it is a request rather than a booking. Reassess save/share features against the approved brokerage scope; do not imply provider listing data is copied. | DE-15 attachment |
+| TC07 | DE-07 / DE-11 | Direct Deal Studio entry is labeled illustrative; legacy `?listing=` URLs load no fabricated facts. Configured provider enrichment is distinct from IDX and never invents a listing ask. | DE-11 attachment |
 | TC08 | DE-08 / DE-10 | Reject 150% vacancy, invalid ranges and cross-field conflicts; server 422 is not replaced locally; edits clear stale base/risk; export matches the successful input snapshot. | DE-10 attachment + workbook comparison |
-| TC09 | DE-09 / DE-12 | Switch a multifamily deal to 567 Design Way and another address; prior rent/expenses never appear as new facts, zero and missing values differ, listing/provider/user provenance is visible. | DE-12 attachment |
+| TC09 | DE-09 / DE-12 | Switch from illustrative multifamily assumptions to another manually entered address and, if configured, a provider record. Prior rent/expenses never transfer; zero and missing values differ; provider/user provenance is visible. | DE-12 attachment |
 | TC10 | DE-10 / DE-16 | At 320/390/430/768 px, rental/flip/land form, base, risk, loading and error states have no clipped controls or page-level horizontal overflow. | DE-16 viewport captures |
 | TC11 | DE-11 / DE-17 | Gbenga approves claims, advisors, contacts, listing rights, photos and statistics; fixtures are labeled; real contact endpoints reach owners. | DE-17 approval register + contact test |
 | TC12 | DE-12 / DE-18 | Privacy/Terms links open readable owner-approved pages; production scripts and consent behavior match the approved inventory; no unintended recording. | DE-18 policy/script sign-off |
 | TC13 | DE-13 / DE-19 | Mobile menu items are reachable; Escape closes; focus enters, stays within, and returns to opener; tabs and links work with keyboard/screen reader. | DE-19 device/keyboard record |
 | TC14 | DE-14 / DE-20 | Buyer quick prompt, seller follow-up context, source review dates, neutral safety reframing, human queue handoff and service-error recovery work. | DE-20 conversation transcript, redacted |
-| TC15 | DE-15 / DE-21 | Neighborhood shortcuts find appropriate listings; padded Austin matches Austin; URL, reload, back/forward preserve filters; reset clears them. | DE-21 query/URL record |
+| TC15 | DE-15 / DE-21 | Verify any site shortcuts land on embedded Georgia MLS search. Filters operate inside the provider frame; do not claim the site URL preserves filters unless provider behavior is demonstrated. | DE-21 query/URL record |
 | TC16 | DE-16 / DE-22 | Unknown URL gives a clear 404 with working Home/Search; known deep links and refresh work. | DE-22 URL captures |
 | TC17 | DE-17 / DE-23 | A 10,000-iteration browser run discloses the 5,000 cap and exclusions; probabilities show their valid denominator; malformed distributions fail clearly. | DE-23 simulation record |
 | TC18 | DE-18 / DE-6 | Public site makes no authenticated-portal or self-service seller claim outside Gbenga's approved brokerage/inquiry launch scope. | DE-6 content review |
 
 ## Journey and operational cross-checks
 
-- Buyer: search/listing → inquiry → consent → reference → one queue record →
-  Gbenga acknowledgement. Repeat with bad input, unavailable queue, duplicate
+- Buyer: Georgia MLS search → manually include address/MLS in inquiry → consent
+  → reference → one queue record → Gbenga acknowledgement. Repeat with bad input, unavailable queue, duplicate
   key, and mobile/keyboard operation.
 - Seller: seller entry → consultation → consent → reference → one queue record
   → acknowledgement. Check address and message context, invalid email and
-  failure/retry. Tour: listing → preferred future time → request (not booking)
-  → listing identity in queue.
+  failure/retry. Tour: visitor-entered property address and preferred future
+  time → request (not booking) → address in queue.
 - Queue staff access must fail closed without configured identity. Verify an
   unauthorized caller cannot list or acknowledge inquiries; an authorized
   Gbenga session can filter, read and acknowledge without exposing secrets in
