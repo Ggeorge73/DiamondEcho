@@ -316,7 +316,7 @@ h1, h2, h3, .display { font-family: 'Sora', 'Inter', sans-serif; }
 .mf-footer__col nav { display: flex; flex-direction: column; gap: 13px; }
 .mf-footer__col a, .mf-footer__col button { padding: 0; display: inline-flex; background: none; border: 0; color: var(--steel-soft); text-decoration: none; text-align: left; font-size: 12.5px; transition: color .3s; }
 .mf-footer__col a:hover, .mf-footer__col button:hover { color: var(--ice); }
-.mf-offices { width: min(100%, 1560px); margin: auto; padding: 64px 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4vw; border-bottom: 1px solid var(--line); }
+.mf-offices { width: min(100%, 1560px); margin: auto; padding: 64px 0; display: grid; grid-template-columns: 1fr; border-bottom: 1px solid var(--line); }
 .mf-offices h3 { margin: 0 0 18px; font-size: 21px; font-weight: 400; }
 .mf-offices p { margin: 0 0 16px; color: var(--mist); font-size: 12.5px; line-height: 1.85; }
 .mf-offices a { display: block; color: var(--steel-bright); text-decoration: none; font-size: 12px; line-height: 2; }
