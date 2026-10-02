@@ -29,6 +29,8 @@ test('search stays embedded without an external search link', async () => {
   expect(container.textContent).not.toContain('Listings live');
   expect(container.querySelector('.mf-prop-card')).toBeNull();
   expect(container.querySelector('a[href="/inquire?type=buyer"]')).not.toBeNull();
+  expect(container.querySelector('a[href="/inquire?type=tour"]')).not.toBeNull();
+  expect(container.textContent).toContain('Selections made in Georgia MLS are not automatically sent');
 });
 test.each([
   ['/search?status=rent', 'Looking for a rental?'],

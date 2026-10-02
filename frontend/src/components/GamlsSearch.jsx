@@ -28,6 +28,7 @@ const GamlsSearch = ({ requestedSearch = '', rentalIntent = false, loading = 'ea
             DiamondEcho inquiries or Deal Studio.
           </p>
           <Link className="mf-btn" to="/inquire?type=buyer">Ask about a property</Link>
+          <Link className="mf-btn" to="/inquire?type=tour">Request a tour</Link>
           <Link className="mf-btn" to="/investment-calculator">Open Deal Studio</Link>
         </div>
       </section>

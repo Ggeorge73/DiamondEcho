@@ -6,7 +6,7 @@ import './Inquire.css';
 const copy = {
   buyer: { eyebrow: 'Buyer inquiry', title: 'Tell us what you are looking for.', intro: 'Share your goals and an advisor can follow up about available residences and next steps.' },
   seller: { eyebrow: 'Seller consultation', title: 'Start a selling conversation.', intro: 'Tell us about your property and goals. An advisor can review your request and follow up.' },
-  tour: { eyebrow: 'Tour request', title: 'Request a property tour.', intro: 'Suggest a date and time. Your request does not reserve or confirm a tour.' },
+  tour: { eyebrow: 'Tour request', title: 'Request a property tour.', intro: 'Enter the property address and suggest a date and time. Georgia MLS selections are not transferred here, and your request does not reserve or confirm a tour.' },
 };
 
 const Inquire = () => {
@@ -25,6 +25,7 @@ const Inquire = () => {
           <div className="de-inquiry-switch" aria-label="Inquiry type">
             <Link to="/inquire?type=buyer" aria-current={kind === 'buyer' ? 'page' : undefined}>Buying</Link>
             <Link to="/inquire?type=seller" aria-current={kind === 'seller' ? 'page' : undefined}>Selling</Link>
+            <Link to="/inquire?type=tour" aria-current={kind === 'tour' ? 'page' : undefined}>Tour request</Link>
           </div>
         </div>
         <InquiryForm key={kind} kind={kind} />
