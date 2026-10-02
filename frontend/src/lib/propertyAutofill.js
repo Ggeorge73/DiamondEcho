@@ -43,17 +43,14 @@ const normalizePropertyType = (value = '') => {
   return 'single_family';
 };
 
-// Only an actual listing ask can prefill purchase price. A historical sale is
-// useful context, but it is not today's asking price or proposed acquisition.
-export const applyPropertyAutofill = (form, record, sourceKind = 'record') => {
+// Neither public records nor illustrative deal examples establish an asking price.
+// A historical sale is context, not today's proposed acquisition.
+export const applyPropertyAutofill = (form, record) => {
   const next = preparePropertyChange(form, record?.formatted_address || '');
   const provenance = {};
-  const isListing = sourceKind === 'listing' && record?.source_listing_id != null;
-  const sourceLabel = isListing
-    ? `DiamondEcho review listing #${record.source_listing_id}`
-    : record?.is_demo || record?.provider === 'demo'
-      ? 'Demo property record — not verified public data'
-      : record?.provider ? `${record.provider} public record — verify currency` : 'Unverified property record';
+  const sourceLabel = record?.is_demo || record?.provider === 'demo'
+    ? 'Illustrative deal example — not verified public data'
+    : record?.provider ? `${record.provider} public record — verify currency` : 'Unverified property record';
   const fill = (field, value, description) => {
     if (value === null || value === undefined || value === '') return;
     next[field] = String(value);
@@ -71,7 +68,6 @@ export const applyPropertyAutofill = (form, record, sourceKind = 'record') => {
   }
   if (hasValue(record?.square_footage)) fill('rentableSquareFeet', record.square_footage, 'Reported building area; verify rentable area');
   if (hasValue(record?.annual_taxes)) fill('propertyTaxes', record.annual_taxes, 'Reported historical annual taxes; reassess after purchase');
-  if (isListing && hasValue(record?.price)) fill('purchasePrice', record.price, 'Current review-listing asking price, not an agreed purchase price');
   if (record?.property_type && !String(record.property_type).toLowerCase().includes('multi')) {
     fill('units', 1, 'Single-property working assumption; verify unit count');
   }
@@ -85,6 +81,6 @@ export const applyPropertyAutofill = (form, record, sourceKind = 'record') => {
     ['closingCosts', 'Closing-cost estimate'],
   ].filter(([field]) => !provenance[field]).map(([, label]) => label);
   // Historical sale is deliberately not copied into purchasePrice.
-  if (!isListing && hasValue(record?.last_sale_price)) reviewFields.unshift('Historical sale price is context only; enter a current purchase price');
+  if (hasValue(record?.last_sale_price)) reviewFields.unshift('Historical sale price is context only; enter a current purchase price');
   return { form: next, provenance, sourceLabel, reviewFields };
 };

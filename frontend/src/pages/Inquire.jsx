@@ -1,6 +1,5 @@
 import React from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { properties } from '../data/mockData';
 import InquiryForm from '../components/InquiryForm';
 import './Inquire.css';
 
@@ -14,7 +13,6 @@ const Inquire = () => {
   const [params] = useSearchParams();
   const requestedKind = params.get('type');
   const kind = Object.prototype.hasOwnProperty.call(copy, requestedKind) ? requestedKind : 'buyer';
-  const property = properties.find((item) => String(item.id) === params.get('listing'));
   const content = copy[kind];
 
   return (
@@ -29,7 +27,7 @@ const Inquire = () => {
             <Link to="/inquire?type=seller" aria-current={kind === 'seller' ? 'page' : undefined}>Selling</Link>
           </div>
         </div>
-        <InquiryForm key={kind + '-' + (property?.id || '')} kind={kind} property={property} />
+        <InquiryForm key={kind} kind={kind} />
       </div>
     </main>
   );

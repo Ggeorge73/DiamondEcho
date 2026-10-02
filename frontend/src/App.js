@@ -1,11 +1,10 @@
 import React, { useEffect } from "react";
 import "./App.css";
-import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
 import Home from "./pages/Home";
 import Search from "./pages/Search";
-import PropertyDetail from "./pages/PropertyDetail";
 import InvestmentCalculator from "./pages/InvestmentCalculator";
 import Agents from "./pages/Agents";
 import About from "./pages/About";
@@ -27,7 +26,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/search" element={<Search />} />
-          <Route path="/property/:id" element={<PropertyDetail />} />
+          <Route path="/property/:id" element={<Navigate to="/search" replace />} />
           <Route path="/investment-calculator" element={<InvestmentCalculator />} />
           <Route path="/agents" element={<Agents />} />
           <Route path="/about" element={<About />} />

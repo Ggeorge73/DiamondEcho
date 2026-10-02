@@ -1,15 +1,15 @@
 """Provider-backed address search and public-record enrichment.
 
 Mapbox Search Box and RentCast are optional production providers. Credentials
-stay on the server. Curated demo records keep local development explicit and
-usable without representing sample values as live property data.
+stay on the server. Without provider credentials, no fabricated address or
+property record is returned; Deal Studio can still use manual illustrative assumptions.
 """
 
 from __future__ import annotations
 
 import json
 import os
-from typing import Dict, List
+from typing import List
 from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
@@ -24,50 +24,6 @@ MARKETS = [
     "Raleigh, NC", "San Antonio, TX", "San Diego, CA", "San Francisco, CA",
     "Seattle, WA", "Tampa, FL", "Washington, DC",
 ]
-
-DEMO_PROPERTIES: Dict[str, dict] = {
-    "1245 ocean drive, miami beach, fl 33139": {
-        "id": "demo-miami-ocean-drive",
-        "formatted_address": "1245 Ocean Drive, Miami Beach, FL 33139",
-        "city": "Miami Beach", "state": "FL", "zip_code": "33139",
-        "county": "Miami-Dade", "latitude": 25.7907, "longitude": -80.1300,
-        "property_type": "Single Family", "bedrooms": 6, "bathrooms": 5.5,
-        "square_footage": 6800, "lot_size": 15000, "year_built": 2020,
-        "last_sale_price": 4500000, "assessed_value": 4200000,
-        "annual_taxes": 45000,
-    },
-    "789 sunset boulevard, los angeles, ca 90069": {
-        "id": "demo-la-sunset",
-        "formatted_address": "789 Sunset Boulevard, Los Angeles, CA 90069",
-        "city": "Los Angeles", "state": "CA", "zip_code": "90069",
-        "county": "Los Angeles", "latitude": 34.0901, "longitude": -118.3814,
-        "property_type": "Single Family", "bedrooms": 7, "bathrooms": 6,
-        "square_footage": 8500, "lot_size": 22000, "year_built": 2018,
-        "last_sale_price": 6200000, "assessed_value": 5900000,
-        "annual_taxes": 62000,
-    },
-    "2100 park avenue, new york, ny 10029": {
-        "id": "demo-ny-park-avenue",
-        "formatted_address": "2100 Park Avenue, New York, NY 10029",
-        "city": "New York", "state": "NY", "zip_code": "10029",
-        "county": "New York", "latitude": 40.7943, "longitude": -73.9526,
-        "property_type": "Condo", "bedrooms": 4, "bathrooms": 3.5,
-        "square_footage": 4200, "year_built": 2021,
-        "last_sale_price": 5500000, "assessed_value": 5100000,
-        "annual_taxes": 55000,
-    },
-    "567 design way, austin, tx 78701": {
-        "id": "demo-austin-design-way",
-        "formatted_address": "567 Design Way, Austin, TX 78701",
-        "city": "Austin", "state": "TX", "zip_code": "78701",
-        "county": "Travis", "latitude": 30.2711, "longitude": -97.7437,
-        "property_type": "Single Family", "bedrooms": 4, "bathrooms": 3.5,
-        "square_footage": 4800, "lot_size": 10000, "year_built": 2022,
-        "last_sale_price": 3200000, "assessed_value": 3000000,
-        "annual_taxes": 32000,
-    },
-}
-
 
 def _get_json(url: str, headers: dict | None = None, timeout: int = 8):
     request = Request(url, headers=headers or {})
@@ -101,12 +57,6 @@ def suggest(query: str, session_token: str) -> SuggestionResponse:
 
     lower = clean.lower()
     local: List[PropertySuggestion] = []
-    for address, record in DEMO_PROPERTIES.items():
-        if lower in address:
-            local.append(PropertySuggestion(
-                id=record["id"], label=record["formatted_address"],
-                kind="address", provider="demo", market=f'{record["city"]}, {record["state"]}',
-            ))
     for market in MARKETS:
         if market.lower().startswith(lower) or lower in market.lower():
             local.append(PropertySuggestion(
@@ -115,7 +65,7 @@ def suggest(query: str, session_token: str) -> SuggestionResponse:
             ))
     return SuggestionResponse(
         suggestions=local[:8], provider="curated",
-        warning="Live address autocomplete requires MAPBOX_ACCESS_TOKEN; showing curated review data.",
+        warning="Live address autocomplete requires MAPBOX_ACCESS_TOKEN; enter an address manually or choose a market.",
     )
 
 
@@ -148,15 +98,6 @@ def lookup(address: str) -> PropertyDetails:
             warnings=["Public-record availability and freshness vary by jurisdiction; verify before underwriting."],
         )
 
-    normalized = clean.lower().replace(".", "")
-    for key, item in DEMO_PROPERTIES.items():
-        if normalized == key or normalized in key or key in normalized:
-            return PropertyDetails(
-                **item, provider="demo",
-                source_url="https://developers.rentcast.io/reference/property-data",
-                is_demo=True,
-                warnings=["Review-mode sample record. Configure RENTCAST_API_KEY for live public-record data."],
-            )
     raise LookupError(
-        "Live property lookup requires RENTCAST_API_KEY. Select one of the review addresses or configure the provider."
+        "Live property lookup requires RENTCAST_API_KEY. Enter property facts manually or configure the provider."
     )

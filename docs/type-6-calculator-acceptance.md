@@ -24,17 +24,18 @@ and DE-12 supply the acceptance criteria.
 
 ## Property change (DE-12)
 
-1. Starting from a multifamily analysis with $360,000 rent, open the
-   single-family 567 Design Way listing. Verify the new address, type, ask,
-   size, and available tax history. Prior rent, expenses, and other
-   property-dependent assumptions must be blank, not relabeled as facts.
-2. Type a different address from a selected listing, then select another
-   listing or provider result. The old listing URL, record card, and results
-   must clear. Historical sale price must not become current purchase price.
-3. For provider data, verify explicit zero remains zero and missing values
-   stay blank. Source labels must distinguish listing, demo, provider, and
-   values entered by the user. Analysis must require review of missing
-   property-dependent financial values before treating blanks as zero.
+1. Starting from the labeled illustrative multifamily analysis with $360,000
+   rent, type a different address. Prior rent, expenses, price and other
+   property-dependent assumptions must clear, not become facts about it.
+2. If live property-data credentials are configured, select a provider address.
+   Only supported public-record facts may populate; historical sale price must
+   not become a current purchase price. Without credentials, lookup must fail
+   closed and manual entry must remain available.
+3. Open a legacy `?listing=1` link. It must show no fabricated record or ask.
+   For provider data, verify explicit zero remains zero and missing values
+   stay blank. Source labels must distinguish provider facts and user entries.
+   Analysis must require review of missing financial values before treating
+   blanks as zero.
 4. Repeat the critical paths by keyboard and on a narrow mobile viewport;
    record browser, viewport, build, test values, and results in Jira. Confirm
    named reviewer acceptance before moving either issue to Done.

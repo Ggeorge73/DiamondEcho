@@ -19,7 +19,7 @@ const createSubmissionKey = () => {
   throw new Error('This browser cannot safely submit the request. Please try an updated browser.');
 };
 
-const InquiryForm = ({ kind, property }) => {
+const InquiryForm = ({ kind }) => {
   const [values, setValues] = useState(emptyValues);
   const [validation, setValidation] = useState({});
   const [error, setError] = useState('');
@@ -48,7 +48,7 @@ const InquiryForm = ({ kind, property }) => {
     if (!values.fullName.trim()) next.fullName = 'Enter your full name.';
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.email.trim())) next.email = 'Enter a valid email address.';
     if ((kind === 'buyer' || kind === 'seller') && !values.message.trim()) next.message = 'Tell us how an advisor can help.';
-    if ((kind === 'seller' || (kind === 'tour' && !property)) && !values.propertyAddress.trim()) next.propertyAddress = 'Enter the property address.';
+    if ((kind === 'seller' || kind === 'tour') && !values.propertyAddress.trim()) next.propertyAddress = 'Enter the property address.';
     if (kind === 'tour') {
       if (!values.preferredTime) next.preferredTime = 'Choose your preferred date and time.';
       else if (!Number.isFinite(new Date(values.preferredTime).getTime())) next.preferredTime = 'Choose a valid date and time.';
@@ -75,10 +75,7 @@ const InquiryForm = ({ kind, property }) => {
       consent: true,
       ...(values.phone.trim() ? { phone: values.phone.trim() } : {}),
       ...(values.message.trim() ? { message: values.message.trim() } : {}),
-      ...(property ? {
-        property_id: String(property.id),
-        property_address: [property.address, property.city, property.state, property.zip].filter(Boolean).join(', '),
-      } : values.propertyAddress.trim() ? { property_address: values.propertyAddress.trim() } : {}),
+      ...(values.propertyAddress.trim() ? { property_address: values.propertyAddress.trim() } : {}),
       ...(kind === 'tour' ? { preferred_tour_time: new Date(values.preferredTime).toISOString() } : {}),
     };
     const signature = JSON.stringify(payload);
@@ -112,7 +109,7 @@ const InquiryForm = ({ kind, property }) => {
         <h2 id="inquiry-receipt-title">DiamondEcho received your request.</h2>
         <p>Your request is in the DiamondEcho staff queue. {kind === 'tour' ? 'This is a tour request. The visit is not booked or confirmed.' : 'A team member can review it and follow up using the contact details you provided.'}</p>
         <p className="de-inquiry-reference">Reference: {receipt.request_id}</p>
-        <Link className="mf-btn mf-btn--solid" to={property ? '/property/' + property.id : '/search'}>Continue browsing</Link>
+        <Link className="mf-btn mf-btn--solid" to="/search">Continue browsing</Link>
       </section>
     );
   }
@@ -134,14 +131,13 @@ const InquiryForm = ({ kind, property }) => {
   return (
     <section className="de-inquiry-card" aria-labelledby="inquiry-form-title">
       <h2 id="inquiry-form-title">Your request</h2>
-      {property && <p className="de-inquiry-property"><strong>{property.title}</strong><span>{property.address}, {property.city}, {property.state} {property.zip}</span></p>}
       <p className="de-inquiry-required">Fields marked * are required.</p>
       {error && <div className="de-inquiry-error" role="alert" tabIndex={-1} ref={errorRef}><strong>Request needs attention</strong><p>{error}</p><p>Your request has not been confirmed. You can retry below.</p></div>}
       <form onSubmit={submit} noValidate>
         {field('fullName', 'Full name *', <input {...attrs('fullName')} value={values.fullName} onChange={change('fullName')} autoComplete="name" required />)}
         {field('email', 'Email address *', <input {...attrs('email')} type="email" value={values.email} onChange={change('email')} autoComplete="email" required />)}
         {field('phone', 'Phone number (optional)', <input {...attrs('phone')} type="tel" value={values.phone} onChange={change('phone')} autoComplete="tel" />)}
-        {(kind === 'seller' || (kind === 'tour' && !property)) && field('propertyAddress', 'Property address *', <input {...attrs('propertyAddress')} value={values.propertyAddress} onChange={change('propertyAddress')} autoComplete="street-address" required />)}
+        {(kind === 'seller' || kind === 'tour') && field('propertyAddress', 'Property address *', <input {...attrs('propertyAddress')} value={values.propertyAddress} onChange={change('propertyAddress')} autoComplete="street-address" required />)}
         {kind === 'tour' && field('preferredTime', 'Preferred tour date and time *', <>
           <input {...attrs('preferredTime')} type="datetime-local" value={values.preferredTime} onChange={change('preferredTime')} required />
           <small>Entered in {timeZone}. Your preferred time is a request, not a booking.</small>

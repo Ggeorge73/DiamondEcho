@@ -6,14 +6,13 @@ import {
   CircleDollarSign, Database, Download, FileSpreadsheet, Home, Loader2,
   LandPlot, MapPin, RotateCcw, ShieldCheck, Sparkles, TrendingUp
 } from 'lucide-react';
-import { properties } from '../data/mockData';
 import { analyzeDealLocally, runMonteCarloLocally } from '../lib/dealAnalysis';
 import { buildRentalDecision, RENTAL_EVIDENCE_ITEMS } from '../lib/dealDecision';
 import { downloadDealWorkbook } from '../lib/dealWorkbook';
 import { buildDealRequest } from '../lib/dealRequest';
 import { responseErrorMessage, validateDealForm, validateMonteCarloScenarios } from '../lib/dealValidation';
 import { buildMonteCarloScenarios, MONTE_CARLO_CASES } from '../lib/monteCarloCases';
-import { recordFromListing, resolveListingContext } from '../lib/listingContext';
+import { resolveListingContext } from '../lib/listingContext';
 import { applyPropertyAutofill, preparePropertyChange } from '../lib/propertyAutofill';
 
 const MARKET_OPTIONS = [
@@ -23,12 +22,6 @@ const MARKET_OPTIONS = [
   'Phoenix, AZ', 'Raleigh, NC', 'San Antonio, TX', 'San Diego, CA',
   'San Francisco, CA', 'Seattle, WA', 'Tampa, FL', 'Washington, DC',
 ];
-
-const LOCAL_ADDRESSES = properties.map((property) => ({
-  id: `local-${property.id}`,
-  label: `${property.address}, ${property.city}, ${property.state} ${property.zip}`,
-  kind: 'address', provider: 'review', property,
-}));
 
 const initialForm = {
   address: '', strategy: 'rental', propertyType: 'multifamily', market: 'Austin, TX',
@@ -86,7 +79,7 @@ const AutocompleteField = ({ label, name, value, onChange, suggestions, onSelect
       <div className="studio-suggestions" role="listbox">
         {suggestions.map((suggestion) => (
           <button type="button" role="option" key={suggestion.id || suggestion.label} onMouseDown={(event) => event.preventDefault()} onClick={() => onSelect(suggestion)}>
-            <MapPin /><span><strong>{suggestion.label}</strong><small>{suggestion.provider === 'mapbox' ? 'Live address result' : suggestion.kind === 'market' ? 'Market' : 'Review property'}</small></span>
+            <MapPin /><span><strong>{suggestion.label}</strong><small>{suggestion.provider === 'mapbox' ? 'Live address result' : suggestion.kind === 'market' ? 'Market' : suggestion.provider === 'demo' ? 'Illustrative deal example' : 'Address for analysis'}</small></span>
           </button>
         ))}
       </div>
@@ -97,7 +90,7 @@ const AutocompleteField = ({ label, name, value, onChange, suggestions, onSelect
 const InvestmentCalculator = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const listingContext = useMemo(() => resolveListingContext(location.search, properties), [location.search]);
+  const listingContext = useMemo(() => resolveListingContext(location.search), [location.search]);
   const [form, setForm] = useState(initialForm);
   const [result, setResult] = useState(null);
   const [analysisSnapshot, setAnalysisSnapshot] = useState(null);
@@ -148,18 +141,16 @@ const InvestmentCalculator = () => {
   useEffect(() => {
     const clean = form.address.trim().toLowerCase();
     if (!clean) { setAddressSuggestions([]); return undefined; }
-    const local = LOCAL_ADDRESSES.filter((item) => item.label.toLowerCase().includes(clean)).slice(0, 6);
-    setAddressSuggestions(local);
+    setAddressSuggestions([]);
     const timer = window.setTimeout(async () => {
       try {
         const { data } = await axios.get(`${backendUrl}/api/v1/properties/suggest`, {
           params: { q: form.address, session_token: sessionToken },
         });
         if (Array.isArray(data?.suggestions)) {
-          const merged = [...data.suggestions, ...local].filter((item, index, items) => items.findIndex((candidate) => candidate.label === item.label) === index);
-          setAddressSuggestions(merged.slice(0, 8));
+          setAddressSuggestions(data.suggestions.slice(0, 8));
         }
-      } catch { /* Local review suggestions remain available. */ }
+      } catch { setAddressSuggestions([]); }
     }, 325);
     return () => window.clearTimeout(timer);
   }, [backendUrl, form.address, sessionToken]);
@@ -213,27 +204,17 @@ const InvestmentCalculator = () => {
     setAddressSuggestions([]);
     setMarketSuggestions([]);
 
-    if (listingContext.kind === 'listing') {
-      const record = recordFromListing(listingContext.listing);
-      const autofill = applyPropertyAutofill(initialForm, record, 'listing');
-      setPropertyRecord(record);
-      setForm(autofill.form);
-      setPropertyProvenance(autofill.provenance);
-      setPropertyReviewFields(autofill.reviewFields);
-      setPropertySourceLabel(autofill.sourceLabel);
-    } else {
-      setPropertyRecord(null);
-      setPropertyProvenance({});
-      setPropertyReviewFields([]);
-      setPropertySourceLabel('');
-      setForm(listingContext.kind === 'missing'
-        ? preparePropertyChange(initialForm)
-        : initialForm);
-    }
+    setPropertyRecord(null);
+    setPropertyProvenance({});
+    setPropertyReviewFields([]);
+    setPropertySourceLabel('');
+    setForm(listingContext.kind === 'missing'
+      ? preparePropertyChange(initialForm)
+      : initialForm);
   }, [listingContext]);
 
   const applyProperty = (record) => {
-    const autofill = applyPropertyAutofill(form, record, record.source_listing_id != null ? 'listing' : 'record');
+    const autofill = applyPropertyAutofill(form, record);
     setPropertyRecord(record);
     setForm(autofill.form);
     setPropertyProvenance(autofill.provenance);
@@ -252,12 +233,6 @@ const InvestmentCalculator = () => {
     setPropertyLoading(false);
     setForm((current) => preparePropertyChange(current, suggestion.label));
     setAddressSuggestions([]);
-    if (suggestion.property) {
-      const listingPath = '/investment-calculator?listing=' + encodeURIComponent(suggestion.property.id);
-      if (location.pathname + location.search === listingPath) applyProperty(recordFromListing(suggestion.property));
-      else navigate(listingPath);
-      return;
-    }
     clearListingRoute();
     setPropertyLoading(true); setError('');
     try {
@@ -416,11 +391,8 @@ const InvestmentCalculator = () => {
 
       <section className="deal-studio-shell">
         <form className="deal-studio-form" onSubmit={analyze} noValidate>
-          {listingContext.kind === 'listing' && propertyRecord?.source_listing_id === listingContext.listing.id && (
-            <p className="studio-provider-note" role="status">DiamondEcho listing #{listingContext.listing.id} loaded. Only the sourced fields below were copied; unrelated financial assumptions were cleared and must be entered and reviewed.</p>
-          )}
           {listingContext.kind === 'manual' && !propertyRecord && <p className="studio-provider-note" role="status">Manual Deal Studio entry. Any prefilled numbers are illustrative, not facts about a selected listing; verify all assumptions.</p>}
-          {listingContext.kind === 'missing' && <p className="studio-provider-note" role="alert">Listing #{listingContext.id || '(empty)'} is unavailable. No listing facts were loaded; enter and verify a property manually or return to search.</p>}
+          {listingContext.kind === 'missing' && <p className="studio-provider-note" role="alert">This old sample-property link is unavailable. No listing facts were loaded; enter and verify a property manually or return to Georgia MLS search.</p>}
           {propertyRecord && <div className="studio-provider-note studio-provenance-note" role="status"><strong>Input sources: {propertySourceLabel}</strong><ul>{Object.entries(propertyProvenance).map(([field, details]) => <li key={field}>{field.replace(/([A-Z])/g, ' $1')}: {details.source} — {details.description}</li>)}</ul>{propertyReviewFields.length > 0 && <p>Review and enter missing values: {propertyReviewFields.join('; ')}.</p>}</div>}
           <div className="studio-strategy" role="group" aria-label="Investment strategy">
             <button type="button" className={form.strategy === 'rental' ? 'is-active' : ''} onClick={() => switchStrategy('rental', form.propertyType === 'land' ? 'multifamily' : form.propertyType)}><Building2 /> Rental & commercial</button>
@@ -437,7 +409,7 @@ const InvestmentCalculator = () => {
             </div>
             {propertyRecord && (
               <div className="studio-property-card">
-                <div><span>{propertyRecord.source_listing_id ? 'REVIEW LISTING #' + propertyRecord.source_listing_id : propertyRecord.is_demo ? 'REVIEW RECORD' : 'PUBLIC RECORD'}</span><strong>{propertyRecord.formatted_address}</strong><small>{propertyRecord.provider || 'Property data provider'}</small></div>
+                <div><span>{propertyRecord.is_demo ? 'ILLUSTRATIVE DEAL EXAMPLE' : 'PUBLIC RECORD'}</span><strong>{propertyRecord.formatted_address}</strong><small>{propertyRecord.provider || 'Property data provider'}</small></div>
                 <dl>
                   <div><dt>TYPE</dt><dd>{propertyRecord.property_type || 'Verify'}</dd></div>
                   <div><dt>BUILT</dt><dd>{propertyRecord.year_built || '—'}</dd></div>
