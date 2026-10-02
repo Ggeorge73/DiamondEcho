@@ -6,7 +6,7 @@ const navItems = [
   { label: 'Search homes', to: '/search' },
   { label: 'Rentals', to: '/search?status=rent' },
   { label: 'Intelligence', to: '/investment-calculator' },
-  { label: 'Advisors', to: '/agents' },
+  { label: 'Advisory', to: '/agents' },
   { label: 'The Firm', to: '/about' },
 ];
 
@@ -14,7 +14,7 @@ const menuItems = [
   { index: '01', label: 'Search homes', to: '/search' },
   { index: '02', label: 'Rentals', to: '/search?status=rent' },
   { index: '03', label: 'Deal Intelligence', to: '/investment-calculator' },
-  { index: '04', label: 'Advisors', to: '/agents' },
+  { index: '04', label: 'Advisory', to: '/agents' },
   { index: '05', label: 'The Firm', to: '/about' },
 ];
 
@@ -148,7 +148,7 @@ const Navbar = () => {
                 <button onClick={() => { restoreFocusRef.current = false; setIsMenuOpen(false); window.dispatchEvent(new CustomEvent('open-diamond-assistant')); }}>
                   Ask the concierge
                 </button>
-                <button onClick={() => closeAndNavigate('/agents')}>Meet the advisors</button>
+                <button onClick={() => closeAndNavigate('/agents')}>Explore advisory</button>
                 <button onClick={() => closeAndNavigate('/inquire?type=buyer')}>Buyer inquiry</button>
                 <button onClick={() => closeAndNavigate('/inquire?type=seller')}>Seller consultation</button>
               </nav>

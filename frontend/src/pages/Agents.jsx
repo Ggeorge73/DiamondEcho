@@ -1,7 +1,27 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, Mail, MessageCircle, Phone } from 'lucide-react';
-import { agents } from '../data/mockData';
+import { Building2, MessageCircle } from 'lucide-react';
+
+const paths = [
+  {
+    title: 'Explore properties',
+    detail: 'Browse the Georgia MLS search and choose the location and property criteria that matter to you.',
+    action: 'Search properties',
+    to: '/search',
+  },
+  {
+    title: 'Consider a deal',
+    detail: 'Use Deal Studio to model assumptions and compare possible outcomes before making a decision.',
+    action: 'Open Deal Studio',
+    to: '/investment-calculator',
+  },
+  {
+    title: 'Start a conversation',
+    detail: 'Describe your buying or selling goals in an inquiry. A submitted request is not an appointment or representation agreement.',
+    action: 'Make an inquiry',
+    to: '/inquire?type=buyer',
+  },
+];
 
 const Agents = () => {
   const navigate = useNavigate();
@@ -12,35 +32,23 @@ const Agents = () => {
         <div className="mf-page-hero__inner">
           <div>
             <p className="eyebrow">04 — Advisory</p>
-            <h1>Private <em>advisors.</em></h1>
+            <h1>Real estate,<br /><em>thoughtfully explored.</em></h1>
             <p className="mf-page-hero__lede">
-              Senior advisors coordinating financing, diligence, negotiation, and closing —
-              one relationship across your entire real estate life. Explore the collection
-              and learn how an advisor can support your next decision.
+              Search Georgia MLS, work through the numbers, and tell DiamondEcho
+              what you need. Individual advisor profiles will appear only after
+              their identities and contact details are verified.
             </p>
-          </div>
-          <div className="mf-page-hero__meta">
-            <strong>{agents.reduce((sum, agent) => sum + agent.listings, 0)}</strong>
-            <span>Active mandates</span>
           </div>
         </div>
       </section>
 
       <div className="mf-advisors">
-        {agents.map((agent) => (
-          <article key={agent.id} className="mf-advisor">
-            <div className="mf-advisor__media">
-              <img src={agent.photo} alt={agent.name} loading="lazy" />
-              <span>{agent.listings} active listings</span>
-            </div>
+        {paths.map((path) => (
+          <article key={path.title} className="mf-advisor">
             <div className="mf-advisor__body">
-              <h3>{agent.name}</h3>
-              <small>{agent.title}</small>
-              <p>{agent.bio}.</p>
-              <div className="mf-advisor__contacts">
-                <a href={`tel:${agent.phone.replace(/[^\d+]/g, '')}`}><Phone /> {agent.phone}</a>
-                <a href={`mailto:${agent.email}`}><Mail /> {agent.email}</a>
-              </div>
+              <h3>{path.title}</h3>
+              <p>{path.detail}</p>
+              <button className="mf-btn" onClick={() => navigate(path.to)}>{path.action}</button>
             </div>
           </article>
         ))}

@@ -36,7 +36,8 @@ test('homepage uses agent GAMLS search instead of sample inventory and market cl
   expect(container.querySelector('#markets')).toBeNull();
   expect(container.querySelector('a[target="_blank"]')).toBeNull();
   for (const text of ['Sample property', 'Illustrative markets', 'Residences represented',
-    'Assets under advisement', 'Client retention', '18.4%', 'Austin, TX']) {
+    'Assets under advisement', 'Client retention', '18.4%', 'Austin, TX',
+    'Meet the advisors', 'Private advisors']) {
     expect(container.textContent).not.toContain(text);
   }
   expect(container.querySelector('a[href="/inquire?type=buyer"]')).not.toBeNull();
