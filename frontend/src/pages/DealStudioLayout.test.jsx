@@ -26,6 +26,15 @@ test('scenario table drops its fixed width on phones and stacks the case name', 
   expect(css).toContain('.studio-scenario-table { margin-top: 13px; overflow-x: auto; }');
 });
 
+test('risk cards cannot be widened past the screen by long figures', () => {
+  expect(css).toContain('.studio-risk-results { padding-top: 24px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }');
+  expect(css).toContain('grid-template-columns: repeat(3, minmax(0, 1fr));');
+  const phone = block('max-width: 460px');
+  expect(phone).toContain('.studio-risk-results > article { padding: 18px; }');
+  expect(phone).toContain('.studio-risk-results h3 { font-size: 24px; }');
+  expect(phone).toContain('.studio-risk-results dd { font-size: clamp(10px, 3.1vw, 12px); }');
+});
+
 describe('rental decision view', () => {
   let container;
   let root;
