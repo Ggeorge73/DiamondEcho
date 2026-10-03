@@ -1,4 +1,4 @@
-import { analyzeDealLocally, runMonteCarloLocally } from './dealAnalysis';
+import { analyzeDealLocally, lossEquivalentReturn, runMonteCarloLocally } from './dealAnalysis';
 
 const johnsCreekDeal = {
   strategy: 'rental',
@@ -82,6 +82,50 @@ test('a case where every iteration is invalid fails with the reason', () => {
 test('each summary carries the number of results it was measured on', () => {
   const [result] = runMonteCarloLocally({ deal: johnsCreekDeal, scenarios: [{ name: 'No income', iterations: 250, seed: 73, drivers: { rent_change: { minimum: -0.1, mode: 0, maximum: 0.1 } } }] }).scenarios;
   expect(result.iterations_completed).toBe(250);
-  expect(result.summaries.irr.sample_size).toBe(0);
   expect(result.summaries.npv.sample_size).toBe(250);
+  expect(result.summaries.npv.loss_without_irr_count).toBe(0);
+});
+
+test('an iteration that returns no cash is counted as a -100% IRR instead of being left out', () => {
+  const [result] = runMonteCarloLocally({ deal: johnsCreekDeal, scenarios: [{ name: 'No income', iterations: 250, seed: 73, drivers: { rent_change: { minimum: -0.1, mode: 0, maximum: 0.1 } } }] }).scenarios;
+  expect(analyzeDealLocally(johnsCreekDeal).metrics.irr.value).toBeNull();
+  expect(result.summaries.irr.sample_size).toBe(250);
+  expect(result.summaries.irr.loss_without_irr_count).toBe(250);
+  expect(result.summaries.irr.p10).toBe(-1);
+  expect(result.summaries.irr.p90).toBe(-1);
+  expect(result.summaries.irr.probability_above_zero).toBe(0);
+});
+
+test('the loss-equivalent return applies only to losses', () => {
+  expect(lossEquivalentReturn(0, 60)).toBe(-1);
+  expect(lossEquivalentReturn(0.15, 60)).toBeCloseTo(0.15 ** 0.2 - 1, 12);
+  expect(lossEquivalentReturn(0.15, 60)).toBeCloseTo(-0.3157, 4);
+  expect(lossEquivalentReturn(0.5, 12)).toBeCloseTo(-0.5, 12);
+  expect(lossEquivalentReturn(1, 60)).toBeNull();
+  expect(lossEquivalentReturn(1.4, 60)).toBeNull();
+  expect(lossEquivalentReturn(null, 60)).toBeNull();
+  expect(lossEquivalentReturn(0.5, 0)).toBeNull();
+});
+
+test('an under-water sale after some income is scored by cash returned over cash invested', () => {
+  // Income arrives monthly, then the sale cannot repay the loan: no IRR solves these cash flows.
+  const deal = {
+    strategy: 'rental',
+    property: { property_type: 'multifamily', unit_count: 12, currency: 'USD' },
+    acquisition: { purchase_price: 3000000, closing_costs: 0, due_diligence_costs: 0, initial_capex: 0, hold_months: 60 },
+    debt: [{ name: 'Senior', loan_to_value: 0.65, annual_interest_rate: 0.0675, amortization_years: 30, interest_only_months: 60, term_months: 120, origination_fee_rate: 0 }],
+    operating: { gross_scheduled_rent: 360000, other_income: 0, vacancy_rate: 0.05, credit_loss_rate: 0, operating_expenses: 126000, management_fee_rate: 0.04, replacement_reserves: 0, annual_below_noi_costs: 0, annual_income_growth_rate: 0, annual_expense_growth_rate: 0 },
+    exit: { explicit_sale_price: 1500000, selling_cost_rate: 0.06 }, assumptions: { annual_discount_rate: 0.1 },
+  };
+  const base = analyzeDealLocally(deal);
+  expect(base.metrics.irr.value).toBeNull();
+  expect(base.cash_flows.some((row) => row.net_cash_flow > 0)).toBe(true);
+  const multiple = base.metrics.equity_multiple.value;
+  expect(multiple).toBeGreaterThan(0);
+  expect(multiple).toBeLessThan(1);
+  const [result] = runMonteCarloLocally({ deal, scenarios: [{ name: 'Fixed', iterations: 250, seed: 73, drivers: { interest_rate: { minimum: 0.0675, mode: 0.0675, maximum: 0.0675 } } }] }).scenarios;
+  expect(result.summaries.irr.sample_size).toBe(250);
+  expect(result.summaries.irr.loss_without_irr_count).toBe(250);
+  expect(result.summaries.irr.p50).toBeCloseTo(multiple ** (12 / 60) - 1, 9);
+  expect(result.summaries.irr.probability_above_zero).toBe(0);
 });

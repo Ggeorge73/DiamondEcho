@@ -82,3 +82,15 @@ test('an engine sentence about a cap or exclusions is dropped only when the coun
   const withoutCounts = { iterations_completed: 4990, warnings: ['keep', capped, excluded] };
   expect(splitWarnings([withoutCounts]).common).toEqual(['keep', capped, excluded]);
 });
+
+test('losses with no solvable IRR are stated as counted, not left out', () => {
+  const disclosure = scenarioDisclosure(
+    { iterations_requested: 5000, iterations_completed: 5000, failed_iterations: 0 },
+    { probability_above_zero: 0.0756, sample_size: 5000, loss_without_irr_count: 1140 },
+    'Projected IRR',
+  );
+  expect(disclosure.denominator).toBe('378 of 5,000 valid results');
+  expect(disclosure.notes).toEqual([
+    '1,140 losing iterations had no solvable Projected IRR. They are counted as losses, using the annual return implied by cash returned over cash invested (-100% when nothing came back).',
+  ]);
+});
