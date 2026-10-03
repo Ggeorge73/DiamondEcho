@@ -6,7 +6,8 @@ import {
   CircleDollarSign, Database, Download, FileSpreadsheet, Home, Loader2,
   LandPlot, MapPin, RotateCcw, ShieldCheck, Sparkles, TrendingUp
 } from 'lucide-react';
-import { analyzeDealLocally, runMonteCarloLocally } from '../lib/dealAnalysis';
+import { analyzeDealLocally, BROWSER_MONTE_CARLO_ITERATION_CAP, runMonteCarloLocally } from '../lib/dealAnalysis';
+import { scenarioDisclosure, splitWarnings } from '../lib/monteCarloDisclosure';
 import { buildRentalDecision, RENTAL_EVIDENCE_ITEMS } from '../lib/dealDecision';
 import { downloadDealWorkbook } from '../lib/dealWorkbook';
 import { buildDealRequest } from '../lib/dealRequest';
@@ -282,10 +283,12 @@ const InvestmentCalculator = () => {
     } finally { if (generation === analysisGeneration.current) setLoading(false); }
   };
 
+  // How far each case stretches the entered worst-case values.
+  const caseScale = (caseName) => (caseName === 'Severe stress' ? 1.75 : caseName === 'Downside case' ? 1.25 : 1);
+
   const scenarioDrivers = (caseName) => {
-    const stress = caseName === 'Severe stress';
     const downside = caseName === 'Downside case';
-    const scale = stress ? 1.75 : downside ? 1.25 : 1;
+    const scale = caseScale(caseName);
     if (form.strategy === 'rental') return {
       rent_change: { minimum: rate(n(form.mcRentMin) * scale), mode: rate(form.mcRentMode), maximum: rate(form.mcRentMax) },
       vacancy_rate: { minimum: rate(form.mcVacancyMin), mode: rate(n(form.mcVacancyMode) * (downside ? 1.2 : 1)), maximum: Math.min(MONTE_CARLO_VACANCY_CAP_PERCENT / 100, rate(n(form.mcVacancyMax) * scale)) },
@@ -373,6 +376,16 @@ const InvestmentCalculator = () => {
     ? 'This analysis result does not match the current strategy or is incomplete. Run the base analysis again.'
     : '';
   const riskSummaryKey = form.strategy === 'rental' ? 'irr' : form.strategy === 'land' ? 'development_profit' : 'flip_profit';
+  const riskWarnings = splitWarnings(Array.isArray(monteCarlo?.scenarios) ? monteCarlo.scenarios : []);
+  // The stress cases scale the entered high vacancy; say so when the cap stops them.
+  const stressCapNotes = (caseName) => {
+    if (form.strategy !== 'rental') return [];
+    const scale = caseScale(caseName);
+    const scaled = n(form.mcVacancyMax) * scale;
+    return scaled > MONTE_CARLO_VACANCY_CAP_PERCENT
+      ? [`Vacancy high was limited to ${MONTE_CARLO_VACANCY_CAP_PERCENT}% in this case; ${number.format(n(form.mcVacancyMax))}% × ${scale} would be ${number.format(scaled)}%.`]
+      : [];
+  };
   const riskResultIssue = monteCarlo && (!Array.isArray(monteCarlo.scenarios) || monteCarlo.scenarios.length === 0 || monteCarlo.scenarios.some((scenario) => {
     const summary = scenario?.summaries?.[riskSummaryKey];
     return typeof scenario?.name !== 'string' || !Number.isFinite(scenario?.iterations_completed)
@@ -583,6 +596,7 @@ const InvestmentCalculator = () => {
               ))}
             </div>
             <p className="studio-case-note">Every run includes all three cases so the committee view is complete regardless of the result tab in focus.</p>
+            {!backendUrl && Number(form.mcIterations) > BROWSER_MONTE_CARLO_ITERATION_CAP && <p className="studio-case-note" role="note">This browser runs at most {BROWSER_MONTE_CARLO_ITERATION_CAP.toLocaleString('en-US')} iterations per case. {Number(form.mcIterations).toLocaleString('en-US')} were selected, so each case will stop at {BROWSER_MONTE_CARLO_ITERATION_CAP.toLocaleString('en-US')} and the results will say so.</p>}
             <div className="studio-field-grid">
               <SelectField label="Iterations per case" name="mcIterations" value={form.mcIterations} onChange={update}><option value="1000">1,000</option><option value="2500">2,500</option><option value="5000">5,000</option><option value="10000">10,000</option></SelectField>
               {form.strategy === 'rental' ? <>
@@ -684,10 +698,14 @@ const InvestmentCalculator = () => {
           {resultMode === 'risk' && (riskError || riskResultIssue) && <div className="studio-error" role="alert"><AlertCircle /><h2>Risk analysis needs attention</h2><p>{riskError || riskResultIssue}</p><button onClick={() => { setRiskError(''); setMonteCarlo(null); }}><RotateCcw /> Review scenarios</button></div>}
           {resultMode === 'risk' && !monteCarlo && !riskError && <div className="studio-empty"><BarChart3 /><h2>Distribution before decision</h2><p>Select multiple cases and run Monte Carlo to see percentile returns, downside frequency, and the range of plausible outcomes.</p></div>}
           {resultMode === 'risk' && monteCarlo && !riskResultIssue && !riskError && <div className="studio-risk-results">
-            {monteCarlo.scenarios.map((scenario) => {
+            {monteCarlo.scenarios.map((scenario, index) => {
               const summary = scenario.summaries[riskSummaryKey];
-              return <article key={scenario.name}><span>{scenario.name.toUpperCase()}</span><h3>{summaryFormat(riskSummaryKey, summary.p50)}</h3><p>Median {labels[riskSummaryKey] || riskSummaryKey} · {number.format(summary.probability_above_zero * 100)}% probability above zero</p><dl><div><dt>P10</dt><dd>{summaryFormat(riskSummaryKey, summary.p10)}</dd></div><div><dt>P50</dt><dd>{summaryFormat(riskSummaryKey, summary.p50)}</dd></div><div><dt>P90</dt><dd>{summaryFormat(riskSummaryKey, summary.p90)}</dd></div></dl><small>{scenario.iterations_completed.toLocaleString()} valid iterations · seed {scenario.seed}</small></article>;
+              const metricLabel = labels[riskSummaryKey] || riskSummaryKey;
+              const disclosure = scenarioDisclosure(scenario, summary, metricLabel);
+              const notes = [...disclosure.notes, ...riskWarnings.perScenario[index], ...stressCapNotes(scenario.name)];
+              return <article key={scenario.name}><span>{scenario.name.toUpperCase()}</span><h3>{summaryFormat(riskSummaryKey, summary.p50)}</h3><p>Median {metricLabel} · {number.format(summary.probability_above_zero * 100)}% probability above zero <span className="studio-risk-denominator">({disclosure.denominator})</span></p><dl><div><dt>P10</dt><dd>{summaryFormat(riskSummaryKey, summary.p10)}</dd></div><div><dt>P50</dt><dd>{summaryFormat(riskSummaryKey, summary.p50)}</dd></div><div><dt>P90</dt><dd>{summaryFormat(riskSummaryKey, summary.p90)}</dd></div></dl><small>{disclosure.counts.join(' · ')} · seed {scenario.seed}</small>{notes.length > 0 && <ul className="studio-risk-notes" aria-label={`Limits that apply to ${scenario.name}`}>{notes.map((note) => <li key={note}>{note}</li>)}</ul>}</article>;
             })}
+            {riskWarnings.common.length > 0 && <div className="studio-risk-common-notes" role="note"><span>HOW TO READ THESE RESULTS</span>{riskWarnings.common.map((warning) => <p key={warning}>{warning}</p>)}</div>}
           </div>}
           <p className="studio-disclaimer">Illustrative analysis only. Not an appraisal, credit decision, offer, tax opinion, or investment recommendation. Verify property records and every assumption with qualified professionals.</p>
         </aside>
