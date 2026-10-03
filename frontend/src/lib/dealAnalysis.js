@@ -251,14 +251,23 @@ const triangular = (random, distribution) => {
 const percentile = (sorted, p) => { if (!sorted.length) return null; const position = (sorted.length - 1) * p; const lower = Math.floor(position); const upper = Math.ceil(position); return sorted[lower] + (sorted[upper] - sorted[lower]) * (position - lower); };
 const summarize = (values) => {
   const valid = values.filter(Number.isFinite).sort((a, b) => a - b);
-  if (!valid.length) return { mean: null, minimum: null, p10: null, p25: null, p50: null, p75: null, p90: null, maximum: null, probability_above_zero: 0, probability_below_one: 0 };
-  return { mean: valid.reduce((sum, value) => sum + value, 0) / valid.length, minimum: valid[0], p10: percentile(valid, .1), p25: percentile(valid, .25), p50: percentile(valid, .5), p75: percentile(valid, .75), p90: percentile(valid, .9), maximum: valid[valid.length - 1], probability_above_zero: valid.filter((value) => value > 0).length / valid.length, probability_below_one: valid.filter((value) => value < 1).length / valid.length };
+  if (!valid.length) return { mean: null, minimum: null, p10: null, p25: null, p50: null, p75: null, p90: null, maximum: null, probability_above_zero: 0, probability_below_one: 0, sample_size: 0 };
+  return { mean: valid.reduce((sum, value) => sum + value, 0) / valid.length, minimum: valid[0], p10: percentile(valid, .1), p25: percentile(valid, .25), p50: percentile(valid, .5), p75: percentile(valid, .75), p90: percentile(valid, .9), maximum: valid[valid.length - 1], probability_above_zero: valid.filter((value) => value > 0).length / valid.length, probability_below_one: valid.filter((value) => value < 1).length / valid.length, sample_size: valid.length };
 };
+
+// The browser fallback stops at this many iterations per case to stay responsive.
+export const BROWSER_MONTE_CARLO_ITERATION_CAP = 5000;
+
+// Same wording as the API so both paths disclose the same limits.
+export const MONTE_CARLO_STANDARD_WARNINGS = [
+  'Distributions are user assumptions, not forecasts; correlations and fat-tail events are not inferred.',
+  'Review percentile outcomes alongside the deterministic downside case and source evidence.',
+];
 
 export const runMonteCarloLocally = ({ deal, scenarios }) => ({
   formula_version: FORMULA_VERSION,
   scenarios: scenarios.map((scenario) => {
-    const iterations = Math.min(scenario.iterations, 5000); const random = seededRandom(scenario.seed); const values = {};
+    const iterations = Math.min(scenario.iterations, BROWSER_MONTE_CARLO_ITERATION_CAP); const random = seededRandom(scenario.seed); const values = {}; let failures = 0; let firstFailure = null;
     for (let iteration = 0; iteration < iterations; iteration += 1) {
       const shocked = JSON.parse(JSON.stringify(deal));
       Object.entries(scenario.drivers).forEach(([driver, distribution]) => {
@@ -278,9 +287,15 @@ export const runMonteCarloLocally = ({ deal, scenarios }) => ({
           ['site_work_cost', 'hard_construction_cost', 'soft_costs', 'permits_impact_fees', 'environmental_remediation', 'developer_fee'].forEach((key) => { shocked.land[key] *= 1 + draw; });
         }
       });
-      const analysis = analyzeDealLocally(shocked);
+      let analysis;
+      try { analysis = analyzeDealLocally(shocked); } catch (error) { failures += 1; if (!firstFailure) firstFailure = error; continue; }
       Object.entries(analysis.metrics).forEach(([key, item]) => { if (!values[key]) values[key] = []; if (Number.isFinite(item.value)) values[key].push(item.value); });
     }
-    return { name: scenario.name, iterations_requested: scenario.iterations, iterations_completed: iterations, failed_iterations: 0, seed: scenario.seed, summaries: Object.fromEntries(Object.entries(values).map(([key, items]) => [key, summarize(items)])), warnings: scenario.iterations > iterations ? ['Browser simulation capped at 5,000 iterations for responsiveness.'] : [] };
+    const completed = iterations - failures;
+    if (completed === 0) throw new Error(`Monte Carlo scenario '${scenario.name}' produced no valid iterations${firstFailure?.message ? `: ${firstFailure.message}` : '.'}`);
+    const warnings = [...MONTE_CARLO_STANDARD_WARNINGS];
+    if (scenario.iterations > iterations) warnings.push(`Browser simulation capped at ${BROWSER_MONTE_CARLO_ITERATION_CAP.toLocaleString('en-US')} iterations per case for responsiveness; ${scenario.iterations.toLocaleString('en-US')} were requested.`);
+    if (failures) warnings.push(`${failures} iterations were excluded because sampled inputs produced invalid economics.`);
+    return { name: scenario.name, iterations_requested: scenario.iterations, iterations_completed: completed, failed_iterations: failures, seed: scenario.seed, summaries: Object.fromEntries(Object.entries(values).map(([key, items]) => [key, summarize(items)])), warnings };
   }),
 });

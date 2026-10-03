@@ -35,6 +35,12 @@ def test_monte_carlo_is_reproducible_and_ordered():
     assert first == second
     assert summary.minimum <= summary.p10 <= summary.p50 <= summary.p90 <= summary.maximum
     assert 0 <= summary.probability_above_zero <= 1
+    scenario = first.scenarios[0]
+    assert scenario.iterations_requested == 300
+    assert scenario.iterations_completed + scenario.failed_iterations == 300
+    # Each probability states the number of results it was measured on.
+    for metric_summary in scenario.summaries.values():
+        assert 0 < metric_summary.sample_size <= scenario.iterations_completed
 
 
 def test_iteration_cap_is_enforced():

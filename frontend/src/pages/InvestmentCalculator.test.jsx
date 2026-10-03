@@ -18,6 +18,8 @@ jest.mock('../lib/dealDecision', () => ({
 }));
 jest.mock('../lib/dealWorkbook', () => ({ downloadDealWorkbook: jest.fn() }));
 jest.mock('../lib/dealAnalysis', () => ({
+  // The cap is a real constant the page reads; only the calculations are faked.
+  BROWSER_MONTE_CARLO_ITERATION_CAP: jest.requireActual('../lib/dealAnalysis').BROWSER_MONTE_CARLO_ITERATION_CAP,
   analyzeDealLocally: jest.fn(),
   runMonteCarloLocally: jest.fn(),
 }));
@@ -248,6 +250,73 @@ test('Monte Carlo vacancy high at the 75% cap is simulated as entered', async ()
   expect(runMonteCarloLocally).toHaveBeenCalledTimes(1);
   const { scenarios } = runMonteCarloLocally.mock.calls[0][0];
   expect(scenarios.map((scenario) => scenario.drivers.vacancy_rate.maximum)).toEqual([0.75, 0.75, 0.75]);
+});
+
+const changeSelect = async (name, value) => {
+  const select = container.querySelector(`select[name="${name}"]`);
+  const setValue = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set;
+  await act(async () => {
+    setValue.call(select, value);
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+};
+
+test('selecting 10,000 iterations in the browser discloses the 5,000 cap before the run', async () => {
+  expect(container.textContent).not.toContain('This browser runs at most 5,000 iterations per case');
+  await changeSelect('mcIterations', '10000');
+  expect(container.textContent).toContain('This browser runs at most 5,000 iterations per case. 10,000 were selected');
+  await changeSelect('mcIterations', '5000');
+  expect(container.textContent).not.toContain('This browser runs at most 5,000 iterations per case');
+});
+
+test('the API path does not claim a browser cap', async () => {
+  await useBackend();
+  await changeSelect('mcIterations', '10000');
+  expect(container.textContent).not.toContain('This browser runs at most');
+});
+
+test('risk results show requested, completed, excluded and per-metric sample counts with the probability', async () => {
+  runMonteCarloLocally.mockImplementationOnce(({ scenarios }) => ({
+    scenarios: scenarios.map(({ name, seed }, index) => ({
+      name, seed, iterations_requested: 10000, iterations_completed: 4990, failed_iterations: 10,
+      summaries: { irr: { p10: 0.01, p50: 0.08, p90: 0.15, probability_above_zero: 0.75, sample_size: 4000 } },
+      warnings: index === 0 ? ['Shared note.', 'Only the first case.'] : ['Shared note.'],
+    })),
+  }));
+  await click('Run Monte Carlo');
+  const cards = [...container.querySelectorAll('.studio-risk-results article')];
+  expect(cards).toHaveLength(3);
+  for (const card of cards) {
+    expect(card.textContent).toContain('75% probability above zero (3,000 of 4,000 valid results)');
+    expect(card.querySelector('small').textContent).toContain('Requested 10,000 · Completed 4,990 · Excluded 10 · Valid for Projected IRR 4,000');
+    expect(card.textContent).toContain('Only 5,000 of the 10,000 requested iterations were run.');
+    expect(card.textContent).toContain('10 iterations were excluded because the sampled inputs produced invalid economics.');
+    expect(card.textContent).toContain('990 completed iterations had no defined Projected IRR');
+  }
+  expect(cards[0].textContent).toContain('Only the first case.');
+  expect(cards[1].textContent).not.toContain('Only the first case.');
+  const common = container.querySelector('.studio-risk-common-notes');
+  expect(common.textContent).toContain('Shared note.');
+  expect(container.textContent.match(/Shared note\./g)).toHaveLength(1);
+});
+
+test('a risk result without sample counts says they were not reported', async () => {
+  await click('Run Monte Carlo');
+  const card = container.querySelector('.studio-risk-results article');
+  expect(card.textContent).toContain('(valid sample size not reported)');
+  expect(card.querySelector('small').textContent).toContain('Completed 10 · Valid for Projected IRR not reported');
+  expect(container.querySelector('.studio-risk-common-notes')).toBeNull();
+});
+
+test('stress cases say when the vacancy cap limited the entered value', async () => {
+  await changeField('mcVacancyMax', '60');
+  await click('Run Monte Carlo');
+  const cards = [...container.querySelectorAll('.studio-risk-results article')];
+  expect(cards[0].textContent).not.toContain('Vacancy high was limited');
+  expect(cards[1].textContent).not.toContain('Vacancy high was limited');
+  expect(cards[2].textContent).toContain('Vacancy high was limited to 75% in this case; 60% × 1.75 would be 105%.');
+  const { scenarios } = runMonteCarloLocally.mock.calls[0][0];
+  expect(scenarios.map((scenario) => scenario.drivers.vacancy_rate.maximum)).toEqual([0.6, 0.75, 0.75]);
 });
 
 test('unordered Monte Carlo drivers show an actionable error without a simulation', async () => {
