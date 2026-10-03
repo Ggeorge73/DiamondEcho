@@ -5,6 +5,9 @@ import json
 from pathlib import Path
 
 
+SCOPE_LABELS = {"toolchain": "build and test toolchain (all npm packages, not shipped)"}
+
+
 def _load_json(path: Path):
     try:
         return json.loads(path.read_text(encoding="utf-8"))
@@ -49,14 +52,19 @@ def build_summary(directory: Path, commit: str, statuses: dict):
     staff = summarize_npm(_load_json(directory / "staff.json"))
     backend = summarize_pip(_load_json(directory / "backend.json"))
     findings = {"frontend": frontend, "staff": staff, "backend": backend}
+    if "toolchain" in statuses:
+        # Build and test tooling is not shipped, but it must stay visible:
+        # moving a package to devDependencies removes it from the production
+        # scopes above without fixing it.
+        findings["toolchain"] = summarize_npm(_load_json(directory / "build-toolchain.json"))
     for name, rows in findings.items():
         if (statuses[name] == "0") != (len(rows) == 0):
             raise ValueError(f"{name} scanner exit disagrees with its report")
     summary = {"commit": commit, "status": "captured", "counts": {name: len(rows) for name, rows in findings.items()}, "findings": findings}
     lines = ["# Production dependency audit", "", f"Commit: `{commit}`", "", "| Scope | Finding count |", "| --- | ---: |"]
     for name, rows in findings.items():
-        lines.append(f"| {name} | {len(rows)} |")
-    lines += ["", "Counts are tool-specific: npm counts vulnerable packages in each workspace; pip-audit counts advisories across frozen backend runtime packages. Do not add them into a single deduplicated total or infer severity equivalence.", "", "This report records findings for triage; it does not approve risk or clear the launch gate. Review raw JSON and the frozen backend inventory before changing dependencies."]
+        lines.append(f"| {SCOPE_LABELS.get(name, name)} | {len(rows)} |")
+    lines += ["", "Counts are tool-specific: npm counts vulnerable packages in each workspace; pip-audit counts advisories across frozen backend runtime packages. Do not add them into a single deduplicated total or infer severity equivalence.", "", "The build and test toolchain scope, when present, covers every npm package in the lockfile including devDependencies; it is not shipped to visitors but runs on developer machines and CI. This report records findings for triage; it does not approve risk or clear the launch gate. Review raw JSON and the frozen backend inventory before changing dependencies."]
     return summary, "\n".join(lines) + "\n"
 
 
@@ -67,8 +75,11 @@ def main():
     parser.add_argument("--frontend-status", default="")
     parser.add_argument("--staff-status", default="")
     parser.add_argument("--backend-status", default="")
+    parser.add_argument("--toolchain-status", default=None, help="exit status of the full npm audit; omit to skip that scope")
     args = parser.parse_args()
     statuses = {"frontend": args.frontend_status, "staff": args.staff_status, "backend": args.backend_status}
+    if args.toolchain_status is not None:
+        statuses["toolchain"] = args.toolchain_status
     summary, markdown = build_summary(args.directory, args.commit, statuses)
     (args.directory / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     (args.directory / "summary.md").write_text(markdown, encoding="utf-8")

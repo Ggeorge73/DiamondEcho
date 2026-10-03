@@ -26,6 +26,27 @@ class AuditSummaryTests(unittest.TestCase):
         self.assertEqual(summary["counts"], {"frontend": 1, "staff": 0, "backend": 1})
         self.assertIn("does not approve risk", markdown)
 
+    def test_reports_build_toolchain_scope_when_requested(self):
+        self.report("frontend.json", {"vulnerabilities": {}})
+        self.report("staff.json", {"vulnerabilities": {}})
+        self.report("backend.json", {"dependencies": []})
+        self.report("build-toolchain.json", {"vulnerabilities": {"dev-only": {"severity": "high", "via": ["GHSA-test"]}}})
+        statuses = {"frontend": "0", "staff": "0", "backend": "0", "toolchain": "1"}
+        summary, markdown = build_summary(self.directory, "abc123", statuses)
+        self.assertEqual(summary["counts"], {"frontend": 0, "staff": 0, "backend": 0, "toolchain": 1})
+        self.assertIn("not shipped", markdown)
+
+    def test_requires_toolchain_report_when_requested(self):
+        self.report("frontend.json", {"vulnerabilities": {}})
+        self.report("staff.json", {"vulnerabilities": {}})
+        self.report("backend.json", {"dependencies": []})
+        with self.assertRaisesRegex(ValueError, "Missing or invalid"):
+            build_summary(self.directory, "abc123", {"frontend": "0", "staff": "0", "backend": "0", "toolchain": "1"})
+
+    def test_rejects_toolchain_scanner_errors(self):
+        with self.assertRaisesRegex(ValueError, "scan failed"):
+            build_summary(self.directory, "abc123", {"frontend": "0", "staff": "0", "backend": "0", "toolchain": ""})
+
     def test_rejects_scanner_errors(self):
         with self.assertRaisesRegex(ValueError, "scan failed"):
             build_summary(self.directory, "abc123", {"frontend": "2", "staff": "0", "backend": "0"})
