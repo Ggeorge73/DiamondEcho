@@ -55,3 +55,33 @@ test('underwrites a ground-up land development with residual land value', () => 
   } }] });
   expect(risk.scenarios[0].summaries.development_profit.p50).not.toBeNull();
 });
+
+const flipDeal = (principal) => ({
+  strategy: 'flip',
+  property: { property_type: 'single_family', unit_count: 1, currency: 'USD' },
+  acquisition: { purchase_price: 200000, closing_costs: 0, due_diligence_costs: 0, initial_capex: 0, hold_months: 6 },
+  debt: [{ name: 'Hard money', principal, annual_interest_rate: 0.1, amortization_years: 30, interest_only_months: 6, term_months: 12, origination_fee_rate: 0 }],
+  flip: { after_repair_value: 420000, rehab_cost: 100000, rehab_contingency_rate: 0, monthly_holding_costs: 0, other_project_costs: 0 },
+  exit: { selling_cost_rate: 0.06 }, assumptions: { annual_discount_rate: 0.1 },
+});
+const rehabSwing = { rehab_cost_change: { minimum: -0.9, mode: 0, maximum: 0.5 } };
+
+test('iterations with invalid economics are counted and excluded instead of stopping the run', () => {
+  const [result] = runMonteCarloLocally({ deal: flipDeal(250000), scenarios: [{ name: 'Thin equity', iterations: 500, seed: 73, drivers: rehabSwing }] }).scenarios;
+  expect(result.failed_iterations).toBeGreaterThan(0);
+  expect(result.iterations_completed).toBe(500 - result.failed_iterations);
+  expect(result.summaries.flip_profit.sample_size).toBe(result.iterations_completed);
+  expect(result.warnings).toContain(`${result.failed_iterations} iterations were excluded because sampled inputs produced invalid economics.`);
+});
+
+test('a case where every iteration is invalid fails with the reason', () => {
+  expect(() => runMonteCarloLocally({ deal: flipDeal(400000), scenarios: [{ name: 'No equity', iterations: 250, seed: 73, drivers: rehabSwing }] }))
+    .toThrow("Monte Carlo scenario 'No equity' produced no valid iterations: Initial debt and loan proceeds must leave a positive equity contribution.");
+});
+
+test('each summary carries the number of results it was measured on', () => {
+  const [result] = runMonteCarloLocally({ deal: johnsCreekDeal, scenarios: [{ name: 'No income', iterations: 250, seed: 73, drivers: { rent_change: { minimum: -0.1, mode: 0, maximum: 0.1 } } }] }).scenarios;
+  expect(result.iterations_completed).toBe(250);
+  expect(result.summaries.irr.sample_size).toBe(0);
+  expect(result.summaries.npv.sample_size).toBe(250);
+});
