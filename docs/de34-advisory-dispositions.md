@@ -40,12 +40,28 @@ Correction: the table below says `underscore` has an in-range fix. It does not. 
 
 What the update changes in the shipped site, and the visual check, are in [de34-dependency-triage.md](de34-dependency-triage.md).
 
+## Update, 2026-10-03: `underscore` override applied
+
+On Engineering's recommendation, Gbenga chose on 2026-10-03 to handle `underscore` on its own instead of holding it for decision 3. Root `overrides` now sets `underscore` to `^1.13.8`; the lockfile resolves 1.13.8, the first release outside the advisory's range. No other lockfile entry changes.
+
+Counts with the override, npm 10.9.4:
+
+- Whole lockfile: 69 packages (61 high, 5 moderate, 3 low), down from 72. The three removed are `underscore`, `jsonpath` and `bfj`.
+- 10 root packages and 22 distinct advisories remain, all in the build and test toolchain. Frontend, staff and backend scopes stay at 0.
+
+Risk recorded: `jsonpath` 1.3.0 declares `underscore` as exactly 1.13.6, so this runs a patch release that `jsonpath` did not declare. `jsonpath` uses one function from it, `uniq`; the advisory concerns `flatten` and `isEqual`, which `jsonpath` does not call. `react-scripts` loads `bfj` only to write build statistics, and only when the build is run with `--stats`, which this repository's build script does not do.
+
+If decision 3 is to replace `react-scripts`, this override stops matching anything and should be removed in the same change.
+
+The `underscore`, `bfj` and `jsonpath` rows below describe the state before this override. Decisions 3 and 4 are still pending.
+
 ## Decisions needed
 
 | # | Decision | Covers | Status |
 | --- | --- | --- | --- |
 | 1 | Staff queue: accept `@grpc/grpc-js` as not reachable, or apply an override | 2 advisories | Decided by Gbenga on 2026-10-03: apply the override. See the update below |
-| 2 | Apply the in-range build-tool updates after a visual check of the stylesheet | 22 advisories in 8 packages, plus the 2.x copy of `svgo`. An earlier version of this row counted `underscore` too; see the update below | Pending. Proposed as its own PR; merging it is the decision |
+| 2 | Apply the in-range build-tool updates after a visual check of the stylesheet | 22 advisories in 8 packages, plus the 2.x copy of `svgo`. An earlier version of this row counted `underscore` too; see the update above | Decided by Gbenga on 2026-10-03 by merging PR #27 |
+| 2a | `underscore`: handle on its own with an override, or leave for decision 3 | 1 advisory | Decided by Gbenga on 2026-10-03: apply the override. See the update above |
 | 3 | Replace `react-scripts`, or accept its build-time findings | 20 advisories in 8 packages | Pending |
 | 4 | Accept `braces` (no patched release) and the low-severity `@tootallnate/once` test finding, or upgrade staff `jsdom` | 2 advisories | Pending |
 
@@ -69,7 +85,7 @@ What the update changes in the shipped site, and the visual check, are in [de34-
 | `qs` 6.15.3 | `express` and `body-parser` > `webpack-dev-server` > `react-scripts` | Local dev server only. Not run in CI. | Denial of service through crafted query strings sent to the dev server on a developer machine. | 6.16.0 or later, inside range. | Open. In-range update available through `npm audit fix`; held back pending a visual check of the stylesheet change and Gbenga's go-ahead. | Decision: Gbenga. Change: Engineering agent. | Build-toolchain scope of the audit workflow no longer lists the package. |
 | `serialize-javascript` 4.0.0, 6.0.2 | `css-minimizer-webpack-plugin` (6.0.2); `rollup-plugin-terser` > `workbox-build` (4.0.0), both under `react-scripts` | Build only. | Code execution and CPU exhaustion need attacker-controlled objects to be serialized. The plugins serialize their own build options. | 7.0.5 or later, a major upgrade the plugins do not accept. | Open. No fix while `react-scripts` 5.0.1 is in use. Needs Gbenga's decision: replace the build tool, or accept for build-time use. | Decision: Gbenga. Change: Engineering agent. | Build-toolchain scope of the audit workflow no longer lists the package. |
 | `svgo` 2.8.2, 1.3.2 | `@svgr/webpack` (1.3.2) and `postcss-svgo` > `cssnano` (2.8.2), both under `react-scripts` | Build only. | The `removeScripts` plugin can leave script content in an SVG. That matters when optimizing untrusted SVGs; the build processes this repository's own files. | 2.8.4 fixes the 2.x copy inside range. The 1.3.2 copy has no fix while `react-scripts` 5.0.1 is in use. | Open. The 2.x copy clears with the deferred in-range update; the 1.x copy needs the `react-scripts` decision. | Decision: Gbenga. Change: Engineering agent. | Build-toolchain scope of the audit workflow no longer lists the package. |
-| `underscore` 1.13.6 | `jsonpath` > `bfj` > `react-scripts` | Build only. `bfj` writes build statistics. | Unbounded recursion on deeply nested input. Input is build output generated locally. | 1.13.8 or later, inside range. | Open. In-range update available through `npm audit fix`; held back pending a visual check of the stylesheet change and Gbenga's go-ahead. | Decision: Gbenga. Change: Engineering agent. | Build-toolchain scope of the audit workflow no longer lists the package. |
+| `underscore` 1.13.6 | `jsonpath` > `bfj` > `react-scripts` | Build only. `bfj` writes build statistics. | Unbounded recursion on deeply nested input. Input is build output generated locally. | 1.13.8 or later. Not reachable in range: `jsonpath` pins 1.13.6 exactly. A root `overrides` entry forces it. | Override applied, by Gbenga's decision of 2026-10-03. Root `overrides` sets `^1.13.8`; the lockfile resolves 1.13.8. | Decision: Gbenga. Change: Engineering agent. | Build-toolchain scope of the audit workflow no longer lists the package. |
 | `uuid` 8.3.2 | `sockjs` > `webpack-dev-server` > `react-scripts` | Local dev server only. Not run in CI. | Missing bounds check when a caller passes its own buffer to v3, v5 or v6. `sockjs` generates v4 identifiers. | 11.1.1 or later, a major upgrade `sockjs` does not accept. | Open. No fix while `react-scripts` 5.0.1 is in use. Needs Gbenga's decision: replace the build tool, or accept for build-time use. | Decision: Gbenga. Change: Engineering agent. | Build-toolchain scope of the audit workflow no longer lists the package. |
 | `webpack-dev-middleware` 5.3.4 | `webpack-dev-server` > `react-scripts` | Local dev server only. Not run in CI. | Path traversal against a running dev server. Reachable only by something that can connect to a developer's machine while `npm run dev` is running. | 7.4.5 or later, a major upgrade. | Open. No fix while `react-scripts` 5.0.1 is in use. Needs Gbenga's decision: replace the build tool, or accept for build-time use. Mitigation meanwhile: keep the dev server bound to localhost. | Decision: Gbenga. Change: Engineering agent. | Build-toolchain scope of the audit workflow no longer lists the package. |
 | `webpack-dev-server` 4.15.2 | `react-scripts` | Local dev server only. Not run in CI. | A malicious site visited while the dev server runs could read served source or interfere with hot reload. The repository is public, which limits what source disclosure exposes. | 5.2.6 or later, a major upgrade. | Open. No fix while `react-scripts` 5.0.1 is in use. Needs Gbenga's decision: replace the build tool, or accept for build-time use. Mitigation meanwhile: keep the dev server bound to localhost and avoid browsing untrusted sites while it runs. | Decision: Gbenga. Change: Engineering agent. | Build-toolchain scope of the audit workflow no longer lists the package. |

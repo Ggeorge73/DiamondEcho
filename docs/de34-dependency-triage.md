@@ -98,6 +98,24 @@ Who could see a difference: someone on iOS Safari older than 15.6 or Chrome olde
 
 `underscore` 1.13.6 stays. The earlier pass listed it as fixable in range; that was wrong. `jsonpath` 1.3.0, the latest release, pins `underscore` to exactly 1.13.6, so it needs an override or the removal of `react-scripts`.
 
+## Third pass: `underscore` override (2026-10-03)
+
+Gbenga chose to handle `underscore` separately from the `react-scripts` decision. Root `overrides` sets `underscore` to `^1.13.8`; the lockfile moves that one entry from 1.13.6 to 1.13.8 and nothing else.
+
+Audit result, npm 10.9.4: the whole lockfile goes from 72 packages (64 high, 5 moderate, 3 low) to 69 (61 high, 5 moderate, 3 low). Distinct advisories go from 23 to 22 and root packages from 11 to 10. The frontend and staff scopes stay at 0.
+
+What it changes in the shipped site: nothing. `main.deeae902.js`, `main.636eb94f.css` and `index.html` built from this branch have the same SHA-256 as the ones built from `main` at `1418279`.
+
+Checks on this branch:
+
+- Clean `npm ci` from the new lockfile. `npm ls underscore` shows 1.13.8, marked overridden.
+- Frontend: 22 suites, 126 of 126 tests pass. Staff: 7 of 7. Audit summary script: 7 of 7. Staging smoke contract: 3 of 3.
+- `jsonpath` queries return correct results with 1.13.8, and a build run with `--stats` writes `bundle-stats.json`, which is the only path through `bfj`.
+- Staff build succeeds.
+- Not run locally: backend tests (no backend change), the Firestore emulator job and the container build. CI on the PR covers them.
+
+Risk: `jsonpath` 1.3.0 declares exactly 1.13.6, so it runs with a patch release it did not declare. It uses only `uniq` from `underscore`. If `react-scripts` is replaced under decision 3, remove this override in the same change.
+
 ## What cannot be fixed by an upgrade
 
 Eight root packages have no fix while `react-scripts` 5.0.1 is in use: `nth-check`, `svgo` (its 1.x copy), `serialize-javascript`, `webpack-dev-server`, `webpack-dev-middleware`, `node-forge`, `uuid` and the nested `postcss` 7. Clearing them means replacing Create React App with a maintained build tool, which is a migration with its own regression risk. `braces` is separate: it also arrives through `tailwindcss` and Jest, and npm offers no patched release.
@@ -116,10 +134,10 @@ No deployed environment was tested. A green CI run on this PR is code evidence, 
 
 ## Decisions pending
 
-The first has been made. The other three each need Gbenga's recorded decision on DE-34.
+The first two have been made. The other two each need Gbenga's recorded decision on DE-34.
 
 1. Staff queue: accept `@grpc/grpc-js` as not reachable, or apply an override. **Decided on 2026-10-03: override applied.**
-2. Apply the in-range build-tool updates after a visual check of the stylesheet. Proposed as its own PR; merging it is the decision.
+2. Apply the in-range build-tool updates after a visual check of the stylesheet. **Decided on 2026-10-03 by merging PR #27.** `underscore`, which that update could not reach, was handled by its own override on the same day.
 3. Replace `react-scripts`, or accept its build-time findings.
 4. Accept `braces` and the low-severity test-only `@tootallnate/once` finding, or upgrade staff `jsdom`.
 
@@ -132,7 +150,7 @@ The release-candidate rerun of the audit, with command, date and commit, is also
 | High, no fix without replacing `react-scripts` | `node-forge`, `nth-check`, `postcss` (7.x, nested), `serialize-javascript`, `svgo`, `webpack-dev-middleware`, `webpack-dev-server` |
 | High, no patched release | `braces` |
 | High, fixed by the proposed in-range update | `brace-expansion`, `browserslist`, `fast-uri`, `js-yaml` |
-| High, pinned by `jsonpath`; needs an override or the removal of `react-scripts` | `underscore` |
+| High, closed by the `underscore` override of 2026-10-03 | `underscore` |
 | High, closed by the override of 2026-10-03 | `@grpc/grpc-js` |
 | Moderate | `ajv`, `baseline-browser-mapping`, `colord`, `qs`, `uuid` |
 | Low | `@tootallnate/once` |
