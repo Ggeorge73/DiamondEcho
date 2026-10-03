@@ -39,8 +39,8 @@ const divisions = [
     index: '04',
     name: 'Advisory',
     to: '/agents',
-    cta: 'Meet the advisors',
-    copy: 'Senior advisors coordinating financing, diligence, negotiation, and closing — one relationship across your entire real estate life.',
+    cta: 'Explore advisory',
+    copy: 'See how property search, deal analysis, and buying or selling inquiries fit together.',
     image: 'https://images.unsplash.com/photo-1600607688969-a5bfcd646154?auto=format&fit=crop&w=2200&q=88',
   },
 ];
@@ -114,8 +114,8 @@ const portalTiles = [
     action: 'assistant',
   },
   {
-    index: '04', icon: Users, title: 'Private advisors',
-    copy: 'Meet the advisory team and learn about its approach to buying and selling.',
+    index: '04', icon: Users, title: 'Advisory',
+    copy: 'Explore the ways to begin a buying or selling conversation.',
     action: 'advisors',
   },
 ];
@@ -374,10 +374,10 @@ const Home = () => {
         <div className="mf-portal__inner">
           <div className="mf-portal__head">
             <p className="eyebrow" data-reveal>Explore DiamondEcho</p>
-            <h2 data-reveal>Explore properties.<br /><em>Meet the advisors.</em></h2>
+            <h2 data-reveal>Explore properties.<br /><em>Consider your next move.</em></h2>
             <p data-reveal style={{ '--reveal-delay': '.1s' }}>
               Browse residences, model a potential deal, and ask property questions online.
-              Learn about our approach to buying and selling through the advisory team.
+              See the available paths for beginning a buying or selling inquiry.
             </p>
           </div>
           <div className="mf-portal__grid">

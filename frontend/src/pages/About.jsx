@@ -1,13 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Award, Heart, Shield, Target, TrendingUp, Users } from 'lucide-react';
-
-const stats = [
-  { label: 'Residences sold', value: '2,500+', icon: TrendingUp },
-  { label: 'Clients represented', value: '1,800+', icon: Users },
-  { label: 'Years of practice', value: '15+', icon: Award },
-  { label: 'Investment mandates', value: '450+', icon: Target },
-];
+import { Award, Heart, Shield } from 'lucide-react';
 
 const values = [
   {
@@ -38,42 +31,32 @@ const About = () => {
             <p className="eyebrow">05 — The Firm</p>
             <h1>Operating privately.<br /><em>Leading with intelligence.</em></h1>
             <p className="mf-page-hero__lede">
-              DiamondEcho is a private real estate house managing exceptional residences and
-              investment assets across America’s signature markets — one standard, every asset class.
+              DiamondEcho brings Georgia MLS property search, deal analysis,
+              and ways to begin a buying or selling conversation into one place.
             </p>
           </div>
         </div>
       </section>
-
-      <div className="mf-values" style={{ gridTemplateColumns: 'repeat(4, 1fr)', borderLeft: '1px solid var(--line)' }}>
-        {stats.map(({ label, value, icon: Icon }) => (
-          <article key={label}>
-            <Icon />
-            <h3 style={{ fontFamily: 'Sora, sans-serif', fontWeight: 200, fontSize: 40 }}>{value}</h3>
-            <p style={{ letterSpacing: '.18em', textTransform: 'uppercase', fontSize: 10, fontWeight: 600 }}>{label}</p>
-          </article>
-        ))}
-      </div>
 
       <div className="mf-story">
         <div>
           <p className="eyebrow">Our philosophy</p>
           <h2>Real estate,<br /><em>intelligently considered.</em></h2>
           <p>
-            Founded on the belief that property decisions deserve institutional rigor and private-bank
-            discretion, DiamondEcho pairs senior human advisors with a proprietary intelligence layer.
-            Clients see every assumption behind every number — and decide with clarity.
+            DiamondEcho is built around a simple idea: property decisions deserve
+            clear assumptions and room to consider the risks. Deal Studio presents
+            model inputs and results for you to review, not a promise of returns.
           </p>
           <p>
-            From a first home to a national portfolio, the firm coordinates search, underwriting,
-            financing, diligence, negotiation, and closing as a single, accountable relationship.
+            Explore available properties through Georgia MLS, examine potential
+            scenarios, and tell us about your buying or selling goals.
           </p>
           <button className="mf-btn mf-btn--solid" style={{ marginTop: 16 }} onClick={() => navigate('/agents')}>
-            Meet the advisors
+            Explore advisory
           </button>
         </div>
         <div className="mf-story__media">
-          <img src="https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1600&q=84" alt="Signature DiamondEcho residence" />
+          <img src="https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1600&q=84" alt="Illustrative residential architecture" />
         </div>
       </div>
 

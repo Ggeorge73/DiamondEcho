@@ -10,8 +10,8 @@ const Footer = () => (
         <strong>DIAMOND ECHO</strong>
         <small>PRIVATE REAL ESTATE</small>
         <p>
-          Global perspective. Local intelligence. Representation without compromise —
-          across residences, rentals, investments, and advisory.
+          Georgia MLS property search, deal analysis, and ways to begin
+          a buying or selling conversation.
         </p>
       </div>
 
