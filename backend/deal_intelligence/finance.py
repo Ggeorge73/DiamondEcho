@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import isfinite, isnan
+from math import copysign, isfinite, isnan
 from typing import Iterable, List, Optional
 
 
@@ -101,11 +101,24 @@ def annualized_irr(cash_flows: Iterable[float]) -> Optional[float]:
         return None
 
     def monthly_npv(rate: float) -> float:
-        try:
-            result = sum(value / ((1 + rate) ** month) for month, value in enumerate(values))
-        except (OverflowError, ZeroDivisionError):
-            return float("inf")
-        return result
+        total = 0.0
+        unbounded: Optional[float] = None
+        for month, value in enumerate(values):
+            if value == 0:
+                continue
+            try:
+                total += value / ((1 + rate) ** month)
+            except ZeroDivisionError:
+                # The discount factor underflowed near -100%. The latest such
+                # cash flow dominates, so the result takes that flow's sign.
+                # (Reporting +infinity whatever the sign made an under-water
+                # sale look like a solvable -100% IRR.)
+                unbounded = copysign(float("inf"), value)
+            except OverflowError:
+                # The discount factor is too large to represent: the term is
+                # effectively zero.
+                continue
+        return unbounded if unbounded is not None else total
 
     low = -0.999999
     high = 1.0

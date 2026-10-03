@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import random
 from statistics import fmean
-from typing import Dict, Iterable, List
+from typing import Dict, Iterable, List, Optional
 
 from .engine import FORMULA_VERSION, analyze_deal
 from .models import (
@@ -30,7 +30,7 @@ def _percentile(values: List[float], percentile: float) -> float:
     return ordered[lower] * (1 - weight) + ordered[upper] * weight
 
 
-def _summary(values: List[float]) -> MonteCarloMetricSummary:
+def _summary(values: List[float], loss_without_irr_count: int = 0) -> MonteCarloMetricSummary:
     return MonteCarloMetricSummary(
         mean=fmean(values), minimum=min(values), p10=_percentile(values, 0.10),
         p25=_percentile(values, 0.25), p50=_percentile(values, 0.50),
@@ -38,7 +38,22 @@ def _summary(values: List[float]) -> MonteCarloMetricSummary:
         probability_above_zero=sum(value > 0 for value in values) / len(values),
         probability_below_one=sum(value < 1 for value in values) / len(values),
         sample_size=len(values),
+        loss_without_irr_count=loss_without_irr_count,
     )
+
+
+def loss_equivalent_return(equity_multiple: Optional[float], hold_months: int) -> Optional[float]:
+    """Annual return implied by cash returned over cash invested, for a loss.
+
+    A losing iteration can have no solvable IRR: nothing came back, or the sale
+    ended under water after some income. It is one of the worst outcomes, not a
+    missing one, so it is scored with this value instead of being left out.
+    Nothing back gives -100%. Returns ``None`` when the iteration did not lose
+    money, because an unsolvable IRR there has no certain sign.
+    """
+    if equity_multiple is None or hold_months <= 0 or not 0 <= equity_multiple < 1:
+        return None
+    return equity_multiple ** (12 / hold_months) - 1
 
 
 def _sample_deal(
@@ -76,6 +91,7 @@ def _run_scenario(base: DealAnalysisRequest, scenario: MonteCarloScenario) -> Mo
     )
     observations: Dict[str, List[float]] = {key: [] for key in target_metrics}
     failures = 0
+    losses_without_irr = 0
 
     for _ in range(scenario.iterations):
         try:
@@ -84,13 +100,24 @@ def _run_scenario(base: DealAnalysisRequest, scenario: MonteCarloScenario) -> Mo
                 metric = result.metrics.get(key)
                 if metric and metric.value is not None:
                     observations[key].append(metric.value)
+                elif key == "irr":
+                    multiple = result.metrics.get("equity_multiple")
+                    substitute = loss_equivalent_return(
+                        multiple.value if multiple else None, len(result.cash_flows) - 1
+                    )
+                    if substitute is not None:
+                        observations[key].append(substitute)
+                        losses_without_irr += 1
         except (ValueError, ArithmeticError):
             failures += 1
 
     completed = scenario.iterations - failures
     if completed == 0:
         raise ValueError(f"Monte Carlo scenario '{scenario.name}' produced no valid iterations")
-    summaries = {key: _summary(values) for key, values in observations.items() if values}
+    summaries = {
+        key: _summary(values, losses_without_irr if key == "irr" else 0)
+        for key, values in observations.items() if values
+    }
     warnings = [
         "Distributions are user assumptions, not forecasts; correlations and fat-tail events are not inferred.",
         "Review percentile outcomes alongside the deterministic downside case and source evidence.",

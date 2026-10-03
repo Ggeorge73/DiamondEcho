@@ -36,11 +36,30 @@ LTV, and LTC. Rental outputs add GPI, EGI, NOI, cap rate, cash-on-cash, DSCR,
 debt yield, and break-even occupancy. Undefined ratios return `null` plus a
 warning; the API never emits NaN or Infinity.
 
+## Monte Carlo summaries
+
+Each metric summary reports `sample_size`, the number of iterations its
+percentiles and probabilities were measured on.
+
+A losing iteration can have no solvable IRR: nothing came back, or the sale
+ended under water after some income. Leaving those out would drop the worst
+outcomes and overstate the result, so the IRR summary includes them using a
+loss-equivalent annual return:
+
+`(cash returned / cash invested) ^ (12 / hold months) - 1`
+
+Nothing back gives -100%. `loss_without_irr_count` says how many iterations in
+`sample_size` were scored this way. An unsolvable IRR on an iteration that made
+money is still left out, because its sign is not certain; it shows as the gap
+between `iterations_completed` and `sample_size`. The single-deal analysis is
+unchanged and still returns `null` with a warning when IRR is undefined. The
+browser fallback in `frontend/src/lib/dealAnalysis.js` applies the same rule.
+
 ## Deliberate boundaries
 
 V1 does not provide an automated valuation, live market/comps, tax or legal
-advice, depreciation, partnership waterfalls, construction draws, refinance
-events, or Monte Carlo simulation. Rehab is funded at acquisition. These are
+advice, depreciation, partnership waterfalls, construction draws, or refinance
+events. Rehab is funded at acquisition. These are
 future versioned capabilities and must not be silently approximated.
 
 Before persistence is added, require authentication and tenant authorization;
