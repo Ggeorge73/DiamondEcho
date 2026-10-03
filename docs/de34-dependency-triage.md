@@ -36,7 +36,9 @@ The report will keep showing four high packages until Firebase raises its pin. T
 1. Accept it as not reachable and record that decision on DE-34.
 2. Force the fixed version with a root `overrides` entry for `@grpc/grpc-js` (`^1.13.6`). That goes against Firebase's own pin and affects only the test path, so the Firestore emulator job in CI would have to pass before it is trusted.
 
-This PR does neither.
+The PR that introduced this document did neither.
+
+**Decided on 2026-10-03.** Gbenga chose option 2. The root `package.json` now carries the override, the lockfile resolves `@grpc/grpc-js` to 1.14.5, and the staff scope of the audit returns 0. The Firestore emulator job in CI is the evidence that the test path still works with the newer gRPC client.
 
 ## Why moving packages to devDependencies is legitimate, and what it hides
 
@@ -68,9 +70,9 @@ No deployed environment was tested. A green CI run on this PR is code evidence, 
 
 ## Decisions pending
 
-None of these has been made. Each needs Gbenga's recorded decision on DE-34.
+The first has been made. The other three each need Gbenga's recorded decision on DE-34.
 
-1. Staff queue: accept `@grpc/grpc-js` as not reachable, or apply an override.
+1. Staff queue: accept `@grpc/grpc-js` as not reachable, or apply an override. **Decided on 2026-10-03: override applied.**
 2. Apply the in-range build-tool updates after a visual check of the stylesheet.
 3. Replace `react-scripts`, or accept its build-time findings.
 4. Accept `braces` and the low-severity test-only `@tootallnate/once` finding, or upgrade staff `jsdom`.
@@ -84,6 +86,6 @@ The release-candidate rerun of the audit, with command, date and commit, is also
 | High, no fix without replacing `react-scripts` | `node-forge`, `nth-check`, `postcss` (7.x, nested), `serialize-javascript`, `svgo`, `webpack-dev-middleware`, `webpack-dev-server` |
 | High, no patched release | `braces` |
 | High, fixed by the deferred in-range update | `brace-expansion`, `browserslist`, `fast-uri`, `js-yaml`, `underscore` |
-| High, open decision | `@grpc/grpc-js` |
+| High, closed by the override of 2026-10-03 | `@grpc/grpc-js` |
 | Moderate | `ajv`, `baseline-browser-mapping`, `colord`, `qs`, `uuid` |
 | Low | `@tootallnate/once` |

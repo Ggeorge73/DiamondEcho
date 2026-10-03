@@ -18,11 +18,23 @@ Prepared by Claude acting as the Engineering agent on 2026-10-03. This table pro
 - 4 packages in the shipped staff scope, all from one root package (`@grpc/grpc-js`). 0 in the shipped frontend scope and 0 in the backend.
 - Every installed copy of the other 19 root packages is marked `dev` in the lockfile, so none is installed by a production install.
 
+## Update, 2026-10-03: decision 1 applied
+
+Gbenga decided to apply the override. The root `package.json` now has an `overrides` entry setting `@grpc/grpc-js` to `^1.13.6`, and the lockfile resolves it to 1.14.5. Firebase 12.19.0 still declares `~1.9.0`, so this runs a newer gRPC client than Firebase tested with. The only code path that uses it is the Firestore rules test in the emulator job, so that job is the retest evidence.
+
+Counts with the override, npm 10.9.3:
+
+- Staff scope: 0 packages (was 4).
+- Whole lockfile: 82 packages (68 high, 11 moderate, 3 low), down from 87. The five removed are `@grpc/grpc-js`, `@firebase/firestore`, `@firebase/firestore-compat`, `@firebase/rules-unit-testing` and `firebase`.
+- 19 root packages and 45 distinct advisories remain, all in the build and test toolchain.
+
+The tables below are the record as triaged at `c23522c`. Rows for `@grpc/grpc-js` and the packages that inherit from it describe the state before the override. Decisions 2, 3 and 4 are still pending.
+
 ## Decisions needed
 
 | # | Decision | Covers | Status |
 | --- | --- | --- | --- |
-| 1 | Staff queue: accept `@grpc/grpc-js` as not reachable, or apply an override | 2 advisories | Pending |
+| 1 | Staff queue: accept `@grpc/grpc-js` as not reachable, or apply an override | 2 advisories | Decided by Gbenga on 2026-10-03: apply the override. See the update below |
 | 2 | Apply the in-range build-tool updates after a visual check of the stylesheet | 23 advisories in 9 packages, plus the 2.x copy of `svgo` | Pending |
 | 3 | Replace `react-scripts`, or accept its build-time findings | 20 advisories in 8 packages | Pending |
 | 4 | Accept `braces` (no patched release) and the low-severity `@tootallnate/once` test finding, or upgrade staff `jsdom` | 2 advisories | Pending |
@@ -31,7 +43,7 @@ Prepared by Claude acting as the Engineering agent on 2026-10-03. This table pro
 
 | Package | Pulled in by | Where it runs | Reachability | Fix or mitigation | Proposed disposition | Owner | Retest evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `@grpc/grpc-js` 1.9.16 | `firebase` 12.19.0 > `@firebase/firestore` 4.17.2 (pins `~1.9.0`); also `@firebase/rules-unit-testing` | Node only: the Firestore rules test run by the emulator job. Listed as a production dependency of the staff workspace. | Not in the shipped staff bundle (`grep -c grpc dist/app.js` is 0 for the disabled and the configured build). The staff app imports only `firebase/app` and `firebase/auth`. Both advisories describe gRPC server behaviour; no file in this repository uses gRPC directly. | `@grpc/grpc-js` 1.13.6 or later. Firebase 12.19.0 is the latest release and does not allow it. A root `overrides` entry would force it; the Firestore emulator job would then have to pass. | Open. Needs Gbenga's decision: accept as not reachable, or apply the override. | Decision: Gbenga. Change: Engineering agent. | Staff scope of the audit workflow returns 0, and the Firestore emulator job passes. |
+| `@grpc/grpc-js` 1.9.16 | `firebase` 12.19.0 > `@firebase/firestore` 4.17.2 (pins `~1.9.0`); also `@firebase/rules-unit-testing` | Node only: the Firestore rules test run by the emulator job. Listed as a production dependency of the staff workspace. | Not in the shipped staff bundle (`grep -c grpc dist/app.js` is 0 for the disabled and the configured build). The staff app imports only `firebase/app` and `firebase/auth`. Both advisories describe gRPC server behaviour; no file in this repository uses gRPC directly. | `@grpc/grpc-js` 1.13.6 or later. Firebase 12.19.0 is the latest release and does not allow it. A root `overrides` entry would force it; the Firestore emulator job would then have to pass. | Override applied, by Gbenga's decision of 2026-10-03. Root `overrides` sets `^1.13.6`; the lockfile resolves 1.14.5. | Decision: Gbenga. Change: Engineering agent. | Staff scope of the audit workflow returns 0, and the Firestore emulator job passes. |
 | `@tootallnate/once` 1.1.2 | `http-proxy-agent` > `jsdom` 16.7.0 (staff tests) and `jest-environment-jsdom` (frontend tests through `react-scripts`) | Tests only. | Used when jsdom fetches through a proxy. The tests make no proxied requests. | Staff: `jsdom` 29.1.1, a major upgrade. Frontend: none while `react-scripts` 5.0.1 supplies Jest. | Open, low severity. Staff upgrade is possible and untested; frontend copy has no fix. | Decision: Gbenga. Change: Engineering agent. | Build-toolchain scope of the audit workflow no longer lists the package. |
 | `ajv` 8.17.1 | direct devDependency `ajv`; also `schema-utils` > `webpack` | Build only. Validates loader and plugin option schemas. | ReDoS needs the `$data` option with attacker-supplied patterns. Schemas here come from build tools and this repository. | 8.18.0 or later, inside the declared range. | Open. In-range update available through `npm audit fix`; held back pending a visual check of the stylesheet change and Gbenga's go-ahead. | Decision: Gbenga. Change: Engineering agent. | Build-toolchain scope of the audit workflow no longer lists the package. |
 | `baseline-browser-mapping` 2.10.42 | `browserslist` > `autoprefixer`, `react-scripts`, `webpack` | Build only. | Crash on invalid input. Input is this repository's browserslist configuration. | 2.11.0 or later, inside range. This is the update that changes generated CSS prefixes. | Open. In-range update available through `npm audit fix`; held back pending a visual check of the stylesheet change and Gbenga's go-ahead. | Decision: Gbenga. Change: Engineering agent. | Build-toolchain scope of the audit workflow no longer lists the package. Stylesheet diff reviewed. |
