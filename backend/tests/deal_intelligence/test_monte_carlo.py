@@ -110,3 +110,51 @@ def test_losses_without_a_solvable_irr_are_counted_not_dropped():
     assert abs(summary.p50 - (multiple ** (12 / 60) - 1)) < 1e-9
     assert summary.probability_above_zero == 0
     assert scenario.summaries["npv"].loss_without_irr_count == 0
+
+
+def _land_deal():
+    return DealAnalysisRequest(
+        strategy="land",
+        property={"property_type": "land", "unit_count": 12},
+        acquisition={"purchase_price": 3_000_000, "closing_costs": 75_000, "hold_months": 60},
+        debt=[{
+            "principal": 3_500_000, "annual_interest_rate": 0.0675,
+            "amortization_years": 30, "term_months": 120, "origination_fee_rate": 0.01,
+        }],
+        exit={"selling_cost_rate": 0.06},
+        land={
+            "site_acres": 2.5, "planned_units": 12, "development_months": 24,
+            "site_work_cost": 300_000, "hard_construction_cost": 1_500_000, "soft_costs": 200_000,
+            "permits_impact_fees": 100_000, "developer_fee": 100_000, "contingency_rate": 0.1,
+            "annual_carrying_costs": 30_000, "expected_terminal_value": 7_500_000,
+            "target_profit_margin": 0.2,
+        },
+    )
+
+
+def test_land_development_monte_carlo_uses_the_land_drivers():
+    request = MonteCarloRequest(
+        deal=_land_deal(),
+        scenarios=[{
+            "name": "Committee case", "iterations": 400, "seed": 2026,
+            "drivers": {
+                "terminal_value_change": {"minimum": -0.15, "mode": 0, "maximum": 0.10},
+                "development_cost_change": {"minimum": 0, "mode": 0.10, "maximum": 0.30},
+                "interest_rate": {"minimum": 0.0575, "mode": 0.0675, "maximum": 0.085},
+            },
+        }],
+    )
+    first = run_monte_carlo(request)
+    scenario = first.scenarios[0]
+    profit = scenario.summaries["development_profit"]
+    base_profit = analyze_deal(_land_deal()).metrics["development_profit"].value
+
+    assert first == run_monte_carlo(request)
+    assert scenario.iterations_completed == 400
+    assert profit.sample_size == 400
+    assert profit.minimum < base_profit < profit.maximum
+    assert profit.minimum <= profit.p10 <= profit.p50 <= profit.p90 <= profit.maximum
+    assert {"irr", "npv", "development_roi", "equity_multiple"} <= set(scenario.summaries)
+    # Costs only rise and the terminal value mostly falls in this case, so most
+    # outcomes sit below the base profit; some must still be profitable.
+    assert 0 < profit.probability_above_zero < 1
