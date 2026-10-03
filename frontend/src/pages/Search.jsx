@@ -2,7 +2,7 @@ import React from 'react';
 import { useSearchParams } from 'react-router-dom';
 import GamlsSearch from '../components/GamlsSearch';
 
-export { GAMLS_SEARCH_URL } from '../components/GamlsSearch';
+export { GAMLS_SEARCH_URL, GAMLS_SALE_SEARCH_URL, GAMLS_RENTAL_SEARCH_URL } from '../components/GamlsSearch';
 
 const Search = () => {
   const [params] = useSearchParams();

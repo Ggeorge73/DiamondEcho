@@ -2,7 +2,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import Home from './Home';
-import { GAMLS_SEARCH_URL } from '../components/GamlsSearch';
+import { GAMLS_SALE_SEARCH_URL } from '../components/GamlsSearch';
 
 let container;
 let root;
@@ -27,7 +27,7 @@ afterEach(async () => {
 test('homepage uses agent GAMLS search instead of sample inventory and market claims', async () => {
   await act(async () => root.render(<MemoryRouter><Home /></MemoryRouter>));
   const frame = container.querySelector('#collection iframe');
-  expect(frame.getAttribute('src')).toBe(GAMLS_SEARCH_URL);
+  expect(frame.getAttribute('src')).toBe(GAMLS_SALE_SEARCH_URL);
   expect(frame.getAttribute('loading')).toBe('lazy');
   expect(frame.title).toBe('Georgia MLS property search');
   expect(container.querySelectorAll('iframe')).toHaveLength(1);
