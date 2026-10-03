@@ -30,12 +30,22 @@ Counts with the override, npm 10.9.3:
 
 The tables below are the record as triaged at `c23522c`. Rows for `@grpc/grpc-js` and the packages that inherit from it describe the state before the override. Decisions 2, 3 and 4 are still pending.
 
+## Update, 2026-10-03: decision 2 prepared, not made
+
+The in-range updates are proposed on their own, on top of the override. `npm audit fix` without `--force` changes 18 lockfile entries. With them the whole lockfile reports 72 packages (64 high, 5 moderate, 3 low), 11 root packages and 23 distinct advisories.
+
+The eight root packages it clears are `ajv`, `baseline-browser-mapping`, `brace-expansion`, `browserslist`, `colord`, `fast-uri`, `js-yaml` and `qs`. `body-parser` and `express` stop being reported because they inherited from `qs`.
+
+Correction: the table below says `underscore` has an in-range fix. It does not. `jsonpath` 1.3.0, the latest release, pins `underscore` to exactly 1.13.6. It belongs with decision 3, or needs its own override.
+
+What the update changes in the shipped site, and the visual check, are in [de34-dependency-triage.md](de34-dependency-triage.md).
+
 ## Decisions needed
 
 | # | Decision | Covers | Status |
 | --- | --- | --- | --- |
 | 1 | Staff queue: accept `@grpc/grpc-js` as not reachable, or apply an override | 2 advisories | Decided by Gbenga on 2026-10-03: apply the override. See the update below |
-| 2 | Apply the in-range build-tool updates after a visual check of the stylesheet | 23 advisories in 9 packages, plus the 2.x copy of `svgo` | Pending |
+| 2 | Apply the in-range build-tool updates after a visual check of the stylesheet | 22 advisories in 8 packages, plus the 2.x copy of `svgo`. An earlier version of this row counted `underscore` too; see the update below | Pending. Proposed as its own PR; merging it is the decision |
 | 3 | Replace `react-scripts`, or accept its build-time findings | 20 advisories in 8 packages | Pending |
 | 4 | Accept `braces` (no patched release) and the low-severity `@tootallnate/once` test finding, or upgrade staff `jsdom` | 2 advisories | Pending |
 
