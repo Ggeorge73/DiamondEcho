@@ -20,6 +20,7 @@ class StrictModel(BaseModel):
 class DealStrategy(str, Enum):
     RENTAL = "rental"
     FLIP = "flip"
+    LAND = "land"
 
 
 class PropertyType(str, Enum):
@@ -105,6 +106,41 @@ class FlipInputs(StrictModel):
     other_project_costs: float = Field(default=0, ge=0)
 
 
+class LandInputs(StrictModel):
+    """Ground-up development inputs. Status fields are free text shown back to
+    the user; only the numeric fields drive the calculation."""
+
+    development_type: str = Field(default="", max_length=80)
+    disposition_strategy: str = Field(default="", max_length=80)
+    site_acres: float = Field(default=0, ge=0)
+    parcel_count: int = Field(default=1, ge=1, le=1_000_000)
+    current_zoning: str = Field(default="", max_length=120)
+    proposed_zoning: str = Field(default="", max_length=120)
+    entitlement_status: str = Field(default="", max_length=80)
+    utility_status: str = Field(default="verify", max_length=80)
+    access_status: str = Field(default="verify", max_length=80)
+    environmental_status: str = Field(default="phase_i_required", max_length=80)
+    geotechnical_status: str = Field(default="not_started", max_length=80)
+    flood_zone: str = Field(default="", max_length=40)
+    wetlands_acres: float = Field(default=0, ge=0)
+    planned_units: float = Field(default=0, ge=0)
+    buildable_square_feet: float = Field(default=0, ge=0)
+    development_months: int = Field(default=1, ge=1, le=600)
+    absorption_months: int = Field(default=0, ge=0, le=600)
+    site_work_cost: float = Field(default=0, ge=0)
+    hard_construction_cost: float = Field(default=0, ge=0)
+    soft_costs: float = Field(default=0, ge=0)
+    permits_impact_fees: float = Field(default=0, ge=0)
+    environmental_remediation: float = Field(default=0, ge=0)
+    developer_fee: float = Field(default=0, ge=0)
+    contingency_rate: float = Field(default=0, ge=0, le=1)
+    annual_carrying_costs: float = Field(default=0, ge=0)
+    expected_terminal_value: float = Field(default=0, ge=0)
+    stabilized_noi: float = Field(default=0, ge=0)
+    stabilized_exit_cap_rate: float = Field(default=0, ge=0, le=0.5)
+    target_profit_margin: float = Field(default=0, ge=0, lt=1)
+
+
 class ExitInputs(StrictModel):
     explicit_sale_price: Optional[float] = Field(default=None, gt=0)
     exit_cap_rate: Optional[float] = Field(default=None, gt=0, le=0.5)
@@ -129,6 +165,7 @@ class DealAnalysisRequest(StrictModel):
     debt: List[DebtInputs] = Field(default_factory=list, max_length=20)
     operating: Optional[OperatingInputs] = None
     flip: Optional[FlipInputs] = None
+    land: Optional[LandInputs] = None
     exit: ExitInputs = Field(default_factory=ExitInputs)
     assumptions: AnalysisAssumptions = Field(default_factory=AnalysisAssumptions)
 
@@ -139,15 +176,33 @@ class DealAnalysisRequest(StrictModel):
                 raise ValueError("operating inputs are required for a rental analysis")
             if self.flip is not None:
                 raise ValueError("flip inputs are not valid for a rental analysis")
+            if self.land is not None:
+                raise ValueError("land inputs are not valid for a rental analysis")
             if self.exit.explicit_sale_price is None and self.exit.exit_cap_rate is None:
                 raise ValueError("rental analysis requires explicit_sale_price or exit_cap_rate")
-        else:
+        elif self.strategy == DealStrategy.FLIP:
             if self.flip is None:
                 raise ValueError("flip inputs are required for a flip analysis")
             if self.operating is not None:
                 raise ValueError("operating inputs are not valid for a flip analysis")
+            if self.land is not None:
+                raise ValueError("land inputs are not valid for a flip analysis")
             if self.exit.exit_cap_rate is not None:
                 raise ValueError("exit_cap_rate is not valid for a flip analysis")
+        else:
+            if self.land is None:
+                raise ValueError("land inputs are required for a land development analysis")
+            if self.operating is not None:
+                raise ValueError("operating inputs are not valid for a land development analysis")
+            if self.flip is not None:
+                raise ValueError("flip inputs are not valid for a land development analysis")
+            # The terminal value comes from the land inputs. Accepting these and
+            # ignoring them would silently change what the caller asked for.
+            if self.exit.exit_cap_rate is not None or self.exit.explicit_sale_price is not None:
+                raise ValueError(
+                    "land development uses expected_terminal_value or stabilized_noi with "
+                    "stabilized_exit_cap_rate; exit_cap_rate and explicit_sale_price are not valid"
+                )
         return self
 
 
@@ -261,6 +316,8 @@ class MonteCarloDriver(str, Enum):
     INTEREST_RATE = "interest_rate"
     AFTER_REPAIR_VALUE_CHANGE = "after_repair_value_change"
     REHAB_COST_CHANGE = "rehab_cost_change"
+    TERMINAL_VALUE_CHANGE = "terminal_value_change"
+    DEVELOPMENT_COST_CHANGE = "development_cost_change"
 
 
 class TriangularDistribution(StrictModel):

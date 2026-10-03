@@ -1,4 +1,4 @@
-"""Deterministic, explainable underwriting for rental and flip deals."""
+"""Deterministic, explainable underwriting for rental, flip and land development deals."""
 
 from __future__ import annotations
 
@@ -442,9 +442,225 @@ def _flip_analysis(
     )
 
 
+def _land_analysis(
+    request: DealAnalysisRequest,
+    principals: Sequence[float],
+    schedules: Sequence[Sequence[LoanMonth]],
+    origination_fees: float,
+) -> DealAnalysisResponse:
+    """Ground-up development. Mirrors ``analyzeLand`` in the browser engine
+    (frontend/src/lib/dealAnalysis.js); the two must give the same figures."""
+    assert request.land is not None
+    land = request.land
+    acquisition = request.acquisition
+    currency = request.property.currency
+    selling_cost_rate = request.exit.selling_cost_rate
+    total_debt = sum(principals)
+
+    acquisition_cost = (
+        acquisition.purchase_price
+        + acquisition.closing_costs
+        + acquisition.due_diligence_costs
+        + acquisition.initial_capex
+    )
+    contingency = (land.site_work_cost + land.hard_construction_cost) * land.contingency_rate
+    development_costs = (
+        land.site_work_cost
+        + land.hard_construction_cost
+        + land.soft_costs
+        + land.permits_impact_fees
+        + land.environmental_remediation
+        + land.developer_fee
+        + contingency
+    )
+    total_project_cost = acquisition_cost + development_costs
+    initial_equity = total_project_cost + origination_fees - total_debt
+    if initial_equity <= 0:
+        raise ValueError("construction financing must leave a positive equity contribution")
+
+    monthly_carrying = land.annual_carrying_costs / 12
+    cash_flows: List[PeriodCashFlow] = [
+        PeriodCashFlow(month=0, capital_costs=total_project_cost + origination_fees, net_cash_flow=-initial_equity)
+    ]
+    for month in range(1, acquisition.hold_months + 1):
+        debt_service = _month_debt_service(schedules, month)
+        cash_flows.append(
+            PeriodCashFlow(
+                month=month,
+                debt_service=_clean(debt_service) or 0,
+                capital_costs=_clean(monthly_carrying) or 0,
+                net_cash_flow=_clean(-monthly_carrying - debt_service) or 0,
+            )
+        )
+
+    derived_terminal_value = (
+        land.stabilized_noi / land.stabilized_exit_cap_rate
+        if land.stabilized_noi > 0 and land.stabilized_exit_cap_rate > 0
+        else 0
+    )
+    terminal_value = max(0, land.expected_terminal_value or derived_terminal_value)
+    selling_costs = terminal_value * selling_cost_rate
+    loan_payoff = _month_ending_balance(schedules, acquisition.hold_months)
+    cash_flows[-1].sale_proceeds = _clean(terminal_value - selling_costs) or 0
+    cash_flows[-1].loan_payoff = _clean(loan_payoff) or 0
+    cash_flows[-1].net_cash_flow = _clean(
+        cash_flows[-1].net_cash_flow + terminal_value - selling_costs - loan_payoff
+    ) or 0
+
+    values = [row.net_cash_flow for row in cash_flows]
+    profit = sum(values)
+    equity_contributions = abs(sum(min(value, 0) for value in values))
+    total_interest = sum(row.interest for schedule in schedules for row in schedule[: acquisition.hold_months])
+    total_carrying = monthly_carrying * acquisition.hold_months
+    economic_cost = total_project_cost + origination_fees + total_interest + total_carrying
+    break_even_terminal_value = economic_cost / (1 - selling_cost_rate) if selling_cost_rate < 1 else None
+    non_land_costs = total_project_cost - acquisition.purchase_price
+    residual_land_value = (
+        terminal_value * (1 - selling_cost_rate) * (1 - land.target_profit_margin)
+        - non_land_costs
+        - total_interest
+        - total_carrying
+    )
+
+    metrics = _common_metrics(request, cash_flows, total_debt, total_project_cost)
+    metrics.update(
+        {
+            "development_profit": _metric(
+                profit,
+                currency,
+                "net disposition proceeds - equity contributions - carrying and financing costs",
+                {"terminal_value": terminal_value, "selling_costs": selling_costs, "economic_cost": economic_cost},
+            ),
+            "development_roi": _metric(
+                ratio(profit, equity_contributions),
+                "decimal_rate",
+                "development profit / total equity contributions",
+                {"profit": profit, "equity_contributions": equity_contributions},
+            ),
+            "development_margin": _metric(
+                ratio(profit, terminal_value),
+                "decimal_rate",
+                "development profit / gross terminal value",
+                {"profit": profit, "terminal_value": terminal_value},
+                None if terminal_value else "Development margin is undefined without a terminal value.",
+            ),
+            "total_development_cost": _metric(
+                total_project_cost,
+                currency,
+                "land acquisition + transaction + site + hard + soft + entitlement + environmental + developer fee + contingency",
+                {"acquisition_cost": acquisition_cost, "development_costs": development_costs, "contingency": contingency},
+            ),
+            "residual_land_value": _metric(
+                residual_land_value,
+                currency,
+                "net terminal value after target margin less all non-land, carrying, and financing costs",
+                {
+                    "terminal_value": terminal_value,
+                    "target_profit_margin": land.target_profit_margin,
+                    "non_land_costs": non_land_costs,
+                },
+            ),
+            "break_even_terminal_value": _metric(
+                break_even_terminal_value,
+                currency,
+                "total economic cost / (1 - selling cost rate)",
+                {"economic_cost": economic_cost, "selling_cost_rate": selling_cost_rate},
+            ),
+            "cost_per_acre": _metric(
+                ratio(total_project_cost, land.site_acres),
+                f"{currency}/acre",
+                "total development cost / site acres",
+                {"total_project_cost": total_project_cost, "site_acres": land.site_acres},
+            ),
+            "cost_per_unit": _metric(
+                ratio(total_project_cost, land.planned_units),
+                f"{currency}/unit",
+                "total development cost / planned units",
+                {"total_project_cost": total_project_cost, "planned_units": land.planned_units},
+            ),
+            "cost_per_buildable_sf": _metric(
+                ratio(total_project_cost, land.buildable_square_feet),
+                f"{currency}/sf",
+                "total development cost / buildable square feet",
+                {"total_project_cost": total_project_cost, "buildable_square_feet": land.buildable_square_feet},
+            ),
+        }
+    )
+
+    warnings: List[str] = [
+        "Land-development results depend on zoning, entitlement, utility, environmental, geotechnical, civil, "
+        "market, and construction assumptions that require professional verification."
+    ]
+    if not terminal_value:
+        warnings.append(
+            "No terminal value can be calculated. Enter an expected gross exit value or stabilized NOI with a "
+            "capitalization rate."
+        )
+    if land.development_months + land.absorption_months > acquisition.hold_months:
+        warnings.append("Development plus sales / lease-up absorption exceeds the modeled hold period.")
+    if land.entitlement_status in ("unentitled", "rezoning_required"):
+        warnings.append(
+            "The project carries material entitlement risk; probability, timing, and denial costs are not "
+            "independently estimated."
+        )
+    if land.utility_status != "available":
+        warnings.append(
+            "Water, sewer, power, stormwater, and other utility capacity are not confirmed at the site; "
+            "extensions and off-site upgrades may materially change cost and timing."
+        )
+    if land.access_status != "legal_confirmed":
+        warnings.append(
+            "Legal and physical access is not confirmed; verify frontage, curb cuts, easements, and emergency access."
+        )
+    if land.environmental_status != "clear":
+        warnings.append(
+            "Environmental diligence is incomplete or indicates a recognized condition; complete Phase I/II "
+            "review and quantify remediation."
+        )
+    if land.geotechnical_status != "complete_suitable":
+        warnings.append(
+            "Geotechnical suitability is not confirmed; soils, rock, groundwater, slope, and foundation "
+            "conditions may affect feasibility."
+        )
+    if land.flood_zone and land.flood_zone.strip().upper() != "X":
+        warnings.append(
+            "The entered flood-zone designation requires floodplain, stormwater, elevation, insurance, and "
+            "buildable-area review."
+        )
+    if land.wetlands_acres > 0:
+        warnings.append(
+            "Wetlands were entered; verify delineation, buffers, mitigation, permitting, and the resulting net "
+            "buildable area."
+        )
+    if residual_land_value < acquisition.purchase_price:
+        warnings.append(
+            "The modeled residual land value is below the proposed purchase price at the selected target margin."
+        )
+    if land.planned_units < 1 and land.buildable_square_feet < 1:
+        warnings.append("Enter planned units or buildable square feet to evaluate density and unit economics.")
+
+    return DealAnalysisResponse(
+        analysis_id=str(uuid4()),
+        formula_version=FORMULA_VERSION,
+        strategy=request.strategy,
+        computed_at=datetime.now(timezone.utc),
+        metrics=metrics,
+        cash_flows=cash_flows,
+        assumptions={
+            "rate_convention": "All rates are decimal annual rates unless labeled otherwise.",
+            "cost_timing": "Development uses are treated as committed at acquisition; carrying costs and debt service occur monthly.",
+            "terminal_value": "Uses explicit exit value first, otherwise stabilized NOI divided by exit cap rate.",
+            "taxes": "Income taxes, depreciation, tax credits, and entity-level tax effects are not modeled.",
+        },
+        warnings=warnings,
+    )
+
+
 def analyze_deal(request: DealAnalysisRequest) -> DealAnalysisResponse:
     """Analyze one validated deal without database or network side effects."""
     principals, schedules, origination_fees = _resolved_debt_and_schedules(request)
     if request.strategy == DealStrategy.RENTAL:
         return _rental_analysis(request, principals, schedules, origination_fees)
+    if request.strategy == DealStrategy.LAND:
+        return _land_analysis(request, principals, schedules, origination_fees)
     return _flip_analysis(request, principals, schedules, origination_fees)

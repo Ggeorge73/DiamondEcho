@@ -56,6 +56,18 @@ def loss_equivalent_return(equity_multiple: Optional[float], hold_months: int) -
     return equity_multiple ** (12 / hold_months) - 1
 
 
+_DEVELOPMENT_COST_FIELDS = (
+    "site_work_cost", "hard_construction_cost", "soft_costs",
+    "permits_impact_fees", "environmental_remediation", "developer_fee",
+)
+
+_TARGET_METRICS = {
+    DealStrategy.RENTAL: ["irr", "npv", "cash_on_cash", "dscr", "equity_multiple"],
+    DealStrategy.FLIP: ["irr", "npv", "flip_profit", "flip_roi", "equity_multiple"],
+    DealStrategy.LAND: ["irr", "npv", "development_profit", "development_roi", "equity_multiple"],
+}
+
+
 def _sample_deal(
     base: DealAnalysisRequest,
     scenario: MonteCarloScenario,
@@ -79,16 +91,21 @@ def _sample_deal(
             deal.flip.after_repair_value *= 1 + value
         elif driver == MonteCarloDriver.REHAB_COST_CHANGE and deal.flip:
             deal.flip.rehab_cost *= 1 + value
+        elif driver == MonteCarloDriver.TERMINAL_VALUE_CHANGE and deal.land:
+            # Shock whichever input sets the terminal value, as the browser engine does.
+            if deal.land.expected_terminal_value > 0:
+                deal.land.expected_terminal_value *= 1 + value
+            else:
+                deal.land.stabilized_noi *= 1 + value
+        elif driver == MonteCarloDriver.DEVELOPMENT_COST_CHANGE and deal.land:
+            for field in _DEVELOPMENT_COST_FIELDS:
+                setattr(deal.land, field, getattr(deal.land, field) * (1 + value))
     return deal
 
 
 def _run_scenario(base: DealAnalysisRequest, scenario: MonteCarloScenario) -> MonteCarloScenarioResult:
     rng = random.Random(scenario.seed)
-    target_metrics = (
-        ["irr", "npv", "cash_on_cash", "dscr", "equity_multiple"]
-        if base.strategy == DealStrategy.RENTAL
-        else ["irr", "npv", "flip_profit", "flip_roi", "equity_multiple"]
-    )
+    target_metrics = _TARGET_METRICS[base.strategy]
     observations: Dict[str, List[float]] = {key: [] for key in target_metrics}
     failures = 0
     losses_without_irr = 0

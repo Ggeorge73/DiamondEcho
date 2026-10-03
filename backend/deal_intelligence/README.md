@@ -31,6 +31,17 @@ Flip analysis supports acquisition costs, rehab contingency, holding costs,
 multiple debt tranches, selling costs, profit, ROI, IRR/NPV, and the 70% rule as
 an explicitly labeled screening heuristic.
 
+Land development analysis supports acquisition and transaction costs, site work,
+hard and soft construction, permits and impact fees, remediation, developer fee,
+contingency on site and hard costs, monthly carrying costs, construction debt,
+and a terminal value taken from an explicit expected value or from stabilized
+NOI divided by an exit cap rate. Outputs add development profit, ROI and margin,
+total development cost, residual land value at the target margin, break-even
+terminal value, and cost per acre, unit and buildable square foot. It mirrors
+`analyzeLand` in `frontend/src/lib/dealAnalysis.js`; a reference test pins the
+two to the same figures. Development uses are treated as committed at
+acquisition, so construction draws are not modeled.
+
 Common outputs include monthly equity cash flows, IRR, NPV, equity multiple,
 LTV, and LTC. Rental outputs add GPI, EGI, NOI, cap rate, cash-on-cash, DSCR,
 debt yield, and break-even occupancy. Undefined ratios return `null` plus a

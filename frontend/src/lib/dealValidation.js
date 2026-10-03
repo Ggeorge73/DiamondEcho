@@ -140,9 +140,29 @@ export const validateMonteCarloScenarios = (scenarios) => {
   }
 };
 
+// The API reports each rejected input with its location, e.g. ["body", "operating",
+// "vacancy_rate"]. Show it, so the message says which input to fix.
+const rejectedField = (loc) => (Array.isArray(loc) ? loc : [])
+  .filter((part) => typeof part === 'string' && part !== 'body')
+  .map((part) => part.replace(/_/g, ' '))
+  .join(' › ');
+
 export const responseErrorMessage = (error, fallback) => {
   const detail = error.response?.data?.detail;
   if (typeof detail === 'string') return detail;
-  if (Array.isArray(detail)) return detail.map((item) => item.msg).filter(Boolean).join(' ') || fallback;
+  if (Array.isArray(detail)) {
+    const lines = [...new Set(detail.filter((item) => item?.msg).map((item) => {
+      const field = rejectedField(item.loc);
+      const message = String(item.msg).replace(/^Value error, /, '');
+      return field ? `${field}: ${message}` : message;
+    }))];
+    if (!lines.length) return fallback;
+    const shown = lines.slice(0, 3).join(' · ');
+    return lines.length > 3 ? `${shown} · and ${lines.length - 3} more.` : shown;
+  }
+  // No answer at all from the analysis service: say so, and that nothing was calculated.
+  if (error.isAxiosError && !error.response) {
+    return 'The analysis service could not be reached, so nothing was calculated. Check your connection and try again.';
+  }
   return error.message || fallback;
 };
