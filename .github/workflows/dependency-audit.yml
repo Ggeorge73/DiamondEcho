@@ -44,9 +44,15 @@ jobs:
           frontend_status=$?
           npm audit --omit=dev --workspace staff-queue --json > dependency-audit/staff.json
           staff_status=$?
+          # Everything in the lockfile, devDependencies included. These packages
+          # are not shipped, but they build and test the release, so they stay
+          # on the record instead of disappearing from the production scopes.
+          npm audit --json > dependency-audit/build-toolchain.json
+          toolchain_status=$?
           set -e
           echo "frontend_status=$frontend_status" >> "$GITHUB_OUTPUT"
           echo "staff_status=$staff_status" >> "$GITHUB_OUTPUT"
+          echo "toolchain_status=$toolchain_status" >> "$GITHUB_OUTPUT"
       - name: Resolve and freeze backend runtime packages
         shell: bash
         run: |
@@ -72,7 +78,8 @@ jobs:
             --commit "$GITHUB_SHA" \
             --frontend-status '${{ steps.npm_audit.outputs.frontend_status }}' \
             --staff-status '${{ steps.npm_audit.outputs.staff_status }}' \
-            --backend-status '${{ steps.python_audit.outputs.status }}'
+            --backend-status '${{ steps.python_audit.outputs.status }}' \
+            --toolchain-status '${{ steps.npm_audit.outputs.toolchain_status }}'
           cat dependency-audit/summary.md >> "$GITHUB_STEP_SUMMARY"
       - name: Upload audit evidence
         if: always()
