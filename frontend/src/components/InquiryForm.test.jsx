@@ -150,3 +150,21 @@ test('getRandomValues fallback generates a UUID header', async () => {
   expect(axios.post.mock.calls[0][2].headers['X-Idempotency-Key'])
     .toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
 });
+
+test.each([
+  ['a service that refuses the request', { isAxiosError: true, message: 'Request failed with status code 405', response: { status: 405, data: 'Method Not Allowed' } }],
+  ['an unreachable service', { isAxiosError: true, message: 'Network Error' }],
+])('%s is reported in plain words, never as success', async (_label, failure) => {
+  axios.post.mockRejectedValueOnce(failure);
+  await renderForm('buyer');
+  await fill('fullName', 'A Buyer');
+  await fill('email', 'buyer@example.com');
+  await fill('message', 'Interested in buying.');
+  await consent();
+  await submit();
+  const alert = container.querySelector('[role="alert"]');
+  expect(alert.textContent).toContain('We could not send your request just now. Nothing was submitted.');
+  expect(alert.textContent).not.toMatch(/status code|Network Error/);
+  expect(container.querySelector('.de-inquiry-receipt')).toBeNull();
+  expect(input('fullName').value).toBe('A Buyer');
+});

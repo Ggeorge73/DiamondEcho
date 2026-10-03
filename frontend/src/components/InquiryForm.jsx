@@ -95,7 +95,12 @@ const InquiryForm = ({ kind }) => {
       setReceipt(response.data);
     } catch (requestError) {
       const detail = requestError.response?.data?.detail;
-      setError(typeof detail === 'string' ? detail : requestError.message || 'We could not confirm your request. Please retry.');
+      // A transport failure ("Request failed with status code 405", "Network Error")
+      // means nothing to a visitor. Say what happened to their request instead.
+      const plain = requestError.isAxiosError
+        ? 'We could not send your request just now. Nothing was submitted.'
+        : requestError.message;
+      setError(typeof detail === 'string' ? detail : plain || 'We could not confirm your request. Please retry.');
     } finally {
       sendingRef.current = false;
       setPending(false);
