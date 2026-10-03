@@ -46,11 +46,57 @@ The PR that introduced this document did neither.
 
 The cost is that those packages stop appearing in the two production scopes. To keep them on the record, the audit workflow now also captures `npm audit` for the whole lockfile as `build-toolchain.json` and the summary reports it as a separate scope. These packages still run on developer machines and in CI, and the `webpack-dev-server` advisories in particular apply to anyone running `npm run dev`.
 
-## Deferred: in-range fixes to the build toolchain
+## In-range fixes to the build toolchain
 
-`npm audit fix` without `--force` updates 20 packages inside their existing ranges (`brace-expansion`, `js-yaml`, `fast-uri`, `browserslist`, `caniuse-lite`, `underscore`, `qs`, `colord`, `baseline-browser-mapping`, `ajv` and others). In a trial on this branch it took the all-npm count from 87 to 77.
+The first triage pass left these out because they change what is shipped. They are now proposed on their own, on top of the `@grpc/grpc-js` override, so the change can be reviewed by itself. Merging that PR is decision 2; it is not made until then.
 
-It is left out because it changes the shipped stylesheet. Newer browser-support data makes autoprefixer drop three legacy prefixes (`-webkit-appearance`, `-webkit-text-decoration-line`, `-webkit-min-content`), and `main.css` shrinks from 123,279 to 122,393 bytes. That is probably harmless on current browsers, but it is a visual change that should go through QA on its own and not ride along with a security fix.
+`npm audit fix` without `--force`, npm 10.9.3, changes 18 lockfile entries and nothing in any `package.json`:
+
+| Package | From | To |
+| --- | --- | --- |
+| `ajv` | 8.17.1 | 8.20.0 |
+| `baseline-browser-mapping` | 2.10.42 | 2.11.27 |
+| `body-parser` | 1.20.6 | 1.20.8 |
+| `brace-expansion` | 1.1.16 and 2.1.2 | 1.1.21 and 2.1.7 |
+| `browserslist` | 4.28.5 | 4.29.3 |
+| `caniuse-lite` | 1.0.30001803 | 1.0.30001814 |
+| `colord` | 2.9.3 | 2.10.0 |
+| `electron-to-chromium` | 1.5.389 | 1.5.444 |
+| `express` | 4.22.2 | 4.22.3 |
+| `fast-uri` | 3.1.3 | 3.1.8 |
+| `js-yaml` | 3.15.0 (two copies) and 4.3.0 | 3.15.2 and 4.3.2 |
+| `node-releases` | 2.0.51 | 2.0.57 |
+| `qs` | 6.15.3 | 6.16.0 |
+| `svgo` (the 2.x copy under `postcss-svgo`) | 2.8.2 | 2.8.4 |
+| `update-browserslist-db` | 1.2.3 | 1.3.3 |
+
+Audit result: the whole lockfile goes from 82 packages (68 high, 11 moderate, 3 low) to 72 (64 high, 5 moderate, 3 low). Distinct advisories go from 45 to 23 and root packages from 19 to 11. The frontend and staff scopes stay at 0.
+
+### What it changes in the shipped site
+
+The update refreshes the browser-usage data that the build reads. The production target is `>0.2%, not dead, not op_mini all`, so the list of supported browsers moves with that data:
+
+| Browser | Oldest version targeted before | After |
+| --- | --- | --- |
+| iOS Safari | 11.0 | 15.6 |
+| Chrome | 103 | 109 |
+| Edge | 148 | 119 |
+| Firefox | 121 | 120 |
+| Safari (desktop) | 18.5 | 18.5 |
+| Samsung Internet | 30 | 30 |
+
+Two build outputs change as a result:
+
+- Stylesheet: 123,309 to 122,423 bytes. The only differences are 18 legacy `-webkit-` fallbacks that are no longer written: `position: -webkit-sticky` (3), `-webkit-max-content` (2), `-webkit-min-content` (1), `-webkit-appearance` on two rules, `-webkit-text-decoration-line` and `-webkit-text-decoration-color` (5), and five rules that existed only for the `::-webkit-file-upload-button` selector. The standard property or selector stays in every case.
+- JavaScript bundle: 140.76 kB to 137.41 kB gzipped, because fewer syntax transforms are needed for the newer target list.
+
+Visual check: seven routes (`/`, `/search`, `/search?status=rent`, `/investment-calculator`, `/inquire?type=tour`, `/agents`, `/about`) at 1280 px and 390 px, full-page screenshots in headless Chromium from both builds. All 14 pairs are pixel-identical. That covers a current Chromium only. It says nothing about Safari, Firefox or a real phone.
+
+Who could see a difference: someone on iOS Safari older than 15.6 or Chrome older than 109. On those, sticky side panels may scroll with the page and some form fields may show the system's default styling. The site would still work.
+
+### Not fixed by this update
+
+`underscore` 1.13.6 stays. The earlier pass listed it as fixable in range; that was wrong. `jsonpath` 1.3.0, the latest release, pins `underscore` to exactly 1.13.6, so it needs an override or the removal of `react-scripts`.
 
 ## What cannot be fixed by an upgrade
 
@@ -73,7 +119,7 @@ No deployed environment was tested. A green CI run on this PR is code evidence, 
 The first has been made. The other three each need Gbenga's recorded decision on DE-34.
 
 1. Staff queue: accept `@grpc/grpc-js` as not reachable, or apply an override. **Decided on 2026-10-03: override applied.**
-2. Apply the in-range build-tool updates after a visual check of the stylesheet.
+2. Apply the in-range build-tool updates after a visual check of the stylesheet. Proposed as its own PR; merging it is the decision.
 3. Replace `react-scripts`, or accept its build-time findings.
 4. Accept `braces` and the low-severity test-only `@tootallnate/once` finding, or upgrade staff `jsdom`.
 
@@ -85,7 +131,8 @@ The release-candidate rerun of the audit, with command, date and commit, is also
 | --- | --- |
 | High, no fix without replacing `react-scripts` | `node-forge`, `nth-check`, `postcss` (7.x, nested), `serialize-javascript`, `svgo`, `webpack-dev-middleware`, `webpack-dev-server` |
 | High, no patched release | `braces` |
-| High, fixed by the deferred in-range update | `brace-expansion`, `browserslist`, `fast-uri`, `js-yaml`, `underscore` |
+| High, fixed by the proposed in-range update | `brace-expansion`, `browserslist`, `fast-uri`, `js-yaml` |
+| High, pinned by `jsonpath`; needs an override or the removal of `react-scripts` | `underscore` |
 | High, closed by the override of 2026-10-03 | `@grpc/grpc-js` |
 | Moderate | `ajv`, `baseline-browser-mapping`, `colord`, `qs`, `uuid` |
 | Low | `@tootallnate/once` |
