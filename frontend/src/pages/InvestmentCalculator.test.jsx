@@ -234,6 +234,22 @@ test('out-of-range Monte Carlo vacancy inputs are rejected before simulation', a
   expect(runMonteCarloLocally).not.toHaveBeenCalled();
 });
 
+test.each(['150', '76', ''])('Monte Carlo vacancy high of "%s" is rejected instead of being capped silently', async (value) => {
+  await changeField('mcVacancyMax', value);
+  await click('Run Monte Carlo');
+  expect(container.textContent).toContain('Vacancy · high must be 75% or less');
+  expect(runMonteCarloLocally).not.toHaveBeenCalled();
+  expect(container.querySelector('.studio-risk-results')).toBeNull();
+});
+
+test('Monte Carlo vacancy high at the 75% cap is simulated as entered', async () => {
+  await changeField('mcVacancyMax', '75');
+  await click('Run Monte Carlo');
+  expect(runMonteCarloLocally).toHaveBeenCalledTimes(1);
+  const { scenarios } = runMonteCarloLocally.mock.calls[0][0];
+  expect(scenarios.map((scenario) => scenario.drivers.vacancy_rate.maximum)).toEqual([0.75, 0.75, 0.75]);
+});
+
 test('unordered Monte Carlo drivers show an actionable error without a simulation', async () => {
   await changeField('mcRentMin', '20');
   await click('Run Monte Carlo');

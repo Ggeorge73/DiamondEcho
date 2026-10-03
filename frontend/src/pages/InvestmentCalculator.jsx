@@ -10,7 +10,10 @@ import { analyzeDealLocally, runMonteCarloLocally } from '../lib/dealAnalysis';
 import { buildRentalDecision, RENTAL_EVIDENCE_ITEMS } from '../lib/dealDecision';
 import { downloadDealWorkbook } from '../lib/dealWorkbook';
 import { buildDealRequest } from '../lib/dealRequest';
-import { responseErrorMessage, validateDealForm, validateMonteCarloScenarios } from '../lib/dealValidation';
+import {
+  MONTE_CARLO_VACANCY_CAP_PERCENT, responseErrorMessage, validateDealForm,
+  validateMonteCarloForm, validateMonteCarloScenarios,
+} from '../lib/dealValidation';
 import { buildMonteCarloScenarios, MONTE_CARLO_CASES } from '../lib/monteCarloCases';
 import { resolveListingContext } from '../lib/listingContext';
 import { applyPropertyAutofill, preparePropertyChange } from '../lib/propertyAutofill';
@@ -285,7 +288,7 @@ const InvestmentCalculator = () => {
     const scale = stress ? 1.75 : downside ? 1.25 : 1;
     if (form.strategy === 'rental') return {
       rent_change: { minimum: rate(n(form.mcRentMin) * scale), mode: rate(form.mcRentMode), maximum: rate(form.mcRentMax) },
-      vacancy_rate: { minimum: rate(form.mcVacancyMin), mode: rate(n(form.mcVacancyMode) * (downside ? 1.2 : 1)), maximum: Math.min(.75, rate(n(form.mcVacancyMax) * scale)) },
+      vacancy_rate: { minimum: rate(form.mcVacancyMin), mode: rate(n(form.mcVacancyMode) * (downside ? 1.2 : 1)), maximum: Math.min(MONTE_CARLO_VACANCY_CAP_PERCENT / 100, rate(n(form.mcVacancyMax) * scale)) },
       operating_expense_change: { minimum: rate(form.mcExpenseMin), mode: rate(form.mcExpenseMode), maximum: rate(n(form.mcExpenseMax) * scale) },
       exit_cap_rate: { minimum: rate(form.mcExitCapMin), mode: rate(n(form.mcExitCapMode) * (downside ? 1.05 : 1)), maximum: rate(n(form.mcExitCapMax) * scale) },
       interest_rate: { minimum: rate(form.mcInterestMin), mode: rate(form.mcInterestMode), maximum: rate(n(form.mcInterestMax) * scale) },
@@ -306,6 +309,7 @@ const InvestmentCalculator = () => {
     const generation = ++analysisGeneration.current;
     setRiskLoading(true); setRiskError(''); setMonteCarlo(null); setResultMode('risk');
     try {
+      validateMonteCarloForm(form);
       const scenarios = buildMonteCarloScenarios({ iterations: form.mcIterations, driversForCase: scenarioDrivers });
       validateMonteCarloScenarios(scenarios);
       const payload = { deal: buildRequest(), scenarios };
