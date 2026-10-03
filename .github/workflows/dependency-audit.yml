@@ -1,0 +1,84 @@
+name: Production dependency audit
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - package.json
+      - package-lock.json
+      - frontend/package.json
+      - staff-queue/package.json
+      - backend/requirements-runtime.txt
+      - .github/workflows/dependency-audit.yml
+      - scripts/dependency_audit_summary.py
+      - scripts/test_dependency_audit_summary.py
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Capture production dependency findings
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Use the repository's pinned npm version
+        run: npm install --global npm@10.9.3
+      - name: Verify report parser
+        run: python -m unittest discover -s scripts -p 'test_dependency_audit_summary.py'
+      - name: Audit frontend and staff production dependency trees
+        id: npm_audit
+        shell: bash
+        run: |
+          mkdir -p dependency-audit
+          set +e
+          npm audit --omit=dev --workspace frontend --json > dependency-audit/frontend.json
+          frontend_status=$?
+          npm audit --omit=dev --workspace staff-queue --json > dependency-audit/staff.json
+          staff_status=$?
+          set -e
+          echo "frontend_status=$frontend_status" >> "$GITHUB_OUTPUT"
+          echo "staff_status=$staff_status" >> "$GITHUB_OUTPUT"
+      - name: Resolve and freeze backend runtime packages
+        shell: bash
+        run: |
+          python -m venv "$RUNNER_TEMP/de34-runtime"
+          "$RUNNER_TEMP/de34-runtime/bin/python" -m pip install -r backend/requirements-runtime.txt
+          "$RUNNER_TEMP/de34-runtime/bin/python" -m pip freeze --exclude pip --exclude setuptools --exclude wheel > dependency-audit/backend-runtime-frozen.txt
+      - name: Audit frozen backend runtime packages
+        id: python_audit
+        shell: bash
+        run: |
+          python -m pip install pip-audit==2.10.1
+          set +e
+          pip-audit --no-deps --disable-pip -r dependency-audit/backend-runtime-frozen.txt --format json --output dependency-audit/backend.json
+          audit_status=$?
+          set -e
+          echo "status=$audit_status" >> "$GITHUB_OUTPUT"
+      - name: Summarize findings and verify scan integrity
+        if: always()
+        shell: bash
+        run: |
+          python scripts/dependency_audit_summary.py \
+            --directory dependency-audit \
+            --commit "$GITHUB_SHA" \
+            --frontend-status '${{ steps.npm_audit.outputs.frontend_status }}' \
+            --staff-status '${{ steps.npm_audit.outputs.staff_status }}' \
+            --backend-status '${{ steps.python_audit.outputs.status }}'
+          cat dependency-audit/summary.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload audit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-dependency-audit-${{ github.sha }}
+          path: dependency-audit/
+          if-no-files-found: error
+          retention-days: 30
