@@ -109,6 +109,19 @@ const driverBounds = {
   vacancy_rate: [0, 0.95], exit_cap_rate: [0.001, 0.5], interest_rate: [0, 1],
 };
 
+// The simulation never models vacancy above this level. The stress cases scale the
+// entered high value up to this cap; a value entered above it must be rejected, not
+// quietly replaced, so the inputs on screen always match what was simulated.
+export const MONTE_CARLO_VACANCY_CAP_PERCENT = 75;
+
+export const validateMonteCarloForm = (form) => {
+  if (form.strategy !== 'rental') return;
+  const high = Number(form.mcVacancyMax);
+  if (form.mcVacancyMax === '' || !Number.isFinite(high) || high > MONTE_CARLO_VACANCY_CAP_PERCENT) {
+    throw new Error(`Vacancy · high must be ${MONTE_CARLO_VACANCY_CAP_PERCENT}% or less. The simulation does not model vacancy above ${MONTE_CARLO_VACANCY_CAP_PERCENT}%.`);
+  }
+};
+
 export const validateMonteCarloScenarios = (scenarios) => {
   for (const scenario of scenarios) {
     if (!Number.isInteger(scenario.iterations) || scenario.iterations < 250 || scenario.iterations > 20000) {
