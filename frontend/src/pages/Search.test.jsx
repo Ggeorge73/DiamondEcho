@@ -52,6 +52,8 @@ test('rental intent pre-selects residential rentals on the form that keeps the t
   expect(src.searchParams.get('typ')).toBe('rr');
   expect(container.textContent).toContain('Looking for a rental?');
   expect(container.textContent).toContain('Rental (Residential) is pre-selected');
+  // The provider never states the rent period, so the page says so instead of implying one.
+  expect(container.textContent).toContain('Georgia MLS shows the rent amount without stating the period, so confirm with the listing whether it is monthly.');
   expect(container.textContent).not.toContain('For-sale property types are pre-selected');
 });
 test.each([
