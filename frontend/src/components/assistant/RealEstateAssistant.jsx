@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
+import { useLocation } from "react-router-dom";
 import { Bot, ExternalLink, Loader2, MessageCircle, Send, ShieldCheck, X } from "lucide-react";
 
 const QUICK_PROMPTS = [
@@ -8,8 +9,25 @@ const QUICK_PROMPTS = [
   "What should I compare in a mortgage?",
 ];
 
+// Resting box of the launcher: bottom-5 and right-5 on the wrapper, h-14 on the button.
+const LAUNCHER_OFFSET = 20;
+const LAUNCHER_HEIGHT = 56;
+const LAUNCHER_FULL_WIDTH = 188;
+
+// True when the labelled launcher would sit on top of the Georgia MLS frame.
+export const launcherOverlapsFrame = (frameRect, viewport, launcherWidth = LAUNCHER_FULL_WIDTH) => {
+  const bottom = viewport.height - LAUNCHER_OFFSET;
+  const top = bottom - LAUNCHER_HEIGHT;
+  const right = viewport.width - LAUNCHER_OFFSET;
+  const left = right - launcherWidth;
+  return frameRect.top < bottom && frameRect.bottom > top
+    && frameRect.left < right && frameRect.right > left;
+};
+
 const RealEstateAssistant = () => {
+  const { pathname, search } = useLocation();
   const [open, setOpen] = useState(false);
+  const [overSearchFrame, setOverSearchFrame] = useState(false);
   const [message, setMessage] = useState("");
   const [state, setState] = useState("");
   const [loading, setLoading] = useState(false);
@@ -24,6 +42,31 @@ const RealEstateAssistant = () => {
     return () => window.removeEventListener("open-diamond-assistant", openAssistant);
   }, []);
   useEffect(() => { if (open) promptRef.current?.focus(); }, [open]);
+  // The provider frame is cross-origin, so nothing inside it can be moved out of
+  // the way. While the launcher would cover it, the launcher shrinks to its icon.
+  useEffect(() => {
+    const request = window.requestAnimationFrame || ((callback) => window.setTimeout(callback, 16));
+    const cancel = window.cancelAnimationFrame || window.clearTimeout;
+    let pending = 0;
+    const measure = () => {
+      pending = 0;
+      const frame = document.querySelector(".de-idx__frame");
+      setOverSearchFrame(Boolean(frame) && launcherOverlapsFrame(
+        frame.getBoundingClientRect(),
+        { width: window.innerWidth, height: window.innerHeight },
+      ));
+    };
+    const schedule = () => { if (!pending) pending = request(measure); };
+    measure();
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+    return () => {
+      window.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+      if (pending) cancel(pending);
+    };
+  }, [pathname, search]);
+  const compact = overSearchFrame && !open;
   const closeAssistant = () => {
     setOpen(false);
     triggerRef.current?.focus();
@@ -125,8 +168,8 @@ const RealEstateAssistant = () => {
         </section>
       )}
 
-      <button ref={triggerRef} onClick={() => { if (open) closeAssistant(); else setOpen(true); }} aria-expanded={open} aria-label="Open DiamondEcho assistant" className="ml-auto flex h-14 items-center gap-2 border border-[#2d628c]/50 bg-[#0c1826] px-5 text-white shadow-xl transition hover:-translate-y-0.5 hover:bg-[#2d628c]">
-        <MessageCircle className="h-5 w-5 text-[#d9c28f]" /><span className="text-[10px] font-semibold uppercase tracking-[0.15em]">Ask DiamondEcho</span>
+      <button ref={triggerRef} onClick={() => { if (open) closeAssistant(); else setOpen(true); }} aria-expanded={open} aria-label="Open DiamondEcho assistant" title={compact ? "Ask DiamondEcho" : undefined} data-compact={compact ? "true" : "false"} className={`ml-auto flex h-14 items-center gap-2 border border-[#2d628c]/50 bg-[#0c1826] text-white shadow-xl transition hover:-translate-y-0.5 hover:bg-[#2d628c] ${compact ? "w-14 justify-center px-0" : "px-5"}`}>
+        <MessageCircle className="h-5 w-5 text-[#d9c28f]" /><span className={compact ? "sr-only" : "text-[10px] font-semibold uppercase tracking-[0.15em]"}>Ask DiamondEcho</span>
       </button>
     </div>
   );
