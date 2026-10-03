@@ -1,5 +1,6 @@
 from backend.deal_intelligence.models import DealAnalysisRequest, MonteCarloRequest
-from backend.deal_intelligence.monte_carlo import run_monte_carlo
+from backend.deal_intelligence.engine import analyze_deal
+from backend.deal_intelligence.monte_carlo import loss_equivalent_return, run_monte_carlo
 
 
 def _rental_deal():
@@ -55,3 +56,57 @@ def test_iteration_cap_is_enforced():
         assert False, "validation should reject more than 50,000 total iterations"
     except ValueError:
         pass
+
+
+def test_loss_equivalent_return_applies_only_to_losses():
+    assert loss_equivalent_return(0, 60) == -1
+    assert abs(loss_equivalent_return(0.15, 60) - (0.15 ** 0.2 - 1)) < 1e-12
+    assert abs(loss_equivalent_return(0.5, 12) + 0.5) < 1e-12
+    assert loss_equivalent_return(1, 60) is None
+    assert loss_equivalent_return(1.4, 60) is None
+    assert loss_equivalent_return(None, 60) is None
+    assert loss_equivalent_return(0.5, 0) is None
+
+
+def _underwater_deal():
+    # Income arrives monthly, then the sale cannot repay the loan, so no IRR
+    # solves the cash flows even though the investor clearly lost money.
+    return DealAnalysisRequest(
+        strategy="rental",
+        property={"property_type": "multifamily", "unit_count": 12},
+        acquisition={"purchase_price": 3_000_000, "hold_months": 60},
+        debt=[{
+            "loan_to_value": 0.65, "annual_interest_rate": 0.0675,
+            "amortization_years": 30, "interest_only_months": 60, "term_months": 120,
+        }],
+        operating={
+            "gross_scheduled_rent": 360_000, "vacancy_rate": 0.05,
+            "operating_expenses": 126_000, "management_fee_rate": 0.04,
+        },
+        exit={"explicit_sale_price": 1_500_000, "selling_cost_rate": 0.06},
+    )
+
+
+def test_losses_without_a_solvable_irr_are_counted_not_dropped():
+    deal = _underwater_deal()
+    base = analyze_deal(deal)
+    multiple = base.metrics["equity_multiple"].value
+    assert base.metrics["irr"].value is None
+    assert any(row.net_cash_flow > 0 for row in base.cash_flows)
+    assert 0 < multiple < 1
+
+    request = MonteCarloRequest(
+        deal=deal,
+        scenarios=[{
+            "name": "Fixed", "iterations": 250, "seed": 73,
+            "drivers": {"interest_rate": {"minimum": 0.0675, "mode": 0.0675, "maximum": 0.0675}},
+        }],
+    )
+    scenario = run_monte_carlo(request).scenarios[0]
+    summary = scenario.summaries["irr"]
+    assert scenario.iterations_completed == 250
+    assert summary.sample_size == 250
+    assert summary.loss_without_irr_count == 250
+    assert abs(summary.p50 - (multiple ** (12 / 60) - 1)) < 1e-9
+    assert summary.probability_above_zero == 0
+    assert scenario.summaries["npv"].loss_without_irr_count == 0
