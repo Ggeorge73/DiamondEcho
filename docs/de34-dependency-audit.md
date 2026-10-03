@@ -8,4 +8,4 @@ The artifact contains raw `frontend.json`, `staff.json`, `backend.json`, `build-
 
 Triage each raw finding by advisory ID, affected package/version, deployment reachability, severity, fix or mitigation, owner, and retest evidence. npm counts vulnerable packages per workspace; pip-audit counts advisories, so their totals are not directly additive. The tools' severity schemes are not interchangeable. Any unresolved high/critical launch risk needs Gbenga's explicit decision. The QA agent verifies the exact release-candidate rerun and records evidence without claiming human Tiara's approval; DE-13 and DE-27 remain gated.
 
-The first triage pass, covering the direct high-severity packages, is recorded in [de34-dependency-triage.md](de34-dependency-triage.md).
+The first triage pass, covering the direct high-severity packages, is recorded in [de34-dependency-triage.md](de34-dependency-triage.md). The disposition of every advisory is in [de34-advisory-dispositions.md](de34-advisory-dispositions.md).

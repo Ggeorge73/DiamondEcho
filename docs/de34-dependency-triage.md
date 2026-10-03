@@ -1,6 +1,6 @@
 # DE-34 dependency triage: direct high-severity packages
 
-Prepared by Claude acting as the Engineering agent on 2026-10-03. This is a triage record and a set of proposed changes. It does not accept risk or clear a launch gate; Gbenga decides both. The run of the **Production dependency audit** workflow on this PR is the evidence of record. The figures below come from the same commands run locally with npm 10.9.3 against `main` at `1c94874` and against this branch.
+Prepared by Claude acting as the Engineering agent on 2026-10-03. This is the first triage pass, covering the direct high-severity packages, and a set of proposed changes. The disposition of every advisory, with owner and retest evidence, is in [de34-advisory-dispositions.md](de34-advisory-dispositions.md). It does not accept risk or clear a launch gate; Gbenga decides both. The run of the **Production dependency audit** workflow on this PR is the evidence of record. The figures below come from the same commands run locally with npm 10.9.3 against `main` at `1c94874` and against this branch.
 
 ## Result
 
@@ -52,7 +52,9 @@ It is left out because it changes the shipped stylesheet. Newer browser-support 
 
 ## What cannot be fixed by an upgrade
 
-These root packages have no fix while `react-scripts` 5.0.1 is in use: `nth-check`, `svgo`, `serialize-javascript`, `webpack-dev-server`, `webpack-dev-middleware`, `node-forge`, `braces`, `uuid` and the nested `postcss` 7. Clearing them means replacing Create React App with a maintained build tool. That is a migration with its own regression risk and belongs in its own ticket, most sensibly after launch.
+Eight root packages have no fix while `react-scripts` 5.0.1 is in use: `nth-check`, `svgo` (its 1.x copy), `serialize-javascript`, `webpack-dev-server`, `webpack-dev-middleware`, `node-forge`, `uuid` and the nested `postcss` 7. Clearing them means replacing Create React App with a maintained build tool, which is a migration with its own regression risk. `braces` is separate: it also arrives through `tailwindcss` and Jest, and npm offers no patched release.
+
+Whether to replace the build tool before launch, or to accept these build-time findings for launch, is Gbenga's decision. It has not been made, and nothing in this document makes it. Until a decision is recorded on DE-34, these findings stay open and DE-13 and DE-27 stay gated.
 
 ## Verification on this branch
 
@@ -64,11 +66,23 @@ These root packages have no fix while `react-scripts` 5.0.1 is in use: `nth-chec
 
 No deployed environment was tested. A green CI run on this PR is code evidence, not release acceptance.
 
+## Decisions pending
+
+None of these has been made. Each needs Gbenga's recorded decision on DE-34.
+
+1. Staff queue: accept `@grpc/grpc-js` as not reachable, or apply an override.
+2. Apply the in-range build-tool updates after a visual check of the stylesheet.
+3. Replace `react-scripts`, or accept its build-time findings.
+4. Accept `braces` and the low-severity test-only `@tootallnate/once` finding, or upgrade staff `jsdom`.
+
+The release-candidate rerun of the audit, with command, date and commit, is also still outstanding.
+
 ## Root packages still reported after this branch (all npm scope)
 
 | Severity | Packages |
 | --- | --- |
-| High, no fix without replacing `react-scripts` | `braces`, `node-forge`, `nth-check`, `postcss` (7.x, nested), `serialize-javascript`, `svgo`, `webpack-dev-middleware`, `webpack-dev-server` |
+| High, no fix without replacing `react-scripts` | `node-forge`, `nth-check`, `postcss` (7.x, nested), `serialize-javascript`, `svgo`, `webpack-dev-middleware`, `webpack-dev-server` |
+| High, no patched release | `braces` |
 | High, fixed by the deferred in-range update | `brace-expansion`, `browserslist`, `fast-uri`, `js-yaml`, `underscore` |
 | High, open decision | `@grpc/grpc-js` |
 | Moderate | `ajv`, `baseline-browser-mapping`, `colord`, `qs`, `uuid` |
