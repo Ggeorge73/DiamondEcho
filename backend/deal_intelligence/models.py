@@ -304,6 +304,9 @@ class MonteCarloMetricSummary(StrictModel):
     maximum: float
     probability_above_zero: float
     probability_below_one: float
+    # Number of iterations with a defined value for this metric: the denominator
+    # of the two probabilities above. It can be lower than iterations_completed.
+    sample_size: int
 
 
 class MonteCarloScenarioResult(StrictModel):

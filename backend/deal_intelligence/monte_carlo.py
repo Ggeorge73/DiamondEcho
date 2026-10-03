@@ -37,6 +37,7 @@ def _summary(values: List[float]) -> MonteCarloMetricSummary:
         p75=_percentile(values, 0.75), p90=_percentile(values, 0.90), maximum=max(values),
         probability_above_zero=sum(value > 0 for value in values) / len(values),
         probability_below_one=sum(value < 1 for value in values) / len(values),
+        sample_size=len(values),
     )
 
 
