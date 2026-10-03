@@ -520,6 +520,8 @@ h1, h2, h3, .display { font-family: 'Sora', 'Inter', sans-serif; }
 .deal-studio-hero__seal span { font-size: 7px; font-weight: 600; letter-spacing: .2em; line-height: 1.7; text-transform: uppercase; }
 .deal-studio-shell { width: min(100%, 1620px); margin: auto; display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(420px, .75fr); background: var(--navy); }
 .deal-studio-form { padding: 64px clamp(28px, 5vw, 76px) 80px; }
+/* Grid children default to min-width:auto, so one wide result row would widen the whole page. */
+.deal-studio-form, .deal-studio-results { min-width: 0; }
 .studio-strategy { display: grid; grid-template-columns: repeat(3, 1fr); margin-bottom: 56px; border: 1px solid var(--line); }
 .studio-strategy button { padding: 20px; display: flex; justify-content: center; align-items: center; gap: 12px; background: transparent; color: var(--mist); border: 0; font-size: 9px; font-weight: 600; letter-spacing: .18em; text-transform: uppercase; transition: background .3s, color .3s; }
 .studio-strategy button + button { border-left: 1px solid var(--line); }
@@ -673,6 +675,7 @@ h1, h2, h3, .display { font-family: 'Sora', 'Inter', sans-serif; }
 .studio-hurdle-grid strong { margin: 10px 0 4px; display: block; font-size: 18px; font-weight: 400; }
 .studio-hurdle-grid small { color: var(--mist); font-size: 7px; }
 .studio-scenario-table { margin-top: 13px; overflow-x: auto; }
+.studio-scenario-table:focus-visible { outline: 2px solid var(--steel-bright); outline-offset: 3px; }
 .studio-scenario-row { min-width: 450px; padding: 11px 5px; display: grid; grid-template-columns: 1.1fr repeat(4, 1fr); gap: 8px; align-items: center; border-bottom: 1px solid var(--line); font-size: 9px; font-variant-numeric: tabular-nums; }
 .studio-scenario-row span { text-align: right; }
 .studio-scenario-row--head { color: var(--mist); font-size: 6px; letter-spacing: .12em; text-transform: uppercase; }
@@ -713,7 +716,7 @@ h1, h2, h3, .display { font-family: 'Sora', 'Inter', sans-serif; }
   .mf-story { grid-template-columns: 1fr; }
   .mf-footer__top { grid-template-columns: 1fr 1fr; }
   .mf-offices { grid-template-columns: 1fr; gap: 40px; }
-  .deal-studio-shell { grid-template-columns: 1fr; }
+  .deal-studio-shell { grid-template-columns: minmax(0, 1fr); }
   .deal-studio-results { border-left: 0; border-top: 1px solid var(--line); min-height: 680px; }
   .mf-filters { grid-template-columns: 1fr 1fr; }
 }
@@ -797,4 +800,9 @@ h1, h2, h3, .display { font-family: 'Sora', 'Inter', sans-serif; }
   .studio-decision-kpis { grid-template-columns: 1fr; }
   .studio-decision-kpis article, .studio-decision-kpis article:nth-child(odd), .studio-decision-kpis article:nth-last-child(-n+2) { border-right: 0; border-bottom: 1px solid var(--line); }
   .studio-decision-kpis article:last-child { border-bottom: 0; }
+  /* Phone layout: the case name takes its own line and the four figures sit beneath it,
+     so the table fits from 320 px up without sideways scrolling. */
+  .studio-scenario-row { min-width: 0; grid-template-columns: repeat(4, minmax(0, 1fr)); row-gap: 5px; }
+  .studio-scenario-row strong { grid-column: 1 / -1; }
+  .studio-scenario-row--head span:first-child { display: none; }
 }
