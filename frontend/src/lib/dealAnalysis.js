@@ -255,6 +255,22 @@ const summarize = (values) => {
   return { mean: valid.reduce((sum, value) => sum + value, 0) / valid.length, minimum: valid[0], p10: percentile(valid, .1), p25: percentile(valid, .25), p50: percentile(valid, .5), p75: percentile(valid, .75), p90: percentile(valid, .9), maximum: valid[valid.length - 1], probability_above_zero: valid.filter((value) => value > 0).length / valid.length, probability_below_one: valid.filter((value) => value < 1).length / valid.length, sample_size: valid.length };
 };
 
+// A losing iteration can have no solvable IRR: nothing came back, or the sale ended
+// under water after some income. It is one of the worst outcomes, not a missing
+// one, so Monte Carlo scores it with the annual return implied by cash returned
+// over cash invested across the hold. Nothing back gives -100%. An unsolvable IRR
+// on an iteration that made money stays out, because its sign is not certain.
+export const lossEquivalentReturn = (equityMultiple, holdMonths) => (
+  Number.isFinite(equityMultiple) && equityMultiple >= 0 && equityMultiple < 1 && holdMonths > 0
+    ? equityMultiple ** (12 / holdMonths) - 1
+    : null
+);
+const lossEquivalentIrr = (analysis) => (
+  Number.isFinite(analysis.metrics?.irr?.value) || !Array.isArray(analysis.cash_flows)
+    ? null
+    : lossEquivalentReturn(analysis.metrics?.equity_multiple?.value, analysis.cash_flows.length - 1)
+);
+
 // The browser fallback stops at this many iterations per case to stay responsive.
 export const BROWSER_MONTE_CARLO_ITERATION_CAP = 5000;
 
@@ -267,7 +283,7 @@ export const MONTE_CARLO_STANDARD_WARNINGS = [
 export const runMonteCarloLocally = ({ deal, scenarios }) => ({
   formula_version: FORMULA_VERSION,
   scenarios: scenarios.map((scenario) => {
-    const iterations = Math.min(scenario.iterations, BROWSER_MONTE_CARLO_ITERATION_CAP); const random = seededRandom(scenario.seed); const values = {}; let failures = 0; let firstFailure = null;
+    const iterations = Math.min(scenario.iterations, BROWSER_MONTE_CARLO_ITERATION_CAP); const random = seededRandom(scenario.seed); const values = {}; let lossesWithoutIrr = 0; let failures = 0; let firstFailure = null;
     for (let iteration = 0; iteration < iterations; iteration += 1) {
       const shocked = JSON.parse(JSON.stringify(deal));
       Object.entries(scenario.drivers).forEach(([driver, distribution]) => {
@@ -289,13 +305,18 @@ export const runMonteCarloLocally = ({ deal, scenarios }) => ({
       });
       let analysis;
       try { analysis = analyzeDealLocally(shocked); } catch (error) { failures += 1; if (!firstFailure) firstFailure = error; continue; }
-      Object.entries(analysis.metrics).forEach(([key, item]) => { if (!values[key]) values[key] = []; if (Number.isFinite(item.value)) values[key].push(item.value); });
+      const lossIrr = lossEquivalentIrr(analysis);
+      Object.entries(analysis.metrics).forEach(([key, item]) => {
+        if (!values[key]) values[key] = [];
+        if (Number.isFinite(item.value)) values[key].push(item.value);
+        else if (key === 'irr' && lossIrr !== null) { values[key].push(lossIrr); lossesWithoutIrr += 1; }
+      });
     }
     const completed = iterations - failures;
     if (completed === 0) throw new Error(`Monte Carlo scenario '${scenario.name}' produced no valid iterations${firstFailure?.message ? `: ${firstFailure.message}` : '.'}`);
     const warnings = [...MONTE_CARLO_STANDARD_WARNINGS];
     if (scenario.iterations > iterations) warnings.push(`Browser simulation capped at ${BROWSER_MONTE_CARLO_ITERATION_CAP.toLocaleString('en-US')} iterations per case for responsiveness; ${scenario.iterations.toLocaleString('en-US')} were requested.`);
     if (failures) warnings.push(`${failures} iterations were excluded because sampled inputs produced invalid economics.`);
-    return { name: scenario.name, iterations_requested: scenario.iterations, iterations_completed: completed, failed_iterations: failures, seed: scenario.seed, summaries: Object.fromEntries(Object.entries(values).map(([key, items]) => [key, summarize(items)])), warnings };
+    return { name: scenario.name, iterations_requested: scenario.iterations, iterations_completed: completed, failed_iterations: failures, seed: scenario.seed, summaries: Object.fromEntries(Object.entries(values).map(([key, items]) => [key, { ...summarize(items), loss_without_irr_count: key === 'irr' ? lossesWithoutIrr : 0 }])), warnings };
   }),
 });

@@ -22,6 +22,10 @@ export const scenarioDisclosure = (scenario, summary, metricLabel) => {
     notes.push(`Only ${count(completed + (excluded || 0))} of the ${count(requested)} requested iterations were run.`);
   }
   if (excluded) notes.push(`${count(excluded)} iterations were excluded because the sampled inputs produced invalid economics.`);
+  const lossesWithoutIrr = known(summary?.loss_without_irr_count) ? summary.loss_without_irr_count : 0;
+  if (lossesWithoutIrr > 0) {
+    notes.push(`${count(lossesWithoutIrr)} losing iterations had no solvable ${metricLabel}. They are counted as losses, using the annual return implied by cash returned over cash invested (-100% when nothing came back).`);
+  }
   if (sample !== null && sample < completed) {
     notes.push(`${count(completed - sample)} completed iterations had no defined ${metricLabel} and are left out of the figures above.`);
   }

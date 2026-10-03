@@ -307,6 +307,10 @@ class MonteCarloMetricSummary(StrictModel):
     # Number of iterations with a defined value for this metric: the denominator
     # of the two probabilities above. It can be lower than iterations_completed.
     sample_size: int
+    # IRR only: losing iterations with no solvable IRR that are included in
+    # sample_size using the loss-equivalent annual return (-100% when nothing
+    # came back). Zero for every other metric.
+    loss_without_irr_count: int = 0
 
 
 class MonteCarloScenarioResult(StrictModel):
