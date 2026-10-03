@@ -655,7 +655,7 @@ const InvestmentCalculator = () => {
 
                 <section className="studio-decision-section">
                   <div className="studio-decision-section__head"><span>DETERMINISTIC SCENARIOS</span><small>At the current purchase price</small></div>
-                  <div className="studio-scenario-table">
+                  <div className="studio-scenario-table" role="region" aria-label="Deterministic scenarios" tabIndex={0}>
                     <div className="studio-scenario-row studio-scenario-row--head"><span>Case</span><span>NOI</span><span>CoC</span><span>DSCR</span><span>IRR</span></div>
                     {decision.scenarios.map((scenario) => <div className="studio-scenario-row" key={scenario.name}><strong>{scenario.name}</strong><span>{money.format(scenario.metrics.noi || 0)}</span><span>{scenario.metrics.cashOnCash == null ? '—' : `${number.format(scenario.metrics.cashOnCash * 100)}%`}</span><span>{scenario.metrics.dscr == null ? '—' : `${number.format(scenario.metrics.dscr)}×`}</span><span>{scenario.metrics.irr == null ? '—' : `${number.format(scenario.metrics.irr * 100)}%`}</span></div>)}
                   </div>
