@@ -73,7 +73,7 @@ test.each([
   ['/investment-calculator', 'Underwrite with'],
   ['/agents', null],
   ['/about', null],
-  ['/inquire?type=tour', 'Request a property tour.'],
+  ['/inquire?type=tour', 'Tour requests are not open yet.'],
 ])('known deep link %s still loads directly and is not treated as unknown', async (path, heading) => {
   await renderAt(path);
   expect(container.textContent).not.toContain('We can’t find that page.');
