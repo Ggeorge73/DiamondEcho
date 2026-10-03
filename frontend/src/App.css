@@ -341,6 +341,12 @@ h1, h2, h3, .display { font-family: 'Sora', 'Inter', sans-serif; }
 .mf-page-hero h1 { margin: 0; font-size: clamp(42px, 6vw, 96px); font-weight: 300; letter-spacing: -.025em; line-height: 1.02; }
 .mf-page-hero h1 em { color: var(--steel-bright); font-style: normal; }
 .mf-page-hero__lede { max-width: 640px; margin: 30px 0 0; color: var(--mist); font-size: 14.5px; line-height: 1.9; }
+.mf-notfound__path { color: var(--ice); overflow-wrap: anywhere; }
+.mf-notfound__actions { margin-top: 36px; display: flex; flex-wrap: wrap; gap: 14px; }
+.mf-notfound__actions .mf-btn { text-decoration: none; }
+.mf-notfound__actions .mf-btn:focus-visible { outline: 2px solid var(--steel-bright); outline-offset: 4px; }
+/* The heading takes focus on arrival so the message is announced; it is not a control. */
+#not-found-title:focus { outline: none; }
 .mf-page-hero__meta { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; color: var(--mist); font-size: 10px; letter-spacing: .24em; text-transform: uppercase; white-space: nowrap; }
 .mf-page-hero__meta strong { font-family: 'Sora', sans-serif; font-size: 42px; font-weight: 200; color: var(--steel-bright); letter-spacing: 0; }
 .mf-section { width: min(100% - max(12vw, 92px), 1480px); margin: 0 auto; padding: clamp(70px, 9vh, 110px) 0; }
