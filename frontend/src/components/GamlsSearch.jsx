@@ -23,7 +23,9 @@ const GamlsSearch = ({ requestedSearch = '', rentalIntent = false, loading = 'ea
             {rentalIntent && (
               <>Looking for a rental? Rental (Residential) is pre-selected under
               Type. Georgia MLS titles this form “For Sale”, but with that box
-              ticked the results are rentals.</>
+              ticked the results are rentals. Georgia MLS shows the rent amount
+              without stating the period, so confirm with the listing whether
+              it is monthly.</>
             )}
           </p>
         )}
