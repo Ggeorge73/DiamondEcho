@@ -300,6 +300,22 @@ test('risk results show requested, completed, excluded and per-metric sample cou
   expect(container.textContent.match(/Shared note\./g)).toHaveLength(1);
 });
 
+test('losses with no solvable IRR are shown as counted in the result', async () => {
+  runMonteCarloLocally.mockImplementationOnce(({ scenarios }) => ({
+    scenarios: scenarios.map(({ name, seed }, index) => ({
+      name, seed, iterations_requested: 5000, iterations_completed: 5000, failed_iterations: 0,
+      summaries: { irr: { p10: -1, p50: -0.2, p90: -0.01, probability_above_zero: 0.0756, sample_size: 5000, loss_without_irr_count: index === 2 ? 1140 : 0 } },
+      warnings: [],
+    })),
+  }));
+  await click('Run Monte Carlo');
+  const cards = [...container.querySelectorAll('.studio-risk-results article')];
+  expect(cards[0].textContent).not.toContain('losing iterations had no solvable');
+  expect(cards[2].textContent).toContain('7.56% probability above zero (378 of 5,000 valid results)');
+  expect(cards[2].textContent).toContain('1,140 losing iterations had no solvable Projected IRR. They are counted as losses');
+  expect(cards[2].querySelector('dd').textContent).toBe('-100%');
+});
+
 test('a risk result without sample counts says they were not reported', async () => {
   await click('Run Monte Carlo');
   const card = container.querySelector('.studio-risk-results article');
