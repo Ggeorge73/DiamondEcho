@@ -13,5 +13,8 @@
     "test": "npm run test --workspace frontend -- --watchAll=false",
     "build:staff": "npm run build --workspace staff-queue",
     "test:staff": "npm run test --workspace staff-queue"
+  },
+  "overrides": {
+    "@grpc/grpc-js": "^1.13.6"
   }
 }
