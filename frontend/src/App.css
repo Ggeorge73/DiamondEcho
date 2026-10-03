@@ -624,16 +624,16 @@ h1, h2, h3, .display { font-family: 'Sora', 'Inter', sans-serif; }
 .studio-result-tabs { margin-top: 20px; display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid var(--line); }
 .studio-result-tabs button { padding: 14px; border: 0; border-bottom: 1px solid transparent; background: transparent; color: var(--mist); font-size: 8px; font-weight: 600; letter-spacing: .18em; text-transform: uppercase; transition: color .3s, border-color .3s; }
 .studio-result-tabs button.is-active { border-color: var(--steel-bright); color: var(--steel-bright); }
-.studio-risk-results { padding-top: 24px; display: grid; gap: 16px; }
+.studio-risk-results { padding-top: 24px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
 .studio-risk-results > article { padding: 23px; border: 1px solid var(--line); background: var(--panel); }
 .studio-risk-results article > span { color: var(--steel-bright); font-size: 7px; font-weight: 600; letter-spacing: .2em; text-transform: uppercase; }
-.studio-risk-results h3 { margin: 12px 0 5px; font-family: 'Sora', sans-serif; font-size: 30px; font-weight: 300; }
+.studio-risk-results h3 { margin: 12px 0 5px; font-family: 'Sora', sans-serif; font-size: 30px; font-weight: 300; overflow-wrap: anywhere; }
 .studio-risk-results article > p { margin: 0; color: var(--mist); font-size: 9px; }
-.studio-risk-results dl { margin: 20px 0 14px; display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.studio-risk-results dl { margin: 20px 0 14px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .studio-risk-results dl div { padding: 14px 7px; text-align: center; border-right: 1px solid var(--line); }
 .studio-risk-results dl div:last-child { border-right: 0; }
 .studio-risk-results dt { color: var(--mist); font-size: 7px; letter-spacing: .15em; text-transform: uppercase; }
-.studio-risk-results dd { margin: 6px 0 0; font-size: 12px; }
+.studio-risk-results dd { margin: 6px 0 0; font-size: 12px; overflow-wrap: anywhere; }
 .studio-risk-results article > small { display: block; color: var(--mist); font-size: 8px; letter-spacing: .06em; line-height: 1.7; }
 .studio-risk-denominator { white-space: nowrap; }
 .studio-risk-notes { margin: 12px 0 0; padding: 10px 0 0 14px; border-top: 1px solid var(--line); color: #dca66f; font-size: 9px; line-height: 1.65; }
@@ -817,4 +817,11 @@ h1, h2, h3, .display { font-family: 'Sora', 'Inter', sans-serif; }
   .studio-scenario-row { min-width: 0; grid-template-columns: repeat(4, minmax(0, 1fr)); row-gap: 5px; }
   .studio-scenario-row strong { grid-column: 1 / -1; }
   .studio-scenario-row--head span:first-child { display: none; }
+  /* Risk cards: seven-figure profit and loss values were wider than a 320 px card,
+     which pushed the card past the screen edge. Tighter padding and type keep the
+     whole card, border included, on screen. */
+  .studio-risk-results > article { padding: 18px; }
+  .studio-risk-results h3 { font-size: 24px; }
+  .studio-risk-results dl div { padding: 12px 3px; }
+  .studio-risk-results dd { font-size: clamp(10px, 3.1vw, 12px); }
 }
