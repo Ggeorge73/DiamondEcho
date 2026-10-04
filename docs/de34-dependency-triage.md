@@ -120,7 +120,11 @@ Risk: `jsonpath` 1.3.0 declares exactly 1.13.6, so it runs with a patch release 
 
 Eight root packages have no fix while `react-scripts` 5.0.1 is in use: `nth-check`, `svgo` (its 1.x copy), `serialize-javascript`, `webpack-dev-server`, `webpack-dev-middleware`, `node-forge`, `uuid` and the nested `postcss` 7. Clearing them means replacing Create React App with a maintained build tool, which is a migration with its own regression risk. `braces` is separate: it also arrives through `tailwindcss` and Jest, and npm offers no patched release.
 
-Whether to replace the build tool before launch, or to accept these build-time findings for launch, is Gbenga's decision. It has not been made, and nothing in this document makes it. Until a decision is recorded on DE-34, these findings stay open and DE-13 and DE-27 stay gated.
+Whether to replace the build tool before launch, or to accept these build-time findings for launch, was Gbenga's decision. On 2026-10-03 he asked Engineering to make the call and confirmed it by merging the pull request that recorded it: accept for launch on conditions, and replace `react-scripts` afterwards under DE-36. `braces` and `@tootallnate/once` are accepted on the same day. The conditions and the reasoning are in [de34-advisory-dispositions.md](de34-advisory-dispositions.md).
+
+One of those conditions needed a code change. `npm run dev` bound the dev server to every network interface, so the dev-server findings were reachable from the local network while it ran. `scripts/dev.mjs` now defaults `HOST` to `127.0.0.1`. Checked by connecting to the dev server on the loopback address and on the machine's network address: before the change both answered; after it only loopback answers; with `HOST=0.0.0.0` set both answer again.
+
+This is not a launch approval. DE-13 and DE-27 stay gated on their own evidence and on the release-candidate rerun of the audit.
 
 ## Verification on this branch
 
@@ -132,14 +136,14 @@ Whether to replace the build tool before launch, or to accept these build-time f
 
 No deployed environment was tested. A green CI run on this PR is code evidence, not release acceptance.
 
-## Decisions pending
+## Decisions
 
-The first two have been made. The other two each need Gbenga's recorded decision on DE-34.
+All four have been made.
 
 1. Staff queue: accept `@grpc/grpc-js` as not reachable, or apply an override. **Decided on 2026-10-03: override applied.**
 2. Apply the in-range build-tool updates after a visual check of the stylesheet. **Decided on 2026-10-03 by merging PR #27.** `underscore`, which that update could not reach, was handled by its own override on the same day.
-3. Replace `react-scripts`, or accept its build-time findings.
-4. Accept `braces` and the low-severity test-only `@tootallnate/once` finding, or upgrade staff `jsdom`.
+3. Replace `react-scripts`, or accept its build-time findings. **Decided on 2026-10-03: accept for launch on conditions; replace under DE-36.**
+4. Accept `braces` and the low-severity test-only `@tootallnate/once` finding, or upgrade staff `jsdom`. **Decided on 2026-10-03: accept both. The `jsdom` upgrade does not clear the finding.**
 
 The release-candidate rerun of the audit, with command, date and commit, is also still outstanding.
 
