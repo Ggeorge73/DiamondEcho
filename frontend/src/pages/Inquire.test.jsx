@@ -63,7 +63,10 @@ describe('with no inquiry service connected', () => {
     expect(container.textContent).not.toMatch(/advisor can (follow up|review)/);
     expect(container.textContent).toContain('8735 Dunwoody Place');
     expect(container.textContent).toContain('GA 30350, USA');
-    expect(container.querySelector('a[href^="tel:"], a[href^="mailto:"]')).toBeNull();
+    // The notice gives the approved phone number and inbox, and nothing else.
+    const links = [...container.querySelectorAll('a[href^="tel:"], a[href^="mailto:"]')].map((link) => [link.getAttribute('href'), link.textContent]);
+    expect(links).toEqual([['tel:+16785169717', '(678) 516-9717'], ['mailto:realtor@diamondecho.com', 'realtor@diamondecho.com']]);
+    expect(container.textContent).toContain('Reach DiamondEcho directly');
     expect(container.querySelector('a[href="/search"]')).not.toBeNull();
     expect(container.querySelector('a[href="/investment-calculator"]')).not.toBeNull();
     expect(container.querySelector(`a[href="/inquire?type=${kind}"][aria-current="page"]`)).not.toBeNull();

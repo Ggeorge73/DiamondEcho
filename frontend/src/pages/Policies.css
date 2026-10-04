@@ -1,0 +1,17 @@
+.de-policy__updated { margin-top: 22px; color: var(--mist); font-size: 12px; letter-spacing: .12em; text-transform: uppercase; }
+.de-policy__body { width: min(100%, 860px); margin: 0 auto; padding: 70px max(6vw, 22px) 120px; }
+.de-policy__body section + section { margin-top: 46px; padding-top: 40px; border-top: 1px solid var(--line); }
+.de-policy__body h2 { margin: 0 0 16px; font-size: 24px; font-weight: 400; line-height: 1.25; overflow-wrap: anywhere; }
+.de-policy__body p, .de-policy__body li { color: var(--mist); font-size: 16px; line-height: 1.8; overflow-wrap: anywhere; }
+.de-policy__body p { margin: 0 0 14px; }
+.de-policy__body ul { margin: 0; padding-left: 20px; }
+.de-policy__body li + li { margin-top: 10px; }
+.de-policy__body strong { color: var(--ice); font-weight: 500; }
+.de-policy__body a { color: var(--steel-bright); text-underline-offset: 3px; }
+.de-policy__body a:hover, .de-policy__body a:focus-visible { color: var(--ice); }
+.de-policy__contact { margin: 6px 0 22px; color: var(--mist); font-size: 16px; font-style: normal; line-height: 1.9; }
+
+@media (max-width: 720px) {
+  .de-policy__body { padding: 46px 22px 90px; }
+  .de-policy__body h2 { font-size: 21px; }
+}
