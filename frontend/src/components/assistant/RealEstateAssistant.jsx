@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { useLocation } from "react-router-dom";
 import { Bot, ExternalLink, Loader2, MessageCircle, Send, ShieldCheck, X } from "lucide-react";
+import { assistantAvailable } from "../../lib/assistant";
 
 const QUICK_PROMPTS = [
   "Help me plan a home purchase",
@@ -24,7 +25,7 @@ export const launcherOverlapsFrame = (frameRect, viewport, launcherWidth = LAUNC
     && frameRect.left < right && frameRect.right > left;
 };
 
-const RealEstateAssistant = () => {
+const AssistantPanel = () => {
   const { pathname, search } = useLocation();
   const [open, setOpen] = useState(false);
   const [overSearchFrame, setOverSearchFrame] = useState(false);
@@ -174,5 +175,8 @@ const RealEstateAssistant = () => {
     </div>
   );
 };
+
+// With no service to answer, the launcher is not offered at all (DE-20).
+const RealEstateAssistant = () => (assistantAvailable() ? <AssistantPanel /> : null);
 
 export default RealEstateAssistant;

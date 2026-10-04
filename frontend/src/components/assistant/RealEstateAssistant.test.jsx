@@ -27,8 +27,12 @@ describe('launcher next to the Georgia MLS frame', () => {
   const button = () => container.querySelector('button[aria-label="Open DiamondEcho assistant"]');
   const label = () => [...button().querySelectorAll('span')].find((node) => node.textContent === 'Ask DiamondEcho');
 
+  const savedBackend = process.env.REACT_APP_BACKEND_URL;
+
   beforeEach(async () => {
     global.IS_REACT_ACT_ENVIRONMENT = true;
+    // The launcher is only offered where a service can answer.
+    process.env.REACT_APP_BACKEND_URL = 'https://api.example.test';
     Object.assign(window, { innerWidth: viewport.width, innerHeight: viewport.height });
     frame = document.createElement('iframe');
     frame.className = 'de-idx__frame';
@@ -47,6 +51,8 @@ describe('launcher next to the Georgia MLS frame', () => {
     container.remove();
     frame.remove();
     Object.assign(window, { innerWidth: originalSize.width, innerHeight: originalSize.height });
+    if (savedBackend === undefined) delete process.env.REACT_APP_BACKEND_URL;
+    else process.env.REACT_APP_BACKEND_URL = savedBackend;
   });
 
   test('shrinks to its icon while over the frame and keeps its accessible name', () => {
@@ -74,6 +80,8 @@ describe('launcher next to the Georgia MLS frame', () => {
 
 test('launcher keeps its label on pages without the search frame', async () => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
+  const saved = process.env.REACT_APP_BACKEND_URL;
+  process.env.REACT_APP_BACKEND_URL = 'https://api.example.test';
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
@@ -85,4 +93,41 @@ test('launcher keeps its label on pages without the search frame', async () => {
   expect(trigger.textContent).toContain('Ask DiamondEcho');
   await act(async () => root.unmount());
   container.remove();
+  if (saved === undefined) delete process.env.REACT_APP_BACKEND_URL;
+  else process.env.REACT_APP_BACKEND_URL = saved;
+});
+
+describe('a build with no service', () => {
+  const savedBackend = process.env.REACT_APP_BACKEND_URL;
+  let container;
+  let root;
+  const render = async () => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => root.render(<MemoryRouter><RealEstateAssistant /></MemoryRouter>));
+  };
+  beforeEach(() => { global.IS_REACT_ACT_ENVIRONMENT = true; });
+  afterEach(async () => {
+    await act(async () => root.unmount());
+    container.remove();
+    if (savedBackend === undefined) delete process.env.REACT_APP_BACKEND_URL;
+    else process.env.REACT_APP_BACKEND_URL = savedBackend;
+  });
+
+  test.each([[undefined], [''], ['   ']])('does not offer the assistant when the service address is %p', async (value) => {
+    if (value === undefined) delete process.env.REACT_APP_BACKEND_URL;
+    else process.env.REACT_APP_BACKEND_URL = value;
+    await render();
+    expect(container.innerHTML).toBe('');
+    // Nothing is listening, so a stray request to open it shows nothing.
+    await act(async () => { window.dispatchEvent(new CustomEvent('open-diamond-assistant')); });
+    expect(container.innerHTML).toBe('');
+  });
+
+  test('offers the launcher once a service address is set', async () => {
+    process.env.REACT_APP_BACKEND_URL = 'https://api.example.test';
+    await render();
+    expect(container.querySelector('button[aria-label="Open DiamondEcho assistant"]')).not.toBeNull();
+  });
 });
