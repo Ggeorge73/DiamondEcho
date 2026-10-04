@@ -29,8 +29,11 @@ const press = async (key, shiftKey = false) => {
   })));
 };
 
+const savedBackend = process.env.REACT_APP_BACKEND_URL;
 beforeEach(() => { global.IS_REACT_ACT_ENVIRONMENT = true; });
 afterEach(async () => {
+  if (savedBackend === undefined) delete process.env.REACT_APP_BACKEND_URL;
+  else process.env.REACT_APP_BACKEND_URL = savedBackend;
   if (root) await act(async () => root.unmount());
   container?.remove();
   container = null;
@@ -80,7 +83,19 @@ test('lower secondary menu actions remain in the same dialog', async () => {
   expect(container.querySelector('[role="dialog"]')).toBeNull();
 });
 
+test('the menu does not offer the concierge on a build with no service', async () => {
+  delete process.env.REACT_APP_BACKEND_URL;
+  const { dialog } = await renderMenu(true);
+  expect(dialog.textContent).not.toContain('Ask the concierge');
+  expect(container.querySelector('button[aria-label="Open DiamondEcho assistant"]')).toBeNull();
+  // The other menu actions are still there.
+  for (const label of ['Search Georgia MLS', 'Run a deal analysis', 'Explore advisory', 'Buyer inquiry', 'Seller consultation']) {
+    expect(dialog.textContent).toContain(label);
+  }
+});
+
 test('concierge action hands focus to assistant and closing returns to its trigger', async () => {
+  process.env.REACT_APP_BACKEND_URL = 'https://api.example.test';
   const { dialog } = await renderMenu(true);
   const concierge = [...dialog.querySelectorAll('button')].find((button) => button.textContent.includes('Ask the concierge'));
   await act(async () => concierge.click());
