@@ -289,6 +289,24 @@ test('the API path says a large run can stop at the service time limit, and the 
   expect(container.textContent).not.toContain(note);
 });
 
+test('land development is warned from 2,500 on the API path, because the service runs it more slowly', async () => {
+  const note = "A run this large can reach the analysis service's time limit";
+  await useBackend();
+  // Rental at the default of 2,500 finishes on the service, so no note.
+  expect(container.querySelector('[name="mcIterations"]').value).toBe('2500');
+  expect(container.textContent).not.toContain(note);
+  await click(strategyButton.land);
+  expect(container.querySelector('[name="mcIterations"]').value).toBe('2500');
+  expect(container.textContent).toContain(note);
+  await changeSelect('mcIterations', '1000');
+  expect(container.textContent).not.toContain(note);
+  await changeSelect('mcIterations', '2500');
+  await click(strategyButton.flip);
+  expect(container.textContent).not.toContain(note);
+  await changeSelect('mcIterations', '5000');
+  expect(container.textContent).toContain(note);
+});
+
 test('a service run stopped at its time limit shows how many iterations were run', async () => {
   await useBackend();
   axios.post.mockResolvedValueOnce({ data: {
