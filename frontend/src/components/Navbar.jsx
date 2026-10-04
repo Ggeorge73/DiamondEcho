@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowUpRight, Diamond, LayoutGrid, Menu, X } from 'lucide-react';
-import { OFFICE } from '../lib/contact';
+import { BROKERAGE, OFFICE } from '../lib/contact';
 
 const navItems = [
   { label: 'Search homes', to: '/search' },
@@ -155,10 +155,15 @@ const Navbar = () => {
               </nav>
             </div>
             <div className="mf-menu__contact">
+              <h4>Brokerage</h4>
+              <p>
+                {BROKERAGE.name}<br />
+                <a href={BROKERAGE.phoneHref}>Office {BROKERAGE.phone}</a>
+              </p>
               <h4>Georgia office</h4>
               <p>8735 Dunwoody Place<br />GA 30350, USA</p>
               <p>
-                <a href={OFFICE.phoneHref}>{OFFICE.phone}</a><br />
+                <a href={OFFICE.phoneHref}>Direct {OFFICE.phone}</a><br />
                 <a href={OFFICE.emailHref}>{OFFICE.email}</a>
               </p>
             </div>
