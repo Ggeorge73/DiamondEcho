@@ -211,7 +211,9 @@ sys.path.insert(0, sys.argv[1])
 import server
 from fastapi.testclient import TestClient
 with TestClient(server.app) as c:
-    assert c.get('/healthz').status_code == 200
+    for path in ('/health', '/healthz'):
+        r = c.get(path)
+        assert r.status_code == 200 and r.json() == {'status': 'ok'}, path
     r = c.get('/api/v1/inquiries/staff', headers={'Origin':'https://public.example.com','Authorization':'Bearer token'})
     assert r.status_code == 403 and r.headers['cache-control'] == 'no-store'
     assert c.get('/api/status').status_code == 401

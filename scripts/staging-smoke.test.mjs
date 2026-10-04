@@ -27,11 +27,21 @@ function fixture(url, options) {
   if (parsed.hostname === "staff-stage.example.com") return response(200, "<html>staff</html>", {
     "cache-control": "no-store", "content-security-policy": "default-src 'none'", "x-frame-options": "DENY",
   });
-  if (parsed.pathname === "/healthz") return response(200, '{"status":"ok"}');
+  if (parsed.pathname === "/health") return response(200, '{"status":"ok"}');
+  // Cloud Run's front end intercepts this path; the smoke check must not rely on it.
+  if (parsed.pathname === "/healthz") return response(404, "<html>Error 404</html>");
   if (parsed.pathname === "/api/v1/inquiries/staff") return response(503, '{}', { "cache-control": "no-store" });
   const origin = options.headers?.Origin;
   return response(200, '{"service":"DiamondEcho API"}', origin === "https://unapproved.example" ? {} : { "access-control-allow-origin": origin });
 }
+
+test("checks liveness on a path Cloud Run does not intercept", async () => {
+  const requested = [];
+  const results = await checkStaging(parseOrigins(env), (url, options) => { requested.push(new URL(url).pathname); return fixture(url, options); });
+  assert.ok(requested.includes("/health"));
+  assert.ok(!requested.includes("/healthz"));
+  assert.equal(results.find((result) => result.name === "API liveness").pass, true);
+});
 
 test("passes a safe, read-only staging fixture", async () => {
   const results = await checkStaging(parseOrigins(env), fixture);

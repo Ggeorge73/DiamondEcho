@@ -58,7 +58,9 @@ Required backend environment:
 The public inquiry/calculator API requires unauthenticated Cloud Run invocation,
 while staff routes enforce Firebase tokens themselves. Gbenga must approve
 that ingress/IAM choice. Cloud Run IAM alone is not staff authentication.
-`/healthz` proves process liveness only, not delivery or Firebase readiness.
+`/health` proves process liveness only, not delivery or Firebase readiness.
+Do not check `/healthz` on a deployed service: Cloud Run answers that path
+itself with a 404 and the request never reaches the API (DE-33).
 With queue disabled/unconfigured, submissions and staff access return 503.
 The legacy status endpoints are staff-protected, no longer publicly readable.
 

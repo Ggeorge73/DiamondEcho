@@ -1,12 +1,22 @@
 # DE-33 staging setup: first stage
 
-Status: prepared by Claude acting as the Engineering agent on 2026-10-03. **Not yet run.** Nothing here has created a cloud resource. The commands are written from the repository's own settings and from a local run of the API with the same settings; the Google Cloud and Cloudflare steps themselves are untested until Gbenga runs them.
+Status: prepared by Claude acting as the Engineering agent on 2026-10-03. Steps 1 to 3 were run on 2026-10-04 and are recorded under "What has been run" below. Step 4 onward is not yet run.
 
 This first stage stands up the API and two staging sites with the inquiry queue **disabled**. It is enough to repeat the Deal Studio and assistant checks on a deployed build. Staff sign-in, Firestore and real inquiry delivery are the second stage and need Firebase decisions that this document does not make.
 
 ## Who does what
 
 Gbenga creates the accounts, the project, billing and the Pages projects, and runs the commands below himself in Google Cloud Shell. No password, key or token is given to an agent, pasted into chat, or written to GitHub or Jira. The agents need only names and web addresses, which are not secret.
+
+## What has been run
+
+| Step | Result |
+| --- | --- |
+| 1 | Project `diamondecho-staging`, billing attached, budget of 25 US dollars a month. Done by Gbenga |
+| 2 | Public staging `https://diamondecho-staging.pages.dev` and staff staging `https://diamondecho-staff-staging.pages.dev`, both built from `main`. Done by Gbenga |
+| 3 | API `diamondecho-api-staging` in `us-east1`, revision `diamondecho-api-staging-00001-xtt`, built from commit `15500c16549b94b70c0b71ac3380cf4b7e44e653`, at `https://diamondecho-api-staging-299705773978.us-east1.run.app`. Inquiry queue off. Run on 2026-10-04 by Claude in Gbenga's Cloud Shell, at his request, as a one-off exception to the rule that agents do not provision cloud resources. No password, key or token was typed or seen. Checks are recorded on DE-33 |
+
+Cloud Run gives one service two addresses. The second, `https://diamondecho-api-staging-2ku27sqe6q-ue.a.run.app`, reaches the same service. Use the first everywhere so the records agree.
 
 ## Choices made, for Gbenga to confirm
 
@@ -41,6 +51,7 @@ Open Cloud Shell from the console with the staging project selected. Put the two
 PUBLIC_ORIGIN="https://diamondecho-staging.pages.dev"
 STAFF_ORIGIN="https://diamondecho-staff-staging.pages.dev"
 
+(
 set -euo pipefail
 PROJECT_ID="$(gcloud config get-value project)"
 REGION="us-east1"
@@ -70,13 +81,18 @@ gcloud run deploy "${SERVICE}" \
   --set-env-vars "^@^INQUIRY_STAFF_QUEUE_ENABLED=false@PUBLIC_ORIGIN=${PUBLIC_ORIGIN}@STAFF_ORIGIN=${STAFF_ORIGIN}@CORS_ORIGINS=${PUBLIC_ORIGIN},${STAFF_ORIGIN}"
 
 gcloud run services describe "${SERVICE}" --region "${REGION}" --format='value(status.url)'
+)
 ```
+
+The block runs inside brackets so that an error stops the block without closing the Cloud Shell window.
 
 What to expect:
 
 - The first deploy asks to create a storage place for the built image. Answer yes.
 - `--allow-unauthenticated` makes the API reachable from the internet. That is required: the public site's calculator calls it from visitors' browsers. Staff routes check sign-in themselves and, with the queue disabled, answer 503.
 - The last line prints the API address, ending in `.run.app`.
+- To confirm the API is up, open `<API address>/health`. It should show `{"status":"ok"}`. Do not use `/healthz`: Cloud Run answers that path itself with a "404 Not Found" page and the request never reaches the API.
+- Running the block again later redeploys the current `main` to the same service and address. That is how a merged change reaches staging.
 - If a command stops with an error, copy the error text to the Engineering agent. These outputs contain no secrets.
 
 ## Step 4. Point the public staging site at the API (Gbenga, about 5 minutes)

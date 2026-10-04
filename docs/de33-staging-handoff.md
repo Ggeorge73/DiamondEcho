@@ -25,7 +25,7 @@ The step-by-step for the first stage, with the queue disabled, is in [de33-stagi
 
 From the repository root, set `STAGING_PUBLIC_ORIGIN`, `STAGING_STAFF_ORIGIN` and `STAGING_API_ORIGIN` to three distinct **staging** HTTPS origins, without trailing slashes. Then run `node scripts/staging-smoke.mjs`. The script refuses `diamondecho.com` and its subdomains to avoid probing production by mistake. It makes GET requests only. A nonzero exit means one or more checks failed; attach the output, exact commit and URLs to DE-33. Run its offline contract tests with `node --test scripts/staging-smoke.test.mjs`.
 
-The smoke check covers public Pages home and `/inquire` deep link, staff Pages no-store/CSP/frame headers, Cloud Run `/healthz` and `/api/`, allowlisted public/staff CORS, denied unapproved CORS, and unauthenticated staff API denial. It does **not** prove Firebase token authorization, Firestore persistence, provider search, lead delivery, rate limiting, mobile/keyboard behavior, or rollback. Tiara and Lara must verify those separately on the exact staging build before DE-9 or DE-13 can pass. Do not paste inquiry bodies, tokens or secrets into Jira.
+The smoke check covers public Pages home and `/inquire` deep link, staff Pages no-store/CSP/frame headers, Cloud Run `/health` and `/api/`, allowlisted public/staff CORS, denied unapproved CORS, and unauthenticated staff API denial. It does **not** prove Firebase token authorization, Firestore persistence, provider search, lead delivery, rate limiting, mobile/keyboard behavior, or rollback. Tiara and Lara must verify those separately on the exact staging build before DE-9 or DE-13 can pass. Do not paste inquiry bodies, tokens or secrets into Jira.
 
 ## Exit rule
 
