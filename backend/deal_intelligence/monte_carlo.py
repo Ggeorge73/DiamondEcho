@@ -59,9 +59,10 @@ def loss_equivalent_return(equity_multiple: Optional[float], hold_months: int) -
 
 
 # A simulation request stops calculating after this long and returns what it
-# has. Measured on the staging service (1 CPU): three rental cases run about
-# 190 iterations per case each second, so 20 seconds covers roughly 3,800 per
-# case and leaves room inside a 30-second request timeout for a cold start.
+# has. Measured on the staging service (1 CPU, three cases per run), 20 seconds
+# covers about 3,450 iterations per case for rental, 3,700 for fix and flip and
+# 2,250 for land, and leaves room inside a 30-second request timeout for a
+# cold start.
 TIME_BUDGET_ENV = "MONTE_CARLO_TIME_BUDGET_SECONDS"
 DEFAULT_TIME_BUDGET_SECONDS = 20.0
 # Iterations each case runs before the next case takes its turn and the clock
