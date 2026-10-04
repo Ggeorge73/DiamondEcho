@@ -1,0 +1,112 @@
+# DE-33 staging setup: first stage
+
+Status: prepared by Claude acting as the Engineering agent on 2026-10-03. **Not yet run.** Nothing here has created a cloud resource. The commands are written from the repository's own settings and from a local run of the API with the same settings; the Google Cloud and Cloudflare steps themselves are untested until Gbenga runs them.
+
+This first stage stands up the API and two staging sites with the inquiry queue **disabled**. It is enough to repeat the Deal Studio and assistant checks on a deployed build. Staff sign-in, Firestore and real inquiry delivery are the second stage and need Firebase decisions that this document does not make.
+
+## Who does what
+
+Gbenga creates the accounts, the project, billing and the Pages projects, and runs the commands below himself in Google Cloud Shell. No password, key or token is given to an agent, pasted into chat, or written to GitHub or Jira. The agents need only names and web addresses, which are not secret.
+
+## Choices made, for Gbenga to confirm
+
+| Choice | Value | Why |
+| --- | --- | --- |
+| Region | `us-east1` (South Carolina) | Closest Google region to Atlanta. Firestore's location, chosen in the second stage, should match and cannot be changed later |
+| API service name | `diamondecho-api-staging` | Keeps staging and production apart by name |
+| Cost limits | 1 CPU, 1 GiB, at most 3 instances, none kept running when idle | The values in `docs/pages-cloud-run-firebase-runbook.md`. An idle service costs nothing for compute. This is not a spending cap, so the budget alert in step 1 matters |
+
+## Step 1. Google Cloud project (Gbenga, about 10 minutes)
+
+1. In the Google Cloud console create a new project. Suggested name: `diamondecho-staging`. Note the **project ID** the console shows; it may differ from the name.
+2. Attach a billing account to it.
+3. Under Billing, Budgets and alerts, create a budget for this project with email alerts. Suggested amount: 25 US dollars a month.
+
+## Step 2. Two Cloudflare Pages projects (Gbenga, about 10 minutes)
+
+Create both from the same GitHub repository, production branch `main`. Copy the Node and npm settings from the existing DiamondEcho Pages project.
+
+| Project | Build command | Output directory | Settings to add now |
+| --- | --- | --- | --- |
+| Public staging, suggested name `diamondecho-staging` | `npm run build` | `build` | None yet |
+| Staff staging, suggested name `diamondecho-staff-staging` | `npm run build:staff` | `staff-queue/dist` | None. With no settings it builds a page that says the staff queue is disabled, which is correct for this stage |
+
+Note the two addresses Cloudflare gives them, for example `https://diamondecho-staging.pages.dev`. Cloudflare adds letters to a name that is already taken, so use the addresses it actually shows.
+
+## Step 3. Deploy the API (Gbenga, in Google Cloud Shell, about 10 minutes)
+
+Open Cloud Shell from the console with the staging project selected. Put the two addresses from step 2 into the first two lines, with no trailing slash, then paste the block.
+
+```bash
+PUBLIC_ORIGIN="https://diamondecho-staging.pages.dev"
+STAFF_ORIGIN="https://diamondecho-staff-staging.pages.dev"
+
+set -euo pipefail
+PROJECT_ID="$(gcloud config get-value project)"
+REGION="us-east1"
+SERVICE="diamondecho-api-staging"
+RUNTIME_ACCOUNT="diamondecho-api-runtime"
+echo "Deploying to project: ${PROJECT_ID}"
+
+gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com
+
+# A dedicated identity for the running API with no roles granted. Stage two adds
+# only what Firestore and staff sign-in need.
+gcloud iam service-accounts describe "${RUNTIME_ACCOUNT}@${PROJECT_ID}.iam.gserviceaccount.com" >/dev/null 2>&1 \
+  || gcloud iam service-accounts create "${RUNTIME_ACCOUNT}" --display-name="DiamondEcho staging API runtime"
+
+rm -rf DiamondEcho
+git clone --depth 1 https://github.com/Ggeorge73/DiamondEcho.git
+cd DiamondEcho
+echo "Commit being deployed: $(git rev-parse HEAD)"
+
+gcloud run deploy "${SERVICE}" \
+  --source backend \
+  --region "${REGION}" \
+  --service-account "${RUNTIME_ACCOUNT}@${PROJECT_ID}.iam.gserviceaccount.com" \
+  --allow-unauthenticated \
+  --cpu 1 --memory 1Gi --concurrency 1 \
+  --min-instances 0 --max-instances 3 --timeout 30 \
+  --set-env-vars "^@^INQUIRY_STAFF_QUEUE_ENABLED=false@PUBLIC_ORIGIN=${PUBLIC_ORIGIN}@STAFF_ORIGIN=${STAFF_ORIGIN}@CORS_ORIGINS=${PUBLIC_ORIGIN},${STAFF_ORIGIN}"
+
+gcloud run services describe "${SERVICE}" --region "${REGION}" --format='value(status.url)'
+```
+
+What to expect:
+
+- The first deploy asks to create a storage place for the built image. Answer yes.
+- `--allow-unauthenticated` makes the API reachable from the internet. That is required: the public site's calculator calls it from visitors' browsers. Staff routes check sign-in themselves and, with the queue disabled, answer 503.
+- The last line prints the API address, ending in `.run.app`.
+- If a command stops with an error, copy the error text to the Engineering agent. These outputs contain no secrets.
+
+## Step 4. Point the public staging site at the API (Gbenga, about 5 minutes)
+
+In the **public staging** Pages project only, add the setting `REACT_APP_BACKEND_URL` with the API address from step 3, with no `/api` and no trailing slash. Then retry the latest deployment so the build picks it up.
+
+Do not add this setting to the existing DiamondEcho Pages project. That one stays as it is.
+
+## Step 5. Tell the Engineering agent (not secret)
+
+1. The Google Cloud project ID.
+2. The three addresses: public staging, staff staging and API.
+3. The commit printed in step 3.
+
+## What the agents do next
+
+- Run the read-only smoke check (`scripts/staging-smoke.mjs`) against the three addresses and record the output on DE-33.
+- Repeat the checks carried over to DE-33 on the deployed build: Deal Studio through the API for rental, flip and land, Monte Carlo with 10,000 iterations, a rejected request, and the assistant.
+- Record the commit, addresses, region and rollback path on DE-33.
+
+## What this stage does not cover
+
+- Staff sign-in, Firestore, and sending or reading real inquiries. The queue stays disabled, so the inquiry forms on the staging site will show "We could not send your request just now."
+- Address lookup in Deal Studio. It needs Mapbox and RentCast keys stored in Secret Manager, which is a separate step.
+- Any production resource, domain or DNS record.
+
+## Known behaviour to decide before stage two
+
+Address lookups are sent as part of the web address (`/api/v1/properties/lookup?address=...`), and Cloud Run's request log records web addresses. A looked-up address would therefore appear in the request log. The Privacy page says so. Whether to shorten log retention or change the lookup to keep the address out of the log is an open decision.
+
+## Rollback
+
+Staging only. To stop the API: `gcloud run services delete diamondecho-api-staging --region us-east1`. To remove a staging site, delete its Pages project. Neither touches production.
