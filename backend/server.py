@@ -21,9 +21,14 @@ api = APIRouter(prefix="/api")
 def root():
     return {"service": "DiamondEcho API"}
 
+# Liveness only, not proof of Firebase configuration or queue delivery.
+# Cloud Run's front end answers some paths ending in "z" itself, so /healthz
+# never reaches this process there (found on the staging deploy, DE-33).
+# /health is the path to check on a deployed service; /healthz stays for
+# local runs and anything that already calls it.
+@app.get("/health")
 @app.get("/healthz")
 def health():
-    # Liveness only, not proof of Firebase configuration or queue delivery.
     return {"status": "ok"}
 
 class StatusCheck(BaseModel):
