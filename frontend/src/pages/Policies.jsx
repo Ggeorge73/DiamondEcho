@@ -2,12 +2,13 @@ import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { BROKERAGE, OFFICE } from '../lib/contact';
 import { inquiryServiceConfigured } from './Inquire';
+import { assistantAvailable } from '../lib/assistant';
 import './Policies.css';
 
 // Plain-language drafts for Gbenga's review (DE-18). They describe what this
 // site does today and claim no legal certification. Keep them in step with
 // frontend/public/index.html: a script added there must be described here.
-export const POLICIES_UPDATED = 'October 3, 2026';
+export const POLICIES_UPDATED = 'October 4, 2026';
 
 const usePageTitle = (title) => {
   useEffect(() => {
@@ -121,14 +122,16 @@ export const Privacy = () => {
         </p>
       </section>
 
-      <section>
-        <h2>Ask DiamondEcho assistant</h2>
-        <p>
-          Questions you type into the assistant, and the state you choose, are sent to
-          DiamondEcho's service to produce an answer. They are not used to build a
-          profile of you. Please do not type personal or financial details into it.
-        </p>
-      </section>
+      {assistantAvailable() && (
+        <section>
+          <h2>Ask DiamondEcho assistant</h2>
+          <p>
+            Questions you type into the assistant, and the state you choose, are sent to
+            DiamondEcho's service to produce an answer. They are not used to build a
+            profile of you. Please do not type personal or financial details into it.
+          </p>
+        </section>
+      )}
 
       <section>
         <h2>Companies that help deliver this site</h2>
@@ -201,13 +204,15 @@ export const Terms = () => {
         </p>
       </section>
 
-      <section>
-        <h2>Assistant</h2>
-        <p>
-          The Ask DiamondEcho assistant gives general real estate information. It can be
-          wrong or out of date, and it is not legal, tax, lending or investment advice.
-        </p>
-      </section>
+      {assistantAvailable() && (
+        <section>
+          <h2>Assistant</h2>
+          <p>
+            The Ask DiamondEcho assistant gives general real estate information. It can be
+            wrong or out of date, and it is not legal, tax, lending or investment advice.
+          </p>
+        </section>
+      )}
 
       <section>
         <h2>Requests and tours</h2>
