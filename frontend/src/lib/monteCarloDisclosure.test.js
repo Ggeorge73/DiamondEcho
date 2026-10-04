@@ -83,6 +83,15 @@ test('an engine sentence about a cap or exclusions is dropped only when the coun
   expect(splitWarnings([withoutCounts]).common).toEqual(['keep', capped, excluded]);
 });
 
+test('the service time-limit sentence is replaced by the counts in the same way', () => {
+  const stopped = 'Service simulation capped at 3,800 iterations for this case to answer in time; 10,000 were requested.';
+  const scenario = { iterations_requested: 10000, iterations_completed: 3800, failed_iterations: 0, warnings: ['keep', stopped] };
+  expect(splitWarnings([scenario])).toEqual({ common: ['keep'], perScenario: [[]] });
+  const disclosure = scenarioDisclosure(scenario, { probability_above_zero: 0.5, sample_size: 3800 }, 'Projected IRR');
+  expect(disclosure.counts.slice(0, 3)).toEqual(['Requested 10,000', 'Completed 3,800', 'Excluded 0']);
+  expect(disclosure.notes[0]).toBe('Only 3,800 of the 10,000 requested iterations were run.');
+});
+
 test('losses with no solvable IRR are stated as counted, not left out', () => {
   const disclosure = scenarioDisclosure(
     { iterations_requested: 5000, iterations_completed: 5000, failed_iterations: 0 },
