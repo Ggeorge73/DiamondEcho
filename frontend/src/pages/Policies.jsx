@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { OFFICE } from '../lib/contact';
+import { BROKERAGE, OFFICE } from '../lib/contact';
 import { inquiryServiceConfigured } from './Inquire';
 import './Policies.css';
 
@@ -19,10 +19,12 @@ const usePageTitle = (title) => {
 
 const ContactBlock = () => (
   <address className="de-policy__contact">
+    Brokerage: {BROKERAGE.name}<br />
+    <a href={BROKERAGE.phoneHref}>Office {BROKERAGE.phone}</a><br />
     DiamondEcho<br />
     {OFFICE.addressLines[0]}<br />
     {OFFICE.addressLines[1]}<br />
-    <a href={OFFICE.phoneHref}>{OFFICE.phone}</a><br />
+    <a href={OFFICE.phoneHref}>Direct {OFFICE.phone}</a><br />
     <a href={OFFICE.emailHref}>{OFFICE.email}</a>
   </address>
 );
@@ -167,6 +169,7 @@ export const Terms = () => {
       <section>
         <h2>What this site is</h2>
         <p>
+          DiamondEcho operates under the real estate brokerage {BROKERAGE.name}.
           This site offers a Georgia MLS property search, a deal analysis tool and ways
           to contact DiamondEcho. It is provided for general information. Nothing on it
           is an offer to buy, sell or lease property.
