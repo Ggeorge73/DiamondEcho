@@ -44,6 +44,16 @@ Start with one CPU, 1 GiB, concurrency 1, min instances 0, max instances 3 and
 calculator calls; benchmark worst-case Monte Carlo before rollout. These are
 initial settings, not a measured production sizing guarantee or spending cap.
 
+Benchmark on staging at these settings, 2026-10-04 (DE-33), three rental cases
+per run: 1,000 iterations per case 5.3 s; 2,500 14.1 s; 5,000 25.2 s; 10,000
+cut off by the 30-second timeout with no result, after which the abandoned
+calculation delayed the next requests. The API therefore stops a simulation at
+`MONTE_CARLO_TIME_BUDGET_SECONDS` (default 20) and returns the iterations it
+completed, the same number for every case, with the counts stated in the
+result. Keep the budget at least 8 seconds below the request timeout to leave
+room for a cold start (7.3 s measured). If the timeout is raised, raise the
+budget with it.
+
 Required backend environment:
 
 | Variable | Value / meaning |
@@ -54,6 +64,7 @@ Required backend environment:
 | STAFF_ORIGIN | Different exact HTTPS staff origin, no trailing slash |
 | CORS_ORIGINS | Only those approved origins; add www only if actually used |
 | INQUIRY_STAFF_QUEUE_ENABLED | false until operational acceptance; then true |
+| MONTE_CARLO_TIME_BUDGET_SECONDS | Optional. Seconds a simulation may calculate before it returns what it has. Default 20. `0` removes the limit and is only safe where nothing cuts requests off |
 
 The public inquiry/calculator API requires unauthenticated Cloud Run invocation,
 while staff routes enforce Firebase tokens themselves. Gbenga must approve

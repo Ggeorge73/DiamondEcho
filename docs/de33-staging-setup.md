@@ -1,6 +1,6 @@
 # DE-33 staging setup: first stage
 
-Status: prepared by Claude acting as the Engineering agent on 2026-10-03. Steps 1 to 3 were run on 2026-10-04 and are recorded under "What has been run" below. Step 4 onward is not yet run.
+Status: prepared by Claude acting as the Engineering agent on 2026-10-03. Steps 1 to 4 were run on 2026-10-04 and are recorded under "What has been run" and "What has been checked on staging" below.
 
 This first stage stands up the API and two staging sites with the inquiry queue **disabled**. It is enough to repeat the Deal Studio and assistant checks on a deployed build. Staff sign-in, Firestore and real inquiry delivery are the second stage and need Firebase decisions that this document does not make.
 
@@ -15,6 +15,8 @@ Gbenga creates the accounts, the project, billing and the Pages projects, and ru
 | 1 | Project `diamondecho-staging`, billing attached, budget of 25 US dollars a month. Done by Gbenga |
 | 2 | Public staging `https://diamondecho-staging.pages.dev` and staff staging `https://diamondecho-staff-staging.pages.dev`, both built from `main`. Done by Gbenga |
 | 3 | API `diamondecho-api-staging` in `us-east1`, revision `diamondecho-api-staging-00001-xtt`, built from commit `15500c16549b94b70c0b71ac3380cf4b7e44e653`, at `https://diamondecho-api-staging-299705773978.us-east1.run.app`. Inquiry queue off. Run on 2026-10-04 by Claude in Gbenga's Cloud Shell, at his request, as a one-off exception to the rule that agents do not provision cloud resources. No password, key or token was typed or seen. Checks are recorded on DE-33 |
+| 3, repeated | Redeployed from `1d69bf53894c65d82c8911d8da390308f93481f4` after PR #42, revision `diamondecho-api-staging-00002-sxs`, same address and settings. Run by Claude at Gbenga's request |
+| 4 | `REACT_APP_BACKEND_URL` added to the `diamondecho-staging` Pages project (Production) and the latest deployment retried. Run by Claude in Gbenga's Cloudflare dashboard, with his permission. The existing DiamondEcho Pages project was not touched |
 
 Cloud Run gives one service two addresses. The second, `https://diamondecho-api-staging-2ku27sqe6q-ue.a.run.app`, reaches the same service. Use the first everywhere so the records agree.
 
@@ -112,6 +114,14 @@ Do not add this setting to the existing DiamondEcho Pages project. That one stay
 - Run the read-only smoke check (`scripts/staging-smoke.mjs`) against the three addresses and record the output on DE-33.
 - Repeat the checks carried over to DE-33 on the deployed build: Deal Studio through the API for rental, flip and land, Monte Carlo with 10,000 iterations, a rejected request, and the assistant.
 - Record the commit, addresses, region and rollback path on DE-33.
+
+## What has been checked on staging
+
+Recorded on DE-33 on 2026-10-04. Step 4 is set: `REACT_APP_BACKEND_URL` on the `diamondecho-staging` Pages project points at the API address above.
+
+- Smoke check (`scripts/staging-smoke.mjs`): 9 of 9 pass.
+- Deal Studio base analysis for rental, flip and land, a rejected request, and the assistant: pass through the staging site.
+- Risk simulation: 1,000, 2,500 and 5,000 iterations per case finish (5.3 s, 14.1 s, 25.2 s). 10,000 did not finish inside the 30-second request limit. The API now stops a simulation at a time budget of 20 seconds and returns what it completed; the results panel states how many iterations were run. This needs a redeploy of the API after the change is merged.
 
 ## What this stage does not cover
 

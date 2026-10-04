@@ -3,7 +3,7 @@
 from fastapi import APIRouter, HTTPException
 
 from .engine import analyze_deal
-from .monte_carlo import run_monte_carlo
+from .monte_carlo import run_monte_carlo, time_budget_seconds
 from .models import (
     DealAnalysisRequest,
     DealAnalysisResponse,
@@ -44,10 +44,12 @@ async def sensitivity(request: SensitivityAnalysisRequest) -> SensitivityAnalysi
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+# A plain function, not a coroutine: FastAPI runs it in a worker thread, so a
+# long simulation does not stop the service answering its other routes.
 @router.post("/monte-carlo", response_model=MonteCarloResponse)
-async def monte_carlo(request: MonteCarloRequest) -> MonteCarloResponse:
+def monte_carlo(request: MonteCarloRequest) -> MonteCarloResponse:
     try:
-        return run_monte_carlo(request)
+        return run_monte_carlo(request, time_budget=time_budget_seconds())
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
