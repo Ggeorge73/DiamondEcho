@@ -19,6 +19,12 @@ import { buildMonteCarloScenarios, MONTE_CARLO_CASES } from '../lib/monteCarloCa
 import { resolveListingContext } from '../lib/listingContext';
 import { applyPropertyAutofill, preparePropertyChange } from '../lib/propertyAutofill';
 
+// The analysis service stops a simulation at its time budget and returns what
+// it completed (backend/deal_intelligence/monte_carlo.py). Measured on staging,
+// 5,000 iterations per case is the smallest choice on this form that came close
+// to that limit, so the page says so from there upward.
+const SERVICE_TIME_LIMIT_NOTE_FROM = 5000;
+
 const MARKET_OPTIONS = [
   'Atlanta, GA', 'Austin, TX', 'Boston, MA', 'Charlotte, NC', 'Chicago, IL',
   'Dallas, TX', 'Denver, CO', 'Houston, TX', 'Las Vegas, NV', 'Los Angeles, CA',
@@ -597,6 +603,7 @@ const InvestmentCalculator = () => {
             </div>
             <p className="studio-case-note">Every run includes all three cases so the committee view is complete regardless of the result tab in focus.</p>
             {!backendUrl && Number(form.mcIterations) > BROWSER_MONTE_CARLO_ITERATION_CAP && <p className="studio-case-note" role="note">This browser runs at most {BROWSER_MONTE_CARLO_ITERATION_CAP.toLocaleString('en-US')} iterations per case. {Number(form.mcIterations).toLocaleString('en-US')} were selected, so each case will stop at {BROWSER_MONTE_CARLO_ITERATION_CAP.toLocaleString('en-US')} and the results will say so.</p>}
+            {backendUrl && Number(form.mcIterations) >= SERVICE_TIME_LIMIT_NOTE_FROM && <p className="studio-case-note" role="note">A run this large can reach the analysis service's time limit. If it does, every case stops at the same point and the results state how many iterations were run.</p>}
             <div className="studio-field-grid">
               <SelectField label="Iterations per case" name="mcIterations" value={form.mcIterations} onChange={update}><option value="1000">1,000</option><option value="2500">2,500</option><option value="5000">5,000</option><option value="10000">10,000</option></SelectField>
               {form.strategy === 'rental' ? <>

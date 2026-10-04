@@ -275,6 +275,42 @@ test('the API path does not claim a browser cap', async () => {
   expect(container.textContent).not.toContain('This browser runs at most');
 });
 
+test('the API path says a large run can stop at the service time limit, and the browser path does not', async () => {
+  const note = "A run this large can reach the analysis service's time limit";
+  await changeSelect('mcIterations', '10000');
+  expect(container.textContent).not.toContain(note);
+  await useBackend();
+  expect(container.textContent).not.toContain(note);
+  await changeSelect('mcIterations', '10000');
+  expect(container.textContent).toContain(`${note}. If it does, every case stops at the same point and the results state how many iterations were run.`);
+  await changeSelect('mcIterations', '5000');
+  expect(container.textContent).toContain(note);
+  await changeSelect('mcIterations', '2500');
+  expect(container.textContent).not.toContain(note);
+});
+
+test('a service run stopped at its time limit shows how many iterations were run', async () => {
+  await useBackend();
+  axios.post.mockResolvedValueOnce({ data: {
+    scenarios: ['Committee case', 'Downside case', 'Severe stress'].map((name, index) => ({
+      name, seed: 2026 + index, iterations_requested: 10000, iterations_completed: 3800, failed_iterations: 0,
+      summaries: { irr: { p10: 0.01, p50: 0.08, p90: 0.15, probability_above_zero: 0.75, sample_size: 3800 } },
+      warnings: ['Shared note.', 'Service simulation capped at 3,800 iterations for this case to answer in time; 10,000 were requested.'],
+    })),
+  } });
+  await click('Run Monte Carlo');
+  await act(async () => { await Promise.resolve(); });
+  const cards = [...container.querySelectorAll('.studio-risk-results article')];
+  expect(cards).toHaveLength(3);
+  for (const card of cards) {
+    expect(card.querySelector('small').textContent).toContain('Requested 10,000 · Completed 3,800 · Excluded 0 · Valid for Projected IRR 3,800');
+    expect(card.textContent).toContain('Only 3,800 of the 10,000 requested iterations were run.');
+    expect(card.textContent).toContain('75% probability above zero (2,850 of 3,800 valid results)');
+  }
+  // The counts replace the service's own sentence; it is not shown twice.
+  expect(container.textContent).not.toContain('Service simulation capped at');
+});
+
 test('risk results show requested, completed, excluded and per-metric sample counts with the probability', async () => {
   runMonteCarloLocally.mockImplementationOnce(({ scenarios }) => ({
     scenarios: scenarios.map(({ name, seed }, index) => ({
