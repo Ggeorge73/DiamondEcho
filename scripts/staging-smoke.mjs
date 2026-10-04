@@ -30,7 +30,8 @@ export async function checkStaging(origins, fetcher = fetch) {
     { name: "public home", url: `${publicOrigin}/`, status: 200, html: true },
     { name: "public inquiry deep link", url: `${publicOrigin}/inquire`, status: 200, html: true },
     { name: "staff home", url: `${staffOrigin}/`, status: 200, html: true, staff: true },
-    { name: "API liveness", url: `${apiOrigin}/healthz`, status: 200, json: { status: "ok" } },
+    // Not /healthz: Cloud Run answers that path itself with a 404 (DE-33).
+    { name: "API liveness", url: `${apiOrigin}/health`, status: 200, json: { status: "ok" } },
     { name: "API identity", url: `${apiOrigin}/api/`, status: 200, json: { service: "DiamondEcho API" } },
   ];
   const results = [];
