@@ -79,4 +79,6 @@
 /* Shown in place of the form while no inquiry service is connected. */
 .de-inquiry-closed p { color: var(--mist); font-size: 15px; line-height: 1.8; }
 .de-inquiry-closed h3 { margin: 28px 0 6px; font-size: 12px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; }
+.de-inquiry-closed__contact a { color: var(--steel-bright); font-size: 17px; text-decoration: none; }
+.de-inquiry-closed__contact a:hover, .de-inquiry-closed__contact a:focus-visible { color: var(--ice); text-decoration: underline; }
 .de-inquiry-closed__actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 32px; }

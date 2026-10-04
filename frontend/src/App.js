@@ -10,6 +10,7 @@ import Agents from "./pages/Agents";
 import About from "./pages/About";
 import Inquire from "./pages/Inquire";
 import NotFound from "./pages/NotFound";
+import { Privacy, Terms } from "./pages/Policies";
 import RealEstateAssistant from "./components/assistant/RealEstateAssistant";
 
 const ScrollToTop = () => {
@@ -32,6 +33,8 @@ function App() {
           <Route path="/agents" element={<Agents />} />
           <Route path="/about" element={<About />} />
           <Route path="/inquire" element={<Inquire />} />
+          <Route path="/privacy" element={<Privacy />} />
+          <Route path="/terms" element={<Terms />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
         <Footer />

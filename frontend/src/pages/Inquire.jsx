@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import InquiryForm from '../components/InquiryForm';
+import { OFFICE } from '../lib/contact';
 import './Inquire.css';
 
 const copy = {
@@ -27,6 +28,11 @@ const InquiryClosed = ({ kind }) => (
     <p>
       DiamondEcho is not yet taking {closedCopy[kind].what} through this website, so
       nothing can be sent from this page. No details are collected here.
+    </p>
+    <h3>Reach DiamondEcho directly</h3>
+    <p className="de-inquiry-closed__contact">
+      <a href={OFFICE.phoneHref}>{OFFICE.phone}</a><br />
+      <a href={OFFICE.emailHref}>{OFFICE.email}</a>
     </p>
     <h3>Georgia office</h3>
     <p>8735 Dunwoody Place<br />GA 30350, USA</p>

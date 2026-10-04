@@ -6,6 +6,8 @@ Status: code-side verification prepared; no Cloudflare, Google/Firebase, DNS, bi
 
 Gbenga approves the non-production Cloudflare Pages projects, Google/Firebase project and billing, Cloud Run region, Firestore location, service identities, staff test UID, and exact three staging HTTPS origins. Use separate staging credentials and data, never production credentials in PR previews. Adeoba configures the services; Lara owns the inquiry-routing and test-data procedure; Tiara receives the exact URLs and commit. The staff queue remains disabled until its role/UID checks, abuse controls and Lara's routing are accepted. See `docs/pages-cloud-run-firebase-runbook.md` for the production architecture and explicit gates.
 
+The step-by-step for the first stage, with the queue disabled, is in [de33-staging-setup.md](de33-staging-setup.md). It is prepared and not yet run.
+
 ## Deployment evidence to record in DE-33
 
 | Evidence | Record after deployment |
