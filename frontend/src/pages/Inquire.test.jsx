@@ -65,7 +65,12 @@ describe('with no inquiry service connected', () => {
     expect(container.textContent).toContain('GA 30350, USA');
     // The notice gives the approved phone number and inbox, and nothing else.
     const links = [...container.querySelectorAll('a[href^="tel:"], a[href^="mailto:"]')].map((link) => [link.getAttribute('href'), link.textContent]);
-    expect(links).toEqual([['tel:+16785169717', '(678) 516-9717'], ['mailto:realtor@diamondecho.com', 'realtor@diamondecho.com']]);
+    expect(links).toEqual([
+      ['tel:+17704955050', 'Office (770) 495-5050'],
+      ['tel:+16785169717', 'Direct (678) 516-9717'],
+      ['mailto:realtor@diamondecho.com', 'realtor@diamondecho.com'],
+    ]);
+    expect(container.textContent).toContain('Virtual Properties Realty.com');
     expect(container.textContent).toContain('Reach DiamondEcho directly');
     expect(container.querySelector('a[href="/search"]')).not.toBeNull();
     expect(container.querySelector('a[href="/investment-calculator"]')).not.toBeNull();

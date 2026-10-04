@@ -50,7 +50,9 @@ test('privacy page says what the site does and does not collect', async () => {
   expect(text).toContain('Cloudflare');
   expect(text).toContain('Last updated');
   expect(text).toContain("removes that tool's leftover cookie");
-  expect(container.querySelector('a[href="tel:+16785169717"]').textContent).toBe('(678) 516-9717');
+  expect(container.querySelector('a[href="tel:+16785169717"]').textContent).toBe('Direct (678) 516-9717');
+  expect(container.querySelector('a[href="tel:+17704955050"]').textContent).toBe('Office (770) 495-5050');
+  expect(text).toContain('Brokerage: Virtual Properties Realty.com');
   expect(container.querySelector('a[href="mailto:realtor@diamondecho.com"]')).not.toBeNull();
   expect(container.querySelector('a[href="/terms"]')).not.toBeNull();
 });
@@ -85,6 +87,7 @@ test('terms page states the limits of listings, Deal Studio and requests', async
   expect(text).toContain('not financial, investment, tax or legal advice');
   expect(text).toContain('A tour request is a request, not a booking');
   expect(text).toContain('equal housing opportunity');
+  expect(text).toContain('operates under the real estate brokerage Virtual Properties Realty.com');
   expect(container.querySelector('a[href="/privacy"]')).not.toBeNull();
 });
 

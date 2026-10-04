@@ -8,3 +8,13 @@ export const OFFICE = Object.freeze({
   email: 'realtor@diamondecho.com',
   emailHref: 'mailto:realtor@diamondecho.com',
 });
+
+// The firm DiamondEcho operates under, confirmed by Gbenga on 2026-10-04 (DE-17).
+// Georgia Real Estate Commission Rule 520-1-.09 asks that the firm's name and
+// the firm's telephone number appear on every page, at least as prominently as
+// the licensee's own. Wherever OFFICE.phone is shown, show these first.
+export const BROKERAGE = Object.freeze({
+  name: 'Virtual Properties Realty.com',
+  phone: '(770) 495-5050',
+  phoneHref: 'tel:+17704955050',
+});
