@@ -5,7 +5,7 @@ const child = spawn("npm", ["run", "start", "--workspace", "frontend"], {
   env: {
     ...process.env,
     BROWSER: "none",
-    HOST: "0.0.0.0",
+    HOST: process.env.HOST || "127.0.0.1",
     PORT: process.env.PORT || "4173",
   },
 });
