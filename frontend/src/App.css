@@ -278,6 +278,8 @@ h1, h2, h3, .display { font-family: 'Sora', 'Inter', sans-serif; }
 .mf-portal__head h2 em { color: var(--steel-bright); font-style: normal; }
 .mf-portal__head p { margin: 0; color: var(--mist); font-size: 14.5px; line-height: 1.9; }
 .mf-portal__grid { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--line); border-left: 1px solid var(--line); }
+/* Three tiles when the assistant is not offered (DE-20). */
+.mf-portal__grid--three { grid-template-columns: repeat(3, 1fr); }
 .mf-portal__tile { position: relative; min-height: 380px; padding: 30px 26px; display: flex; flex-direction: column; background: transparent; border: 0; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); color: var(--ice); text-align: left; overflow: hidden; transition: color .4s; }
 .mf-portal__tile::before { position: absolute; content: ''; inset: auto 0 0 0; height: 0; background: var(--steel); transition: height .45s cubic-bezier(.3,.7,.2,1); z-index: 0; }
 .mf-portal__tile:hover::before { height: 100%; }
@@ -723,6 +725,7 @@ h1, h2, h3, .display { font-family: 'Sora', 'Inter', sans-serif; }
   .mf-intel { grid-template-columns: 1fr; }
   .mf-intel__visual { border-left: 0; border-top: 1px solid var(--line); min-height: 520px; }
   .mf-portal__grid { grid-template-columns: 1fr 1fr; }
+  .mf-portal__grid--three { grid-template-columns: repeat(3, 1fr); }
   .mf-grid { grid-template-columns: 1fr 1fr; }
   .mf-detail__layout { grid-template-columns: 1fr; }
   .mf-agent-panel { position: static; }
@@ -756,7 +759,7 @@ h1, h2, h3, .display { font-family: 'Sora', 'Inter', sans-serif; }
   .mf-accordion__content dl { flex-wrap: wrap; gap: 20px; }
   .mf-markets__rows button { grid-template-columns: 36px 1fr 20px; }
   .mf-markets__rows small { display: none; }
-  .mf-portal__grid { grid-template-columns: 1fr; }
+  .mf-portal__grid, .mf-portal__grid--three { grid-template-columns: 1fr; }
   .mf-portal__tile { min-height: 280px; }
   .mf-portal__tile h3 { margin-top: 44px; }
   .mf-contact__actions { flex-direction: column; align-items: stretch; }
