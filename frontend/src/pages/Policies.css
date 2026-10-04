@@ -9,6 +9,7 @@
 .de-policy__body strong { color: var(--ice); font-weight: 500; }
 .de-policy__body a { color: var(--steel-bright); text-underline-offset: 3px; }
 .de-policy__body a:hover, .de-policy__body a:focus-visible { color: var(--ice); }
+.de-policy__body .de-policy__note { margin-top: 18px; font-size: 14px; }
 .de-policy__contact { margin: 6px 0 22px; color: var(--mist); font-size: 16px; font-style: normal; line-height: 1.9; }
 
 @media (max-width: 720px) {

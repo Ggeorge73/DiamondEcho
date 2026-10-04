@@ -49,6 +49,7 @@ test('privacy page says what the site does and does not collect', async () => {
   expect(text).toContain('Mapbox and RentCast');
   expect(text).toContain('Cloudflare');
   expect(text).toContain('Last updated');
+  expect(text).toContain("removes that tool's leftover cookie");
   expect(container.querySelector('a[href="tel:+16785169717"]').textContent).toBe('(678) 516-9717');
   expect(container.querySelector('a[href="mailto:realtor@diamondecho.com"]')).not.toBeNull();
   expect(container.querySelector('a[href="/terms"]')).not.toBeNull();

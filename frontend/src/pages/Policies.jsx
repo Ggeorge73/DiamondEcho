@@ -59,6 +59,10 @@ export const Privacy = () => {
           <li>The property search is provided by Georgia MLS inside a frame. What you do in that frame is handled by Georgia MLS.</li>
           <li>We do not sell personal information.</li>
         </ul>
+        <p className="de-policy__note">
+          An earlier version of this site used an analytics tool. This version does not,
+          and it removes that tool's leftover cookie from your browser when you visit.
+        </p>
       </section>
 
       <section>
