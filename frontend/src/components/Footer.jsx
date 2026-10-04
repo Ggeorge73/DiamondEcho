@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Diamond } from 'lucide-react';
+import { OFFICE } from '../lib/contact';
 
 const Footer = () => (
   <footer className="mf-footer">
@@ -44,12 +45,16 @@ const Footer = () => (
       <div>
         <h3>Georgia office</h3>
         <p>8735 Dunwoody Place<br />GA 30350, USA</p>
+        <a href={OFFICE.phoneHref}>{OFFICE.phone}</a>
+        <a href={OFFICE.emailHref}>{OFFICE.email}</a>
       </div>
     </div>
 
     <div className="mf-footer__legal">
       <span>© {new Date().getFullYear()} DiamondEcho Private Real Estate — All rights reserved</span>
-      <span>Equal Housing Opportunity · Privacy · Terms of use</span>
+      <span>
+        Equal Housing Opportunity · <Link to="/privacy">Privacy</Link> · <Link to="/terms">Terms of use</Link>
+      </span>
     </div>
   </footer>
 );
