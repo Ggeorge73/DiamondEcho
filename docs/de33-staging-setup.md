@@ -16,6 +16,7 @@ Gbenga creates the accounts, the project, billing and the Pages projects, and ru
 | 2 | Public staging `https://diamondecho-staging.pages.dev` and staff staging `https://diamondecho-staff-staging.pages.dev`, both built from `main`. Done by Gbenga |
 | 3 | API `diamondecho-api-staging` in `us-east1`, revision `diamondecho-api-staging-00001-xtt`, built from commit `15500c16549b94b70c0b71ac3380cf4b7e44e653`, at `https://diamondecho-api-staging-299705773978.us-east1.run.app`. Inquiry queue off. Run on 2026-10-04 by Claude in Gbenga's Cloud Shell, at his request, as a one-off exception to the rule that agents do not provision cloud resources. No password, key or token was typed or seen. Checks are recorded on DE-33 |
 | 3, repeated | Redeployed from `1d69bf53894c65d82c8911d8da390308f93481f4` after PR #42, revision `diamondecho-api-staging-00002-sxs`, same address and settings. Run by Claude at Gbenga's request |
+| 3, repeated again | Redeployed from `0eb78b8f4499e53bd1e4332d116e04ec445cf323` after PR #43, revision `diamondecho-api-staging-00003-gdl`, same address and settings. Run by Claude at Gbenga's request |
 | 4 | `REACT_APP_BACKEND_URL` added to the `diamondecho-staging` Pages project (Production) and the latest deployment retried. Run by Claude in Gbenga's Cloudflare dashboard, with his permission. The existing DiamondEcho Pages project was not touched |
 
 Cloud Run gives one service two addresses. The second, `https://diamondecho-api-staging-2ku27sqe6q-ue.a.run.app`, reaches the same service. Use the first everywhere so the records agree.
@@ -121,7 +122,21 @@ Recorded on DE-33 on 2026-10-04. Step 4 is set: `REACT_APP_BACKEND_URL` on the `
 
 - Smoke check (`scripts/staging-smoke.mjs`): 9 of 9 pass.
 - Deal Studio base analysis for rental, flip and land, a rejected request, and the assistant: pass through the staging site.
-- Risk simulation: 1,000, 2,500 and 5,000 iterations per case finish (5.3 s, 14.1 s, 25.2 s). 10,000 did not finish inside the 30-second request limit. The API now stops a simulation at a time budget of 20 seconds and returns what it completed; the results panel states how many iterations were run. This needs a redeploy of the API after the change is merged.
+- Risk simulation before the time budget: 1,000, 2,500 and 5,000 iterations per case finished (5.3 s, 14.1 s, 25.2 s). 10,000 did not finish inside the 30-second request limit, and the abandoned run delayed the requests behind it.
+
+Risk simulation with the 20-second time budget (API revision `diamondecho-api-staging-00003-gdl`): every run returns. Three cases per run:
+
+| Strategy | Requested per case | Time | Completed per case |
+| --- | --- | --- | --- |
+| Rental | 2,500 | 14.5 s | 2,500 |
+| Rental | 5,000 | 20.2 s | 3,500 |
+| Rental | 10,000 | 20.4 s | 3,450 |
+| Rental | 1,000, straight after the 10,000 run | 5.8 s | 1,000 |
+| Fix and flip | 10,000 | 20.3 s | 3,700 |
+| Land | 2,500 | 20.4 s | 2,250 |
+| Land | 10,000 | 20.2 s | 2,300 |
+
+When a run stops early the results panel states "Only X of the Y requested iterations were run."
 
 ## What this stage does not cover
 
