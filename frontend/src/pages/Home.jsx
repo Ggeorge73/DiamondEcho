@@ -5,6 +5,7 @@ import {
   LineChart, MessageCircle, Plus, Search, Users,
 } from 'lucide-react';
 import GamlsSearch from '../components/GamlsSearch';
+import { assistantAvailable, openAssistant } from '../lib/assistant';
 
 /* ------------------------------------------------------------------ */
 /* Content                                                             */
@@ -99,22 +100,22 @@ const explorerData = {
 
 const portalTiles = [
   {
-    index: '01', icon: Search, title: 'Search Georgia MLS',
+    icon: Search, title: 'Search Georgia MLS',
     copy: 'Explore Georgia MLS listings by location, price, and property preferences.',
     action: 'search',
   },
   {
-    index: '02', icon: LineChart, title: 'Deal Studio',
+    icon: LineChart, title: 'Deal Studio',
     copy: 'Underwrite any address yourself: rentals, flips, and multifamily with instant verdicts and downloadable workbooks.',
     action: 'studio',
   },
   {
-    index: '03', icon: MessageCircle, title: 'Ask the concierge',
+    icon: MessageCircle, title: 'Ask the concierge',
     copy: 'A real-estate intelligence partner for financing, taxes, neighborhoods, and negotiation — available on every page.',
     action: 'assistant',
   },
   {
-    index: '04', icon: Users, title: 'Advisory',
+    icon: Users, title: 'Advisory',
     copy: 'Explore the ways to begin a buying or selling conversation.',
     action: 'advisors',
   },
@@ -177,11 +178,15 @@ const Home = () => {
   const [explorerTab, setExplorerTab] = useState('Residences');
   const [openItem, setOpenItem] = useState(0);
 
+  // The assistant tile is offered only where a service can answer (DE-20).
+  const assistantOffered = assistantAvailable();
+  const tiles = portalTiles.filter(({ action }) => action !== 'assistant' || assistantOffered);
+
   const onPortalTile = (action) => {
     if (action === 'search') navigate('/search');
     else if (action === 'studio') navigate('/investment-calculator');
     else if (action === 'advisors') navigate('/agents');
-    else window.dispatchEvent(new CustomEvent('open-diamond-assistant'));
+    else openAssistant();
   };
 
   return (
@@ -376,12 +381,14 @@ const Home = () => {
             <p className="eyebrow" data-reveal>Explore DiamondEcho</p>
             <h2 data-reveal>Explore properties.<br /><em>Consider your next move.</em></h2>
             <p data-reveal style={{ '--reveal-delay': '.1s' }}>
-              Browse residences, model a potential deal, and ask property questions online.
-              See the available paths for beginning a buying or selling inquiry.
+              {assistantOffered
+                ? 'Browse residences, model a potential deal, and ask property questions online.'
+                : 'Browse residences and model a potential deal.'}
+              {' '}See the available paths for beginning a buying or selling inquiry.
             </p>
           </div>
-          <div className="mf-portal__grid">
-            {portalTiles.map(({ index, icon: Icon, title, copy, action }, i) => (
+          <div className={`mf-portal__grid${tiles.length === 3 ? ' mf-portal__grid--three' : ''}`}>
+            {tiles.map(({ icon: Icon, title, copy, action }, i) => (
               <button
                 key={title}
                 className="mf-portal__tile"
@@ -389,7 +396,7 @@ const Home = () => {
                 style={{ '--reveal-delay': `${i * 0.08}s` }}
                 onClick={() => onPortalTile(action)}
               >
-                <header><span>{index}</span><Icon /></header>
+                <header><span>{String(i + 1).padStart(2, '0')}</span><Icon /></header>
                 <h3>{title}</h3>
                 <p>{copy}</p>
                 <footer>Open <ArrowRight /></footer>

@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Diamond } from 'lucide-react';
 import { BROKERAGE, OFFICE } from '../lib/contact';
+import { assistantAvailable, openAssistant } from '../lib/assistant';
 
 const Footer = () => (
   <footer className="mf-footer">
@@ -33,9 +34,11 @@ const Footer = () => (
           <Link to="/investment-calculator">Deal studio</Link>
           <Link to="/inquire?type=buyer">Buyer inquiry</Link>
           <Link to="/inquire?type=seller">Seller consultation</Link>
-          <button onClick={() => window.dispatchEvent(new CustomEvent('open-diamond-assistant'))}>
-            Ask the concierge
-          </button>
+          {assistantAvailable() && (
+            <button onClick={openAssistant}>
+              Ask the concierge
+            </button>
+          )}
           <Link to="/about">The firm</Link>
         </nav>
       </div>

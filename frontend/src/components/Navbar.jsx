@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowUpRight, Diamond, LayoutGrid, Menu, X } from 'lucide-react';
 import { BROKERAGE, OFFICE } from '../lib/contact';
+import { assistantAvailable, openAssistant } from '../lib/assistant';
 
 const navItems = [
   { label: 'Search homes', to: '/search' },
@@ -146,9 +147,11 @@ const Navbar = () => {
               <nav>
                 <button onClick={() => closeAndNavigate('/search')}>Search Georgia MLS</button>
                 <button onClick={() => closeAndNavigate('/investment-calculator')}>Run a deal analysis</button>
-                <button onClick={() => { restoreFocusRef.current = false; setIsMenuOpen(false); window.dispatchEvent(new CustomEvent('open-diamond-assistant')); }}>
-                  Ask the concierge
-                </button>
+                {assistantAvailable() && (
+                  <button onClick={() => { restoreFocusRef.current = false; setIsMenuOpen(false); openAssistant(); }}>
+                    Ask the concierge
+                  </button>
+                )}
                 <button onClick={() => closeAndNavigate('/agents')}>Explore advisory</button>
                 <button onClick={() => closeAndNavigate('/inquire?type=buyer')}>Buyer inquiry</button>
                 <button onClick={() => closeAndNavigate('/inquire?type=seller')}>Seller consultation</button>

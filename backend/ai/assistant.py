@@ -66,11 +66,11 @@ class RealEstateAssistant:
                 "financing terms, rent or resale evidence, vacancy, operating expenses, reserves, capital work, "
                 "holding period, and exit costs. Then compare base, downside, and upside cases using NOI, cap rate, "
                 "DSCR, cash-on-cash return, and—on multi-year commercial deals—levered and unlevered IRR. "
-                "Use DiamondEcho’s deterministic analysis endpoint for the arithmetic; a model should explain "
-                "results but never invent the numbers. Rental-income tax treatment is summarized by the IRS [1], "
+                "Deal Studio on this site does the arithmetic from the figures you enter; treat each result as an "
+                "estimate to check, not a prediction. Rental-income tax treatment is summarized by the IRS [1], "
                 "and a possible like-kind exchange has strict eligibility and timing rules [2]."
             )
-            questions.append("Which model should we run: rental, fix-and-flip, commercial, or mortgage?")
+            questions.append("Which kind of deal are you weighing: a rental, a fix-and-flip, or land development?")
         elif has_any(text, MORTGAGE_TERMS):
             source_ids = ["cfpb-home", "cfpb-loan-estimate"]
             answer = (
@@ -78,7 +78,7 @@ class RealEstateAssistant:
                 "interest rate and APR, lender credits, points, mortgage insurance, taxes, insurance, HOA dues, "
                 "cash to close, and whether the rate can adjust. The CFPB’s official home-loan tools explain the "
                 "process [1], and its Loan Estimate guidance is designed for offer-to-offer comparison [2]. "
-                "DiamondEcho can calculate principal and interest plus user-supplied housing costs, but only a "
+                "Deal Studio includes loan payments when it analyzes a rental, flip, or land deal, but only a "
                 "licensed lender can quote or approve a loan."
             )
             questions.append("What purchase price, down payment, rate, term, taxes, and insurance should I use?")

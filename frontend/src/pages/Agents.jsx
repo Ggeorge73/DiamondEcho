@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Building2, MessageCircle } from 'lucide-react';
+import { assistantAvailable, openAssistant } from '../lib/assistant';
 
 const paths = [
   {
@@ -61,10 +62,12 @@ const Agents = () => {
           <p className="eyebrow">Not sure where to begin?</p>
           <h2>Start a conversation,<br /><em>on your terms.</em></h2>
           <div className="mf-contact__actions">
-            <button className="mf-btn mf-btn--solid" onClick={() => window.dispatchEvent(new CustomEvent('open-diamond-assistant'))}>
-              <MessageCircle size={15} /> Ask the concierge
-            </button>
-            <button className="mf-btn" onClick={() => navigate('/inquire?type=buyer')}>
+            {assistantAvailable() && (
+              <button className="mf-btn mf-btn--solid" onClick={openAssistant}>
+                <MessageCircle size={15} /> Ask the concierge
+              </button>
+            )}
+            <button className={assistantAvailable() ? 'mf-btn' : 'mf-btn mf-btn--solid'} onClick={() => navigate('/inquire?type=buyer')}>
               <Building2 size={15} /> Ask about buying
             </button>
             <button className="mf-btn" onClick={() => navigate('/inquire?type=seller')}>
