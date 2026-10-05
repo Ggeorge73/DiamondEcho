@@ -142,8 +142,27 @@ Nothing today. Google's pricing page says alerting will be charged "no sooner th
 | 16:45:19 | Synthetic request 2 | Answered `201` |
 | 16:45:49 | Alert opened | 30 seconds after the request |
 | later | Email | Gbenga reported it received, from Google Cloud alerting, with a "View Incident" link |
+| 20:48 | A request sent by Gbenga through the staging form | Alert email received; he sent a picture of it. Its start time reads "Oct 5, 2026 at 8:48PM UTC" |
 
 Approval was for one synthetic request. A second was sent because the first proved nothing; this was reported to Gbenga and recorded on DE-31.
+
+## What the alert email contains
+
+Read from the picture of a real alert email that Gbenga sent on 2026-10-05, for a request he had made through the staging form. From the top of the email to the end of the policy wording, it shows:
+
+| Part | Content |
+| --- | --- |
+| Notice | "This is an automated notification set up by a Google Cloud user, not an official message from Google." |
+| Banner | "Log alert fired", "No severity", and "Cloud Run Revision with a log matching the query has appeared" |
+| Start time | The moment the request was accepted, in UTC |
+| Policy, project, condition | The names given in "The policy" above |
+| Labels | `configuration_name`, `location`, `project_id`, `revision_name`, `service_name`. All describe the service, none the visitor |
+| Policy documentation | The wording written for the policy, with the link to the staff page |
+
+- **No visitor detail appears in that part:** no IP address, no browser string, no web address of the request, nothing from the form.
+- The only web address in it is the link to the staff sign-in page.
+- The banner is red and reads like a fault. It is not one: for this policy "Log alert fired" means a request has arrived.
+- Limit: the picture stops at the end of the policy wording. Anything Google places below that was not seen.
 
 ## When the alert does not ring
 
@@ -162,15 +181,15 @@ To see what is waiting, sign in to the staff page: every request that still show
 
 ## Not proven, and open
 
-1. **Whether the email shows a visitor's IP address or a raw log line.** The request log holds the caller's address and browser string, never the form. Gbenga described the email but did not say either way, so this is unchecked. Settle it before production by reading one alert email in full.
+1. **Whether the email shows a visitor's IP address or a raw log line: it does not, in the part of the email that has been seen.** See "What the alert email contains". The picture Gbenga sent ends at the policy wording; whatever follows it (he earlier mentioned a "View Incident" link) was not in the picture.
 2. **Production.** Nothing in this document exists there.
 3. **The two Google limits** in the table above were read from Google's documentation, not driven.
 4. **No acknowledgement email goes to the visitor, by decision.** The receipt on screen, with its business-hours line, is the only confirmation they get. Gbenga decided on 2026-10-05 that no emailed auto-reply is wanted, so no mail provider, key or DNS record is needed.
 5. **The site does not know public holidays or absences, by decision.** Nothing on it changes on such a day.
 6. **How long requests are kept**, and who deletes them, is not decided (DE-26).
 7. **Nothing measures the response time.** The queue shows when a request arrived and whether it has been acknowledged. It does not show when it was acknowledged, and whether the visitor was answered within 4 business hours is not recorded anywhere.
-8. **The business-hours wording is tested in the repository's tests and in headless Chromium at 320 and 1280 px, not yet seen on staging**, where it appears once the pull request that added it is merged.
-9. **The Eastern-time display is tested in the repository's tests and in headless Chromium, not yet seen on the deployed staff page**, which needs Gbenga's sign-in.
+8. **The business-hours wording has been used on staging by Gbenga** (2026-10-05, a request sent at 4:48 PM Eastern on a Monday; he reported the receipt as working). The out-of-hours line has been seen only in the repository's tests and in headless Chromium, not on staging.
+9. **The Eastern-time display has been seen on the deployed staff page.** Gbenga's screenshot of 2026-10-05 shows "Submitted: Mon, Oct 5, 2026, 4:48 PM EDT" for a request he had just sent; the alert email for the same request gives its start as 8:48 PM UTC, the same moment.
 
 ## Repeating this in production
 
@@ -180,7 +199,7 @@ Each step is a change to a Google Cloud project and needs Gbenga's yes at the ti
 2. Create the policy from the file above with three things changed: the project in `logName`, the Cloud Run service name, and the staff page address and the word "staging" in the wording.
 3. Wait at least five minutes.
 4. Send one synthetic request through the site's own form and confirm the email arrives.
-5. Read that email in full for item 1 above.
+5. Read that email in full, to the bottom, and compare it with "What the alert email contains". Production carries real visitors, so confirm again that no visitor detail appears.
 6. Acknowledge the synthetic request in the queue so it is not mistaken for a visitor.
 
 ## Undo
