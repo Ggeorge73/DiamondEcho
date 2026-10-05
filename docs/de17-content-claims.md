@@ -83,6 +83,7 @@ Not changed. These are his to keep or reword.
 | Client-first: "Every decision and transaction begins with the client's goals — and ends only when they are met. Priorities are stated, agreed, and protected." | About | "ends only when they are met" reads as a promise of an outcome |
 | Integrity: "the numbers we present are the numbers we would act on ourselves." | About | Sits beside Terms that say Deal Studio's numbers are estimates from the visitor's own figures, and not advice |
 | Excellence: "From market analysis to closing logistics, we hold a single standard: work we would put our own name on, because we do." | About | Names two services: market analysis and closing logistics |
+| "Requests can be sent at any hour. We reply during business hours: Monday to Saturday, 9:00 AM to 5:00 PM Eastern."; out of hours, "Your request arrived outside our business hours. We reply Monday to Saturday, 9:00 AM to 5:00 PM Eastern, and will be in touch once we reopen." | Request form and its receipt, shown only when online requests are open | Added 2026-10-05 (DE-31). The hours and the instruction to say so are his; the sentences are the agent's. A promise of a reply, not of a time. See `docs/de31-inquiry-routing.md` |
 
 ## 5. Still open on DE-17
 

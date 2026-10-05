@@ -6,22 +6,39 @@ Written 2026-10-05 by the Operations agent. Every term in the first table was de
 
 | Term | Decision |
 | --- | --- |
+| When a request can be sent | At any hour, every day |
 | Where a request lands | The staff queue. The queue is the record |
 | Who is told | `realtor@diamondecho.com`, by email, when a request is accepted |
 | Business hours | Monday to Saturday, 9:00 to 17:00 Eastern |
 | Response time | Within 4 business hours |
-| Out of hours | Answered the next business day |
+| Out of hours | The request is accepted and the alert still goes out. The visitor is told on screen that a reply comes in business hours. Answered the next business day; Gbenga may answer sooner |
 | Backup responder | None at launch |
 
 ## How a request travels
 
 1. A visitor sends the buyer, seller or tour form.
-2. The request service stores it and answers `201`. The visitor sees "DiamondEcho received your request" and a reference. No email is sent to the visitor.
+2. The request service stores it and answers `201`. The visitor sees "DiamondEcho received your request", a line about business hours (see "What the visitor is told") and a reference. No email is sent to the visitor.
 3. Google Cloud sees the `201` in the service's request log and emails the realtor inbox: "a new request is waiting in the queue".
 4. The responder opens the staff page, signs in with password and authenticator code, reads the request and presses **Acknowledge**.
 5. The responder answers the visitor by the email address or phone number the visitor gave.
 
 The alert email is a prompt. It carries no name, message or contact detail from the form, so the request can only be read in the queue, behind the staff sign-in.
+
+## What the visitor is told
+
+Gbenga asked on 2026-10-05 that requests stay open round the clock and that a visitor who writes outside business hours is told a reply will come in business hours. The wording below is the Operations agent's; it is his to change.
+
+| Where | When | Words |
+| --- | --- | --- |
+| Under the Submit button | Always | "Requests can be sent at any hour. We reply during business hours: Monday to Saturday, 9:00 AM to 5:00 PM Eastern." |
+| On the receipt | Request arrived in business hours | "We reply during business hours: Monday to Saturday, 9:00 AM to 5:00 PM Eastern." |
+| On the receipt | Request arrived outside business hours | "Your request arrived outside our business hours. We reply Monday to Saturday, 9:00 AM to 5:00 PM Eastern, and will be in touch once we reopen." |
+
+- Open or closed is judged from the time the request service recorded, read on the office's Eastern clock. The visitor's own clock and time zone play no part.
+- The words promise a reply in business hours, not within a number of hours. The 4-business-hour figure is an internal target and is not shown to visitors.
+- The hours live in one place, `HOURS` in `frontend/src/lib/contact.js`.
+- Public holidays are not known to the site. On a holiday inside the usual hours the visitor sees the in-hours line, which names the hours and promises nothing about today.
+- This is a notice on the screen, **not an email**. A visitor who closes the page has no copy of it. See item 4 under "Not proven, and open".
 
 ## The responder's routine
 
@@ -145,11 +162,12 @@ To see what is waiting, sign in to the staff page: every request that still show
 1. **Whether the email shows a visitor's IP address or a raw log line.** The request log holds the caller's address and browser string, never the form. Gbenga described the email but did not say either way, so this is unchecked. Settle it before production by reading one alert email in full.
 2. **Production.** Nothing in this document exists there.
 3. **The two Google limits** in the table above were read from Google's documentation, not driven.
-4. **No acknowledgement email goes to the visitor.** The receipt on screen is the only confirmation they get. Whether to add one is a product decision.
+4. **No acknowledgement email goes to the visitor.** The receipt on screen, with its business-hours line, is the only confirmation they get. An emailed auto-reply needs things this project does not have: a mail-sending provider and its account, an API key held in Secret Manager, sender records in the DNS of `diamondecho.com`, new code and tests, and a line on the Privacy page naming the provider. Each is Gbenga's decision.
 5. **Public holidays and responder absence** are not decided.
 6. **How long requests are kept**, and who deletes them, is not decided (DE-26).
 7. **Nothing measures the response time.** The queue shows when a request arrived and whether it has been acknowledged. It does not show when it was acknowledged, and whether the visitor was answered within 4 business hours is not recorded anywhere.
-8. **The Eastern-time display is tested in the repository's tests and in headless Chromium, not yet seen on the deployed staff page**, which needs Gbenga's sign-in.
+8. **The business-hours wording is tested in the repository's tests and in headless Chromium at 320 and 1280 px, not yet seen on staging**, where it appears once the pull request that added it is merged.
+9. **The Eastern-time display is tested in the repository's tests and in headless Chromium, not yet seen on the deployed staff page**, which needs Gbenga's sign-in.
 
 ## Repeating this in production
 
