@@ -139,6 +139,13 @@ export const Privacy = () => {
           <li><strong>Cloudflare</strong> hosts the site. Like any web host, it receives your IP address and basic browser details in order to send you the pages.</li>
           <li><strong>Google Fonts</strong> supplies the typefaces, and <strong>Unsplash</strong> supplies some illustrative photographs. Your browser fetches these directly, so those companies receive your IP address.</li>
           <li><strong>Georgia MLS</strong> supplies the property search, as described above.</li>
+          {requestsOpen && (
+            <li>
+              <strong>Google Cloud</strong> runs DiamondEcho's analysis and request service. It receives
+              your IP address and keeps routine request logs. To limit misuse of the request forms, that
+              service also counts recent requests from each connection for a short time, in memory only.
+            </li>
+          )}
         </ul>
       </section>
 
