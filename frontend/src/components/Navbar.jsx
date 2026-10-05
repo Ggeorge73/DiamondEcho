@@ -3,6 +3,7 @@ import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowUpRight, Diamond, LayoutGrid, Menu, X } from 'lucide-react';
 import { BROKERAGE, OFFICE } from '../lib/contact';
 import { assistantAvailable, openAssistant } from '../lib/assistant';
+import { readSearchCriteria } from '../lib/searchCriteria';
 
 const navItems = [
   { label: 'Search homes', to: '/search' },
@@ -29,9 +30,15 @@ const Navbar = () => {
   const menuRef = useRef(null);
   const closeRef = useRef(null);
   const restoreFocusRef = useRef(false);
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const navigate = useNavigate();
   const isHomePage = pathname === '/';
+  const { rentalIntent } = readSearchCriteria(new URLSearchParams(search));
+  // "Search homes" and "Rentals" share the /search path; the status in the
+  // address decides which of the two is the page the visitor is on.
+  const isCurrentItem = (item) => (item.to.startsWith('/search')
+    ? pathname === '/search' && item.to.includes('status=rent') === rentalIntent
+    : pathname === item.to);
 
   useEffect(() => {
     if (!isHomePage) {
@@ -101,9 +108,24 @@ const Navbar = () => {
           </Link>
 
           <nav className="mf-nav__links" aria-label="Primary navigation">
-            {navItems.map((item) => (
-              <NavLink key={item.label} to={item.to}>{item.label}</NavLink>
-            ))}
+            {navItems.map((item) => {
+              // NavLink compares the path only, so it marked both "Search homes"
+              // and "Rentals" as the current page on /search (DE-21).
+              if (!item.to.startsWith('/search')) {
+                return <NavLink key={item.label} to={item.to}>{item.label}</NavLink>;
+              }
+              const isCurrent = isCurrentItem(item);
+              return (
+                <Link
+                  key={item.label}
+                  to={item.to}
+                  className={isCurrent ? 'active' : undefined}
+                  aria-current={isCurrent ? 'page' : undefined}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
           </nav>
 
           <div className="mf-nav__actions">
@@ -137,6 +159,7 @@ const Navbar = () => {
               <a
                 key={item.label}
                 href={item.to}
+                aria-current={isCurrentItem(item) ? 'page' : undefined}
                 onClick={(event) => { event.preventDefault(); closeAndNavigate(item.to); }}
               >
                 <span>{item.index}</span>{item.label}<ArrowUpRight />

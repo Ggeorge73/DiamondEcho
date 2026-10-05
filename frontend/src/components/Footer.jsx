@@ -30,7 +30,7 @@ const Footer = () => (
       <div className="mf-footer__col">
         <h4>Explore</h4>
         <nav>
-          <Link to="/search">Search the collection</Link>
+          <Link to="/search">Search Georgia MLS</Link>
           <Link to="/investment-calculator">Deal studio</Link>
           <Link to="/inquire?type=buyer">Buyer inquiry</Link>
           <Link to="/inquire?type=seller">Seller consultation</Link>
