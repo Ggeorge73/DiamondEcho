@@ -1,11 +1,12 @@
 from uuid import UUID
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
 from .models import InquiryCreate, InquiryReceipt, StaffAcknowledgement, StaffInquiryList
 from .service import (
     IdempotencyConflict, InquiryNotFound, QueueUnavailable, StaffUnauthorized, StaffForbidden,
     acknowledge_inquiry, list_staff_inquiries, submit_inquiry,
 )
 from .firebase import get_store, verify_staff
+from .limits import client_address, limiter, limits
 
 router = APIRouter(prefix="/v1/inquiries", tags=["Inquiries"])
 
@@ -14,6 +15,27 @@ def require_store():
         return get_store()
     except QueueUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+TOO_MANY_FROM_ADDRESS = ("Too many requests were sent from this connection. "
+                         "Please wait a few minutes and try again, or call or email us.")
+QUEUE_BUSY = "Online requests are busy right now. Please try again later, or call or email us."
+
+def admit_submission(request: Request):
+    """The store for a submission that is inside the limits.
+
+    The queue check comes first: while the queue is off every submission is a
+    503 and nothing is counted. Replays and submissions that fail the field
+    checks count as attempts. A body that is not JSON at all is refused before
+    this runs and is not counted; it stores nothing either way.
+    """
+    store = require_store()
+    reason, wait = limiter.check(client_address(request), *limits())
+    if reason is None:
+        return store
+    headers = {"Retry-After": str(wait), "Cache-Control": "no-store"}
+    if reason == "address":
+        raise HTTPException(status_code=429, detail=TOO_MANY_FROM_ADDRESS, headers=headers)
+    raise HTTPException(status_code=503, detail=QUEUE_BUSY, headers=headers)
 
 def require_staff(authorization: str | None = Header(default=None)) -> str:
     try:
@@ -28,7 +50,7 @@ def require_staff(authorization: str | None = Header(default=None)) -> str:
 # Sync routes are run in FastAPI's thread pool; SDK I/O never blocks the ASGI loop.
 @router.post("", response_model=InquiryReceipt, status_code=201)
 def create_inquiry(inquiry: InquiryCreate, response: Response,
-                   x_idempotency_key: UUID = Header(), store=Depends(require_store)):
+                   x_idempotency_key: UUID = Header(), store=Depends(admit_submission)):
     response.headers["Cache-Control"] = "no-store"
     try:
         receipt, replay = submit_inquiry(store, inquiry, x_idempotency_key)
