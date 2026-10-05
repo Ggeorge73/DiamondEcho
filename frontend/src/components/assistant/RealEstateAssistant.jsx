@@ -51,11 +51,12 @@ const AssistantPanel = () => {
     let pending = 0;
     const measure = () => {
       pending = 0;
-      const frame = document.querySelector(".de-idx__frame");
-      setOverSearchFrame(Boolean(frame) && launcherOverlapsFrame(
-        frame.getBoundingClientRect(),
-        { width: window.innerWidth, height: window.innerHeight },
-      ));
+      // More than one search frame can be in the page (for-sale and rentals each
+      // keep one, and the search page stays loaded while hidden). A frame that
+      // is not shown measures as empty and so never counts as covered.
+      const viewport = { width: window.innerWidth, height: window.innerHeight };
+      setOverSearchFrame([...document.querySelectorAll(".de-idx__frame")]
+        .some((frame) => launcherOverlapsFrame(frame.getBoundingClientRect(), viewport)));
     };
     const schedule = () => { if (!pending) pending = request(measure); };
     measure();
