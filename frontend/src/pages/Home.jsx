@@ -65,8 +65,8 @@ const explorerData = {
     },
     {
       title: 'Rental properties',
-      copy: 'Choose Rental (Residential) or Rental (Commercial) under Type in the Georgia MLS search form.',
-      facts: [{ k: 'Source', v: 'Georgia MLS' }, { k: 'Filter', v: 'Select rental type in search' }],
+      copy: 'Opens the Georgia MLS search with Rental (Residential) already selected under Type. Tick Rental (Commercial) there if you need it.',
+      facts: [{ k: 'Source', v: 'Georgia MLS' }, { k: 'Filter', v: 'Rental (Residential) pre-selected' }],
       to: '/search?status=rent',
     },
   ],
