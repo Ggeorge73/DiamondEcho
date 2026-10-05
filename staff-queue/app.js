@@ -43,6 +43,14 @@
     const data = await response.json();
     return generation === epoch ? data : null;
   }
+  // The business keeps Eastern time, and the response time is counted in it. Show
+  // every time that way and name the zone, whatever clock the device in use keeps.
+  const eastern = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", weekday: "short",
+    year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" });
+  function when(value) {
+    const date = new Date(value);
+    return value && Number.isFinite(date.getTime()) ? eastern.format(date) : value;
+  }
   function render(items) {
     el("inquiries").replaceChildren();
     el("count").textContent = items.length + " recent request(s)";
@@ -53,7 +61,7 @@
       for (const [label, value] of [
         ["Reference", item.request_id], ["Name", item.full_name], ["Email", item.email],
         ["Phone", item.phone], ["Message", item.message], ["Property", item.property_address || item.property_id],
-        ["Tour time", item.preferred_tour_time], ["Submitted", item.submitted_at],
+        ["Tour time", when(item.preferred_tour_time)], ["Submitted", when(item.submitted_at)],
         ["Consent version", item.consent_version]]) {
         if (!value) continue;
         const dt = document.createElement("dt"); dt.textContent = label;

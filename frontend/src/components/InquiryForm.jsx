@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
+import { HOURS } from '../lib/contact';
+import { isBusinessHours } from '../lib/hours';
 
 const emptyValues = {
   fullName: '', email: '', phone: '', propertyAddress: '', message: '', preferredTime: '', consent: false,
@@ -108,11 +110,16 @@ const InquiryForm = ({ kind }) => {
   };
 
   if (receipt) {
+    // The service's own record of when the request arrived, not the visitor's clock.
+    const open = isBusinessHours(receipt.submitted_at);
     return (
       <section className="de-inquiry-card de-inquiry-receipt" tabIndex={-1} ref={receiptRef} aria-labelledby="inquiry-receipt-title">
         <p className="eyebrow">Request submitted</p>
         <h2 id="inquiry-receipt-title">DiamondEcho received your request.</h2>
         <p>Your request is in the DiamondEcho staff queue. {kind === 'tour' ? 'This is a tour request. The visit is not booked or confirmed.' : 'A team member can review it and follow up using the contact details you provided.'}</p>
+        <p className="de-inquiry-hours">{open
+          ? 'We reply during business hours: ' + HOURS.label + '.'
+          : 'Your request arrived outside our business hours. We reply ' + HOURS.label + ', and will be in touch once we reopen.'}</p>
         <p className="de-inquiry-reference">Reference: {receipt.request_id}</p>
         <Link className="mf-btn mf-btn--solid" to="/search">Continue browsing</Link>
       </section>
@@ -155,6 +162,7 @@ const InquiryForm = ({ kind }) => {
         </div>
         {validation.consent && <p className="de-inquiry-field-error" id="inquiry-consent-error">{validation.consent}</p>}
         <button className="mf-btn mf-btn--solid de-inquiry-submit" type="submit" disabled={pending}>{pending ? 'Sending request…' : 'Submit request'}</button>
+        <p className="de-inquiry-note">Requests can be sent at any hour. We reply during business hours: {HOURS.label}.</p>
         <p className="de-inquiry-note">Submitting a request does not book a tour or establish representation.</p>
       </form>
     </section>

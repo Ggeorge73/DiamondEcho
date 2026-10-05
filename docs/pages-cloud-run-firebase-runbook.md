@@ -157,9 +157,10 @@ verified and rollback is agreed.
 Tiara runs the Type 7 matrix on the exact release-candidate build and URLs,
 including real email/password + TOTP enrollment/sign-in, negative identity
 cases and all three inquiry types. Lara confirms who checks the queue, response
-SLA, alerting, backup responder, retention and recovery. No email notification
-or automated retention job is implemented. Gbenga alone authorizes merge and
-production release.
+SLA, alerting, backup responder, retention and recovery. Gbenga set the routing
+terms on 2026-10-05 and an arrival alert email exists on staging only; see
+`docs/de31-inquiry-routing.md`. No automated retention job is implemented.
+Gbenga alone authorizes merge and production release.
 
 ## 6. Costs, monitoring and rollback
 

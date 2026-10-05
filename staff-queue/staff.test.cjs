@@ -102,3 +102,25 @@ test("the acknowledgement notice survives the list refresh that follows it",asyn
   ui.el("inquiries").querySelector("button").click();await pause();await pause();
   assert.equal(ui.el("notice").hidden,false);assert.equal(ui.el("notice").textContent,"Request acknowledged.");
 });
+const listOf = item => async()=>({ok:true,status:200,json:async()=>({items:[{kind:"tour",status:"queued",request_id:"ref",full_name:"Test",email:"visitor@example.com",...item}]})});
+const shown = (ui,label) => { const dt=[...ui.el("inquiries").querySelectorAll("dt")].find(n=>n.textContent===label); return dt.nextElementSibling.textContent; };
+test("the submitted time is shown in Eastern time with the zone named, not in UTC",async()=>{
+  const ui=setup({fetch:listOf({submitted_at:"2026-10-05T16:45:19.123456+00:00"})});
+  await login(ui);
+  assert.match(shown(ui,"Submitted"),/^Mon, Oct 5, 2026, 12:45\sPM EDT$/);
+});
+test("a winter time is shown as standard time",async()=>{
+  const ui=setup({fetch:listOf({submitted_at:"2026-12-01T15:00:00+00:00"})});
+  await login(ui);
+  assert.match(shown(ui,"Submitted"),/^Tue, Dec 1, 2026, 10:00\sAM EST$/);
+});
+test("a requested tour time is shown in Eastern time, including one that falls on the previous day there",async()=>{
+  const ui=setup({fetch:listOf({preferred_tour_time:"2026-10-11T02:30:00Z",submitted_at:"2026-10-05T16:45:19+00:00"})});
+  await login(ui);
+  assert.match(shown(ui,"Tour time"),/^Sat, Oct 10, 2026, 10:30\sPM EDT$/);
+});
+test("a time that cannot be read is shown as it was sent",async()=>{
+  const ui=setup({fetch:listOf({submitted_at:"not-a-time"})});
+  await login(ui);
+  assert.equal(shown(ui,"Submitted"),"not-a-time");
+});

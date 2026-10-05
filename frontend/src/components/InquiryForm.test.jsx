@@ -186,3 +186,43 @@ test.each([
   expect(container.querySelector('.de-inquiry-receipt')).toBeNull();
   expect(input('fullName').value).toBe('A Buyer');
 });
+
+const HOURS_LABEL = 'Monday to Saturday, 9:00 AM to 5:00 PM Eastern';
+const sendBuyer = async (submittedAt) => {
+  await renderForm('buyer');
+  await fill('fullName', 'A Buyer'); await fill('email', 'buyer@example.com');
+  await fill('message', 'Looking for a home.'); await consent();
+  axios.post.mockResolvedValueOnce({ status: 201, data: { status: 'queued', request_id: 'REQ-H', submitted_at: submittedAt } });
+  await submit();
+};
+
+test('the form says requests are open at any hour and when replies are sent', async () => {
+  await renderForm('buyer');
+  expect(container.textContent).toContain('Requests can be sent at any hour. We reply during business hours: ' + HOURS_LABEL + '.');
+});
+
+test('a request received inside business hours is told the hours, with no out-of-hours notice', async () => {
+  await sendBuyer('2026-10-06T15:00:00+00:00'); // Tuesday 11:00 AM Eastern
+  expect(container.textContent).toContain('DiamondEcho received your request.');
+  expect(container.textContent).toContain('We reply during business hours: ' + HOURS_LABEL + '.');
+  expect(container.textContent).not.toContain('outside our business hours');
+});
+
+test('a request received outside business hours is told so and when to expect a reply', async () => {
+  await sendBuyer('2026-10-11T16:00:00+00:00'); // Sunday noon Eastern
+  expect(container.textContent).toContain('DiamondEcho received your request.');
+  expect(container.textContent).toContain('Your request arrived outside our business hours. We reply ' + HOURS_LABEL + ', and will be in touch once we reopen.');
+});
+
+test('the out-of-hours notice follows the time the service recorded, not the clock on the device', async () => {
+  jest.useFakeTimers({ now: new Date('2026-10-06T15:00:00Z'), doNotFake: ['setTimeout', 'setInterval', 'setImmediate', 'clearTimeout', 'clearInterval', 'clearImmediate', 'nextTick', 'queueMicrotask'] });
+  try {
+    await sendBuyer('2026-10-06T02:00:00+00:00'); // Monday 10:00 PM Eastern, while the device says Tuesday 11:00 AM
+    expect(container.textContent).toContain('outside our business hours');
+  } finally { jest.useRealTimers(); }
+});
+
+test('a receipt with no readable time is treated as out of hours rather than promising too much', async () => {
+  await sendBuyer(undefined);
+  expect(container.textContent).toContain('outside our business hours');
+});

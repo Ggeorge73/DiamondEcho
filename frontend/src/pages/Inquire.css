@@ -68,6 +68,7 @@
 .de-inquiry-error p { margin: 8px 0 0; font-size: 13px; line-height: 1.5; }
 .de-inquiry-receipt { outline: none; }
 .de-inquiry-receipt > p:not(.eyebrow) { color: var(--mist); line-height: 1.7; }
+.de-inquiry-receipt > .de-inquiry-hours { margin-top: 12px; }
 .de-inquiry-reference { padding: 15px 0 25px; overflow-wrap: anywhere; font-size: 12px; }
 .de-inquiry-page :is(a, button, input, textarea):focus-visible { outline: 3px solid var(--steel-bright); outline-offset: 3px; }
 @media (max-width: 800px) {

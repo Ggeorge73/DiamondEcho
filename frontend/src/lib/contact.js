@@ -18,3 +18,14 @@ export const BROKERAGE = Object.freeze({
   phone: '(770) 495-5050',
   phoneHref: 'tel:+17704955050',
 });
+
+// Business hours set by Gbenga on 2026-10-05 (DE-31). Requests are accepted at
+// any hour; replies are sent inside these hours. They are Eastern time whatever
+// clock the visitor's device keeps. Change them here only.
+export const HOURS = Object.freeze({
+  timeZone: 'America/New_York',
+  days: Object.freeze(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']),
+  open: 9,
+  close: 17,
+  label: 'Monday to Saturday, 9:00 AM to 5:00 PM Eastern',
+});
