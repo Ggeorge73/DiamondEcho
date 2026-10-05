@@ -140,7 +140,7 @@ When a run stops early the results panel states "Only X of the Y requested itera
 
 ## What this stage does not cover
 
-- Staff sign-in, Firestore, and sending or reading real inquiries. The queue stays disabled, so the inquiry forms on the staging site will show "We could not send your request just now."
+- Staff sign-in, Firestore, and sending or reading real inquiries. The queue stays disabled, so the inquiry forms on the staging site will show "We could not send your request just now." The steps for these are in [de33-staging-stage-two.md](de33-staging-stage-two.md).
 - Address lookup in Deal Studio. It needs Mapbox and RentCast keys stored in Secret Manager, which is a separate step.
 - Any production resource, domain or DNS record.
 
