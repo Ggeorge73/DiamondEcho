@@ -15,7 +15,7 @@ Gbenga creates the accounts, the project, billing and the Pages projects, and ru
 | 1 | Project `diamondecho-staging`, billing attached, budget of 25 US dollars a month. Done by Gbenga |
 | 2 | Public staging `https://diamondecho-staging.pages.dev` and staff staging `https://diamondecho-staff-staging.pages.dev`, both built from `main`. Done by Gbenga |
 | 3 | API `diamondecho-api-staging` in `us-east1`, revision `diamondecho-api-staging-00001-xtt`, built from commit `15500c16549b94b70c0b71ac3380cf4b7e44e653`, at `https://diamondecho-api-staging-299705773978.us-east1.run.app`. Inquiry queue off. Run on 2026-10-04 by Claude in Gbenga's Cloud Shell, at his request, as a one-off exception to the rule that agents do not provision cloud resources. No password, key or token was typed or seen. Checks are recorded on DE-33 |
-| 3, repeated | Redeployed from `1d69bf53894c65d82c8911d8da390308f93481f4` after PR #42, revision `diamondecho-api-staging-00002-sxs`, same address and settings. Run by Claude at Gbenga's request |
+| 3, repeated | Redeployed from `1d69bf53894c65d82c8911d8da390308f93481f4` after PR #42, revision `diamondecho-api-staging-00002-zxs`, same address and settings. Run by Claude at Gbenga's request |
 | 3, repeated again | Redeployed from `0eb78b8f4499e53bd1e4332d116e04ec445cf323` after PR #43, revision `diamondecho-api-staging-00003-gdl`, same address and settings. Run by Claude at Gbenga's request |
 | 4 | `REACT_APP_BACKEND_URL` added to the `diamondecho-staging` Pages project (Production) and the latest deployment retried. Run by Claude in Gbenga's Cloudflare dashboard, with his permission. The existing DiamondEcho Pages project was not touched |
 

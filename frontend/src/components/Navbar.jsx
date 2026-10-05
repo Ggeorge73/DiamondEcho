@@ -12,10 +12,12 @@ const navItems = [
   { label: 'The Firm', to: '/about' },
 ];
 
+// Same words and order as the desktop links above, so the phone menu and the
+// desktop header never disagree (DE-32).
 const menuItems = [
   { index: '01', label: 'Search homes', to: '/search' },
   { index: '02', label: 'Rentals', to: '/search?status=rent' },
-  { index: '03', label: 'Deal Intelligence', to: '/investment-calculator' },
+  { index: '03', label: 'Intelligence', to: '/investment-calculator' },
   { index: '04', label: 'Advisory', to: '/agents' },
   { index: '05', label: 'The Firm', to: '/about' },
 ];

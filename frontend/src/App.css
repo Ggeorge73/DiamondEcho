@@ -715,14 +715,15 @@ h1, h2, h3, .display { font-family: 'Sora', 'Inter', sans-serif; }
   .mf-menu__primary { border-right: 0; padding-top: 100px; padding-bottom: 30px; }
   .mf-menu__secondary { padding-top: 30px; }
   .mf-rail { display: none; }
-  .mf-hero__panel { display: none; }
+  /* The hero panel stays visible at every width: it carries each division's
+     description and its link, which phone visitors could not see (DE-32). */
   .mf-hero__side { display: none; }
-  .mf-explorer__inner, .mf-markets__inner { grid-template-columns: 1fr; }
+  .mf-explorer__inner, .mf-markets__inner { grid-template-columns: minmax(0, 1fr); }
   .mf-explorer__intro, .mf-markets__preview { position: static; }
   .mf-markets__preview { order: -1; }
   .mf-markets__frame { height: 320px; }
   .mf-counters { grid-template-columns: 1fr 1fr; }
-  .mf-intel { grid-template-columns: 1fr; }
+  .mf-intel { grid-template-columns: minmax(0, 1fr); }
   .mf-intel__visual { border-left: 0; border-top: 1px solid var(--line); min-height: 520px; }
   .mf-portal__grid { grid-template-columns: 1fr 1fr; }
   .mf-portal__grid--three { grid-template-columns: repeat(3, 1fr); }
@@ -742,9 +743,16 @@ h1, h2, h3, .display { font-family: 'Sora', 'Inter', sans-serif; }
 @media (max-width: 720px) {
   .mf-nav__inner { height: 72px; }
   .mf-wordmark strong { font-size: 11px; }
-  .mf-hero { min-height: 640px; }
-  .mf-hero__content { left: 22px; right: 22px; }
+  /* On a phone the hero is a column: the division list at the top and the
+     panel pinned above the counter. Nothing is positioned over anything else,
+     and the hero grows if large text needs more room (DE-32). */
+  .mf-hero { height: auto; min-height: 640px; min-height: max(640px, 100svh); display: flex; flex-direction: column; justify-content: space-between; gap: 28px; padding: 108px 22px 80px; }
+  .mf-hero__content { position: relative; top: auto; left: auto; right: auto; transform: none; }
   .mf-divisions button { font-size: clamp(36px, 11vw, 56px); }
+  .mf-hero__panel { position: relative; right: auto; bottom: auto; width: auto; padding: 20px 20px 16px; }
+  .mf-hero__panel small { font-size: 10px; }
+  .mf-hero__panel p { margin-bottom: 12px; font-size: 14px; line-height: 1.65; }
+  .mf-hero__panel a { min-height: 44px; font-size: 11px; padding-bottom: 0; border-bottom: 0; text-decoration: underline; text-underline-offset: 8px; text-decoration-color: var(--line-strong); }
   .mf-hero__scroll { display: none; }
   .mf-hero__index { left: 22px; bottom: 28px; }
   .mf-statement, .mf-explorer, .mf-markets, .mf-portal { padding-left: 22px; padding-right: 22px; }
@@ -754,7 +762,12 @@ h1, h2, h3, .display { font-family: 'Sora', 'Inter', sans-serif; }
   .mf-strip { padding: 0 22px; }
   .mf-strip-progress { width: calc(100% - 44px); }
   .mf-counters { grid-template-columns: 1fr; }
-  .mf-accordion__head { grid-template-columns: 40px 1fr auto; padding: 22px 2px; }
+  /* The three tabs share the row, so they fit screens narrower than 320px
+     and larger text settings without pushing the page sideways (DE-32). */
+  .mf-explorer__tabs { display: flex; width: 100%; }
+  .mf-explorer__tabs button { flex: 1 1 0; min-width: 0; padding: 0 6px; letter-spacing: .12em; overflow-wrap: anywhere; }
+  .mf-accordion__head { grid-template-columns: 40px minmax(0, 1fr) auto; padding: 22px 2px; }
+  .mf-accordion__head strong, .mf-accordion__content p, .mf-accordion__content dd { overflow-wrap: anywhere; }
   .mf-accordion__content { padding-left: 42px; grid-template-columns: 1fr; align-items: start; }
   .mf-accordion__content dl { flex-wrap: wrap; gap: 20px; }
   .mf-markets__rows button { grid-template-columns: 36px 1fr 20px; }
@@ -763,6 +776,12 @@ h1, h2, h3, .display { font-family: 'Sora', 'Inter', sans-serif; }
   .mf-portal__tile { min-height: 280px; }
   .mf-portal__tile h3 { margin-top: 44px; }
   .mf-contact__actions { flex-direction: column; align-items: stretch; }
+  /* Keep centred sections and the steps card inside very narrow screens (DE-32). */
+  .mf-contact { grid-template-columns: minmax(0, 1fr); }
+  .mf-contact__content { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+  .mf-contact__actions .mf-btn { white-space: normal; }
+  .mf-deal-card__props { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .mf-deal-card__props strong, .mf-deal-card p { overflow-wrap: anywhere; }
   .mf-page-hero { padding: 140px 22px 60px; }
   .mf-page-hero__inner { flex-direction: column; align-items: flex-start; }
   .mf-searchbar { width: calc(100% - 44px); grid-template-columns: 1fr; }
@@ -788,8 +807,10 @@ h1, h2, h3, .display { font-family: 'Sora', 'Inter', sans-serif; }
   .mf-footer__legal { flex-direction: column; gap: 8px; }
   .floating-concierge span { display: none; }
   .floating-concierge { width: 50px; padding: 0; justify-content: center; }
-  .deal-studio-hero { min-height: 560px; padding: 130px 22px 60px; }
-  .deal-studio-hero__seal { display: none; }
+  .deal-studio-hero { min-height: 560px; padding: 130px 22px 60px; flex-direction: column; align-items: flex-start; justify-content: flex-end; gap: 28px; }
+  /* The formula badge is shown on phones too, as a small label (DE-32). */
+  .deal-studio-hero__seal { width: auto; height: auto; flex-direction: row; gap: 12px; padding: 10px 16px; border-radius: 0; text-align: left; animation: none; }
+  .deal-studio-hero__seal span { font-size: 9px; }
   .deal-studio-form { padding: 45px 20px 60px; }
   .studio-strategy { grid-template-columns: 1fr; }
   .studio-strategy button + button { border-top: 1px solid var(--line); border-left: 0; }
