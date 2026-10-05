@@ -6,7 +6,9 @@ script is loaded. Named staff email/password and TOTP MFA replace the old
 shared bearer key. Tokens remain in SDK memory. Visitor details render with
 textContent, never HTML, and clear on sign-out/page exit.
 
-First login by a verified user without TOTP presents an enrollment secret.
+First login by a verified user without TOTP presents an enrollment secret, as
+a QR code and as a key to type. The code is drawn by the page itself as plain
+SVG, because the content policy allows no images; nothing is fetched to make it.
 After enrollment, sign out and sign in again; the API will not authorize an
 enrollment-only session. Only the privately provisioned staff UID is permitted
 by the backend. The UI cannot grant roles or create a staff account.

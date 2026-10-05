@@ -11,9 +11,39 @@
     target.textContent = text; target.hidden = false;
     if (!notice) target.focus();
   }
+  const SVG = "http://www.w3.org/2000/svg";
+  function hideSetup() {
+    el("secret").textContent = ""; el("secret").hidden = true;
+    el("secret-label").textContent = ""; el("secret-label").hidden = true;
+    el("qr").replaceChildren(); el("qr-block").hidden = true;
+  }
+  // Draws the setup address as a QR code out of plain SVG shapes. This page's
+  // content policy allows no images and no inline styles, so there is no <img>,
+  // no canvas export and no style attribute: one white square and one black path.
+  // Returns false, and shows nothing, if the code cannot be made.
+  function drawQr(text) {
+    let grid = null;
+    try { grid = text && window.DIAMOND_ECHO_STAFF_QR ? window.DIAMOND_ECHO_STAFF_QR(text) : null; } catch { grid = null; }
+    if (!Array.isArray(grid) || !grid.length) return false;
+    const quiet = 4, size = grid.length + quiet * 2;
+    const svg = document.createElementNS(SVG, "svg");
+    svg.setAttribute("viewBox", "0 0 " + size + " " + size);
+    svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", "QR code to scan with your authenticator app");
+    svg.setAttribute("shape-rendering", "crispEdges");
+    const paper = document.createElementNS(SVG, "rect");
+    paper.setAttribute("width", size); paper.setAttribute("height", size); paper.setAttribute("fill", "#ffffff");
+    let squares = "";
+    grid.forEach((row, r) => row.forEach((dark, c) => { if (dark) squares += "M" + (c + quiet) + " " + (r + quiet) + "h1v1h-1z"; }));
+    const ink = document.createElementNS(SVG, "path");
+    ink.setAttribute("d", squares); ink.setAttribute("fill", "#000000");
+    svg.append(paper, ink);
+    el("qr").replaceChildren(svg); el("qr-block").hidden = false;
+    return true;
+  }
   function clear() {
     el("inquiries").replaceChildren(); el("count").textContent = "";
-    el("secret").textContent = ""; el("secret").hidden = true;
+    hideSetup();
     el("code").value = ""; el("password").value = "";
     el("enrollment").hidden = true; el("mfa-form").hidden = true;
     el("signin-form").hidden = false; el("signin-section").hidden = false;
@@ -92,12 +122,15 @@
   async function handle(result) {
     // A step has succeeded, so anything said about an earlier failed attempt is stale.
     el("alert").hidden = true; el("notice").hidden = true;
-    if (result.type === "ready") { el("secret").textContent = ""; await refresh(); return; }
+    if (result.type === "ready") { hideSetup(); await refresh(); return; }
     if (result.type === "enrolled") {
       clear(); message("Authenticator enrolled. Sign in again with your password and authenticator.", true); return;
     }
     mode = result.type; el("signin-form").hidden = true; el("mfa-form").hidden = false;
     if (mode === "enroll") {
+      const drawn = drawQr(result.uri);
+      el("secret-label").textContent = drawn ? "Cannot scan? Enter this setup key in the app instead:" : "Enter this setup key in the app:";
+      el("secret-label").hidden = false;
       el("secret").textContent = result.secret; el("secret").hidden = false; el("enrollment").hidden = false;
     }
     el("code").focus();

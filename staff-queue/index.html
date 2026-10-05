@@ -22,7 +22,9 @@
 <button id="signin-button" type="submit">Sign in</button>
 </form>
 <form id="mfa-form" class="card" hidden>
-<p id="enrollment" class="hint" hidden>First sign-in: add this secret to your authenticator, then enter its code. Never share the secret.</p>
+<p id="enrollment" class="hint" hidden>First sign-in: add this account to your authenticator app, then enter the 6-digit code it shows. Never share this screen, or a picture of it.</p>
+<div id="qr-block" hidden><p class="hint">Scan this code with the app:</p><div id="qr" class="qr"></div></div>
+<p id="secret-label" class="hint" hidden></p>
 <code id="secret" hidden></code>
 <label for="code">Authenticator code</label><input id="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required>
 <button id="mfa-button" type="submit">Verify</button>
