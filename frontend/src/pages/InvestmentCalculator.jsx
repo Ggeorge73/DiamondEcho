@@ -408,7 +408,7 @@ const InvestmentCalculator = () => {
         <div>
           <p className="eyebrow eyebrow--light"><span /> DIAMOND ECHO DEAL ANALYSIS</p>
           <h1>Underwrite with<br /><em>absolute clarity.</em></h1>
-          <p>Address-enriched, institutional-grade analysis for residences, income property, commercial assets, fix-and-flips, lots, and ground-up development.</p>
+          <p>Institutional-grade analysis for residences, income property, commercial assets, fix-and-flips, lots, and ground-up development, from the figures you enter.</p>
         </div>
         <div className="deal-studio-hero__seal"><BarChart3 /><span>FORMULA VERSION<br />1.1 · MONTE CARLO</span></div>
       </header>

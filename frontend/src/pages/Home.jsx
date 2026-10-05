@@ -70,30 +70,33 @@ const explorerData = {
       to: '/search?status=rent',
     },
   ],
+  // Every item here describes something Deal Studio does with the figures the
+  // visitor enters, and opens Deal Studio. None is a service, a market
+  // statistic or a coverage area: those need Gbenga's approval first (DE-17).
   Investments: [
     {
       title: 'Multifamily',
-      copy: 'Value-add and stabilized multifamily underwritten on real rent rolls — IRR, cash-on-cash, and DSCR modeled before you ever tour the asset.',
-      facts: [{ k: 'Typical hold', v: '5–10 yrs' }, { k: 'Modeled in', v: 'Deal Studio' }],
+      copy: 'Model value-add and stabilized multifamily from the rent and expense figures you enter: IRR, cash-on-cash, and DSCR, before you tour the asset.',
+      facts: [{ k: 'Strategy', v: 'Rental & commercial' }, { k: 'Modeled in', v: 'Deal Studio' }],
       to: '/investment-calculator',
     },
     {
       title: 'Fix & Flip',
-      copy: 'Acquisition, rehab budget, carry, and resale modeled with Monte Carlo ranges — so the downside is known before the offer goes in.',
-      facts: [{ k: 'Cycle', v: '6–12 mo' }, { k: 'Modeled in', v: 'Deal Studio' }],
+      copy: 'Acquisition, rehab budget, carry, and resale modeled with Monte Carlo ranges, so you can see a spread of outcomes before the offer goes in.',
+      facts: [{ k: 'Strategy', v: 'Fix & flip' }, { k: 'Modeled in', v: 'Deal Studio' }],
       to: '/investment-calculator',
     },
     {
       title: 'Commercial',
-      copy: 'Office, retail, and mixed-use opportunities evaluated on tenancy, credit, and basis — with clear-eyed views on repositioning risk.',
-      facts: [{ k: 'Focus', v: 'Core · Value-add' }, { k: 'Coverage', v: 'National' }],
-      to: '/agents',
+      copy: 'Model office, retail, industrial, mixed-use, and hospitality income property from your own rent, expense, and financing figures.',
+      facts: [{ k: 'Strategy', v: 'Rental & commercial' }, { k: 'Modeled in', v: 'Deal Studio' }],
+      to: '/investment-calculator',
     },
     {
       title: 'New Development',
-      copy: 'Ground-up projects from land assembly to sell-out — entitlement guidance, construction finance, and pre-sale strategy under one roof.',
-      facts: [{ k: 'Stage', v: 'Land → Sell-out' }, { k: 'Coverage', v: 'Sunbelt · Coasts' }],
-      to: '/agents',
+      copy: 'Model a land or ground-up project from your own figures: site work, construction, carrying costs, and a sale or a stabilized hold.',
+      facts: [{ k: 'Strategy', v: 'Land development' }, { k: 'Modeled in', v: 'Deal Studio' }],
+      to: '/investment-calculator',
     },
   ],
 };
@@ -111,7 +114,7 @@ const portalTiles = [
   },
   {
     icon: MessageCircle, title: 'Ask the concierge',
-    copy: 'A real-estate intelligence partner for financing, taxes, neighborhoods, and negotiation — available on every page.',
+    copy: 'General answers on buying, selling, renting, financing, and taxes, with their sources. Educational information, not advice.',
     action: 'assistant',
   },
   {
@@ -355,7 +358,8 @@ const Home = () => {
           <p data-reveal style={{ '--reveal-delay': '.1s' }}>
             Our intelligence layer underwrites rentals, flips, multifamily, and commercial deals with
             institutional rigor — IRR, cash-on-cash, DSCR, and Monte Carlo stress tests — then explains
-            the verdict in plain language you can act on.
+            the result in plain language for you to review. Results are estimates from the figures
+            you enter, not advice.
           </p>
           <button className="mf-btn mf-btn--solid" data-reveal style={{ '--reveal-delay': '.15s' }} onClick={() => navigate('/investment-calculator')}>
             <BarChart3 size={15} /> Analyze an opportunity
