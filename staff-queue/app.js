@@ -82,6 +82,8 @@
     el("signin-section").hidden = true; el("queue-section").hidden = false;
   }
   async function handle(result) {
+    // A step has succeeded, so anything said about an earlier failed attempt is stale.
+    el("alert").hidden = true; el("notice").hidden = true;
     if (result.type === "ready") { el("secret").textContent = ""; await refresh(); return; }
     if (result.type === "enrolled") {
       clear(); message("Authenticator enrolled. Sign in again with your password and authenticator.", true); return;
@@ -110,7 +112,11 @@
       const result = mode === "enroll" ? await auth.completeEnrollment(code) : await auth.completeMfa(code);
       if (generation !== epoch) { await auth.signOut(); return; }
       await handle(result);
-    } catch (error) { message(error.queueError ? error.message : "Verification failed. Retry the current authenticator code or cancel and sign in again."); }
+    } catch (error) {
+      message(error.queueError ? error.message : mode === "enroll"
+        ? "Verification failed. Check that the setup key in your authenticator matches the one shown, then retry with the current code. Or cancel and sign in again for a new key."
+        : "Verification failed. Retry the current authenticator code or cancel and sign in again.");
+    }
     finally { toggle(false); }
   });
   el("refresh-button").addEventListener("click", async () => {

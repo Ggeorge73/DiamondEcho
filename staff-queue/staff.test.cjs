@@ -73,3 +73,32 @@ test("acknowledgement uses verified API receipt then refreshes",async()=>{
   assert.equal(paths[1][0],"https://api.example.com/api/v1/inquiries/staff/ref/acknowledge");
   assert.equal(paths[1][1],"PATCH");assert.equal(paths.length,3);
 });
+test("a message about a failed attempt is cleared once a later attempt succeeds",async()=>{
+  let codes=0, signIns=0;
+  const ui=setup({auth:{
+    signIn:async()=>{ if(signIns++===0) throw new Error("wrong password"); return {type:"mfa"}; },
+    completeMfa:async()=>{ if(codes++===0) throw new Error("wrong code"); return {type:"ready"}; }}});
+  ui.submit("signin-form");await pause();
+  assert.equal(ui.el("alert").hidden,false);assert.match(ui.el("alert").textContent,/^Sign-in failed/);
+  ui.submit("signin-form");await pause();
+  assert.equal(ui.el("mfa-form").hidden,false);assert.equal(ui.el("alert").hidden,true);
+  ui.el("code").value="000000";ui.submit("mfa-form");await pause();
+  assert.equal(ui.el("alert").hidden,false);assert.match(ui.el("alert").textContent,/^Verification failed\. Retry the current authenticator code/);
+  ui.el("code").value="123456";ui.submit("mfa-form");await pause();
+  assert.equal(ui.el("queue-section").hidden,false);assert.equal(ui.el("alert").hidden,true);
+});
+test("a failed enrolment says to check the setup key and keeps the key on screen",async()=>{
+  const ui=setup({auth:{signIn:async()=>({type:"enroll",secret:"TESTSECRET"}),completeEnrollment:async()=>{throw new Error("bad code");}}});
+  ui.submit("signin-form");await pause();
+  ui.el("code").value="000000";ui.submit("mfa-form");await pause();
+  assert.match(ui.el("alert").textContent,/setup key in your authenticator matches the one shown/);
+  assert.match(ui.el("alert").textContent,/sign in again for a new key/);
+  assert.equal(ui.el("secret").textContent,"TESTSECRET");assert.equal(ui.el("queue-section").hidden,true);
+});
+test("the acknowledgement notice survives the list refresh that follows it",async()=>{
+  const item={kind:"buyer",status:"queued",request_id:"ref",full_name:"Test",email:"visitor@example.com"};
+  const ui=setup({fetch:async(_,init)=>({ok:true,status:200,json:async()=>init.method==="PATCH"?{request_id:"ref",status:"acknowledged"}:{items:[item]}})});
+  await login(ui);
+  ui.el("inquiries").querySelector("button").click();await pause();await pause();
+  assert.equal(ui.el("notice").hidden,false);assert.equal(ui.el("notice").textContent,"Request acknowledged.");
+});
