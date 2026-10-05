@@ -4,7 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-route
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
 import Home from "./pages/Home";
-import Search from "./pages/Search";
+import { KeptSearch } from "./pages/Search";
 import InvestmentCalculator from "./pages/InvestmentCalculator";
 import Agents from "./pages/Agents";
 import About from "./pages/About";
@@ -27,7 +27,8 @@ function App() {
         <Navbar />
         <Routes>
           <Route path="/" element={<Home />} />
-          <Route path="/search" element={<Search />} />
+          {/* The search page itself is KeptSearch, below: it stays loaded between visits. */}
+          <Route path="/search" element={null} />
           <Route path="/property/:id" element={<Navigate to="/search" replace />} />
           <Route path="/investment-calculator" element={<InvestmentCalculator />} />
           <Route path="/agents" element={<Agents />} />
@@ -37,6 +38,7 @@ function App() {
           <Route path="/terms" element={<Terms />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
+        <KeptSearch />
         <Footer />
         <RealEstateAssistant />
       </BrowserRouter>

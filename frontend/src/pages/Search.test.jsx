@@ -2,6 +2,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
 import Search, { GAMLS_SEARCH_URL, GAMLS_SALE_SEARCH_URL, GAMLS_RENTAL_SEARCH_URL } from './Search';
+import { RELOADED_NOTE_MS } from '../components/GamlsSearch';
 
 let container;
 let root;
@@ -12,6 +13,7 @@ beforeEach(() => {
   root = createRoot(container);
 });
 afterEach(async () => {
+  jest.restoreAllMocks();
   await act(async () => root.unmount());
   container.remove();
 });
@@ -28,7 +30,9 @@ const render = async (route) => {
   ));
 };
 const address = () => location.pathname + location.search;
-const frame = () => container.querySelector('iframe');
+// The search the visitor can see. A second search may be loaded and hidden.
+const frame = () => container.querySelector('iframe:not([hidden])');
+const frames = () => [...container.querySelectorAll('iframe')];
 const click = async (element) => {
   await act(async () => element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })));
 };
@@ -133,24 +137,65 @@ test('tidying the address replaces the entry, so Back is not trapped', async () 
 });
 
 // DE-21: Back, Forward and reset.
-test('switching between for-sale and rentals replaces the frame instead of re-pointing it', async () => {
-  // Re-pointing a frame (changing its src) adds a step to the browser history.
-  // Back then showed the for-sale form under the rentals note.
+test('for-sale and rentals each keep their own frame; moving between them shows one and hides the other', async () => {
+  // One frame re-pointed at the other search added a step to the browser
+  // history: Back showed for-sale results under the rentals note. One frame
+  // replaced by another left steps in the history with no frame to go to: Back
+  // presses that did nothing. So neither frame is ever re-pointed or removed.
+  const assigned = jest.spyOn(HTMLIFrameElement.prototype, 'src', 'set');
+  const attributes = jest.spyOn(Element.prototype, 'setAttribute');
+  const srcWrites = () => attributes.mock.calls
+    .filter((call, index) => attributes.mock.instances[index].tagName === 'IFRAME' && call[0] === 'src')
+    .map((call) => call[1]);
   await render('/search');
+  expect(frames()).toHaveLength(1);
   const saleFrame = frame();
+  expect(saleFrame.getAttribute('src')).toBe(GAMLS_SALE_SEARCH_URL);
+
   await act(async () => navigate('/search?status=rent'));
-  expect(frame()).not.toBe(saleFrame);
-  expect(frame().getAttribute('src')).toBe(GAMLS_RENTAL_SEARCH_URL);
+  expect(frames()).toHaveLength(2);
   const rentalFrame = frame();
+  expect(rentalFrame).not.toBe(saleFrame);
+  expect(rentalFrame.getAttribute('src')).toBe(GAMLS_RENTAL_SEARCH_URL);
+  expect(saleFrame.isConnected).toBe(true);
+  expect(saleFrame.hidden).toBe(true);
+  expect(saleFrame.getAttribute('src')).toBe(GAMLS_SALE_SEARCH_URL);
+
   await act(async () => navigate(-1));
   expect(address()).toBe('/search');
-  expect(frame()).not.toBe(rentalFrame);
-  expect(frame().getAttribute('src')).toBe(GAMLS_SALE_SEARCH_URL);
+  expect(frame()).toBe(saleFrame);
+  expect(rentalFrame.isConnected).toBe(true);
+  expect(rentalFrame.hidden).toBe(true);
   expect(container.querySelector('.de-idx__notice')).toBeNull();
+
   await act(async () => navigate(1));
   expect(address()).toBe('/search?status=rent');
-  expect(frame().getAttribute('src')).toBe(GAMLS_RENTAL_SEARCH_URL);
+  expect(frame()).toBe(rentalFrame);
+  expect(saleFrame.hidden).toBe(true);
   expect(container.textContent).toContain('Looking for a rental?');
+
+  // Each frame was given its address once, when it was created, and never again.
+  expect(frames()).toEqual([saleFrame, rentalFrame]);
+  expect(srcWrites()).toEqual([GAMLS_SALE_SEARCH_URL, GAMLS_RENTAL_SEARCH_URL]);
+  expect(assigned).not.toHaveBeenCalled();
+  assigned.mockRestore();
+  attributes.mockRestore();
+});
+test('a page opened on rentals loads only the rentals search until for-sale is asked for', async () => {
+  await render('/search?status=rent');
+  expect(frames()).toHaveLength(1);
+  const rentalFrame = frame();
+  await click([...container.querySelectorAll('.de-idx__notice a')].find((a) => a.textContent === 'Show homes for sale instead'));
+  expect(frames()).toHaveLength(2);
+  // The for-sale frame is added without moving the rentals frame, which would reload it.
+  expect(frames().map((item) => item.getAttribute('src'))).toEqual([GAMLS_SALE_SEARCH_URL, GAMLS_RENTAL_SEARCH_URL]);
+  expect(rentalFrame.isConnected).toBe(true);
+  expect(rentalFrame.hidden).toBe(true);
+  expect(frame().getAttribute('src')).toBe(GAMLS_SALE_SEARCH_URL);
+});
+test('the hidden search cannot be shown by the stylesheet', () => {
+  const css = require('fs').readFileSync(require('path').resolve(__dirname, 'Search.css'), 'utf8');
+  expect(css).toMatch(/\.de-idx__frame\[hidden\]\s*\{\s*display:\s*none;/);
 });
 test('a note-only change keeps the same frame, so a search in progress is not thrown away', async () => {
   await render('/search?q=Atlanta&status=rent');
@@ -167,19 +212,38 @@ test('"Show homes for sale instead" keeps the note about the older link', async 
   expect(frame().getAttribute('src')).toBe(GAMLS_SALE_SEARCH_URL);
   expect(container.textContent).toContain('“Atlanta”');
 });
-test('"Start a new search" reloads the form the page was opened for and says so', async () => {
+test('"Start a new search" sends the visible search back to its form, keeps the frame, and says so for a while', async () => {
+  jest.useFakeTimers();
+  try {
+    await render('/search?status=rent');
+    const before = frame();
+    const assigned = jest.spyOn(HTMLIFrameElement.prototype, 'src', 'set');
+    expect(container.querySelector('.de-idx__status').textContent).toBe('');
+    await click([...container.querySelectorAll('button')].find((b) => b.textContent === 'Start a new search'));
+    // Same frame, sent to its starting address again: an ordinary step that Back can undo.
+    expect(frame()).toBe(before);
+    expect(assigned.mock.calls.map(([value]) => value)).toEqual([GAMLS_RENTAL_SEARCH_URL]);
+    expect(address()).toBe('/search?status=rent');
+    expect(container.querySelector('.de-idx__status').textContent).toBe('The search form has been reloaded.');
+    await act(async () => { jest.advanceTimersByTime(RELOADED_NOTE_MS + 1); });
+    expect(container.querySelector('.de-idx__status').textContent).toBe('');
+    assigned.mockRestore();
+  } finally {
+    jest.useRealTimers();
+  }
+});
+test('the reload message does not follow the visitor to the other search', async () => {
   await render('/search?status=rent');
-  const before = frame();
-  expect(container.querySelector('.de-idx__status').textContent).toBe('');
   await click([...container.querySelectorAll('button')].find((b) => b.textContent === 'Start a new search'));
-  expect(frame()).not.toBe(before);
-  expect(frame().getAttribute('src')).toBe(GAMLS_RENTAL_SEARCH_URL);
-  expect(address()).toBe('/search?status=rent');
   expect(container.querySelector('.de-idx__status').textContent).toBe('The search form has been reloaded.');
+  await act(async () => navigate('/search'));
+  expect(container.querySelector('.de-idx__status').textContent).toBe('');
+  await act(async () => navigate(-1));
+  expect(container.querySelector('.de-idx__status').textContent).toBe('');
 });
 test('the page says what its link does and does not keep, and what to do if the search is blank', async () => {
   await render('/search');
-  expect(container.querySelector('#idx-help').textContent).toContain('What you choose in the search stays inside Georgia MLS.');
-  expect(container.querySelector('#idx-help').textContent).toContain('anyone you send the link to starts a new search');
+  expect(container.querySelector('.de-idx__help').textContent).toContain('What you choose in the search stays inside Georgia MLS.');
+  expect(container.querySelector('.de-idx__help').textContent).toContain('anyone you send the link to starts a new search');
   expect(container.querySelector('.de-idx__fallback').textContent).toContain('choose “Start a new search”');
 });

@@ -117,38 +117,60 @@ has done for them since PR #25.
 
 ### Back, Forward, reload and reset
 
+How the page is built, and why:
+
+- **For-sale and rentals each keep their own frame.** Only the one the address asks
+  for is shown; the other stays loaded and hidden. The second frame is not loaded
+  until the visitor asks for it.
+- **The search page stays loaded once opened.** While the visitor is on another
+  DiamondEcho page it is hidden, not removed (`KeptSearch` in
+  `frontend/src/pages/Search.jsx`). While hidden it neither reads nor rewrites the
+  address, which then belongs to the other page.
+- **No frame is ever pointed at a different search or removed.** Pointing one frame
+  at the other search adds a step to the browser's history: Back then showed
+  for-sale results under the rentals note. Removing a frame leaves its steps in the
+  history with nothing to go to: Back presses that did nothing, and the visitor's
+  results gone. Both were measured before this design (see DE-21).
+
 Measured in headless Chromium with a local stand-in page in place of the Georgia
-MLS frame, so that only the browser's history behaviour was under test.
+MLS frame, so that only the browser's history behaviour was under test. Each row
+was also checked for agreement between the address, the note, the header and the
+frame that is shown.
 
-| Action | Before DE-21 | Now |
-| --- | --- | --- |
-| On `/search`, choose Rentals, then Back | The address and note still said rentals while the frame showed the for-sale form | Address, note and frame all return to for-sale |
-| Forward after that | Did nothing; the forward step had been lost | Returns to rentals |
-| Search in the for-sale frame, choose Rentals, search, then Back twice | For-sale results shown under the rentals note | Rental form, then the for-sale form |
-| Header on `/search` | "Search homes" and "Rentals" both marked as the current page | Only the one the visitor is on |
-| Search inside the frame, then Back | Returns to the form inside the frame | Same |
-| Reload | Frame returns to its starting form | Same |
+| Action | Result |
+| --- | --- |
+| Two for-sale searches, Rentals, one rental search, then Back five times | Rental form; for-sale second results; for-sale first results; for-sale form; the page before the search. No press without effect |
+| Forward five times after that | The same steps in order, ending on the rental results |
+| For-sale search, Rentals, rental search, "Show homes for sale instead", for-sale search, then Back five times | Each step undone in order; each search still showing what the visitor left |
+| Open results, choose "Ask about a property", Back | The same results, at the place on the page the visitor had scrolled to |
+| Leave the search, come back by a link | The search as the visitor left it, at the top of the page |
+| "Start a new search" on results, then Back | The form; then the results again |
+| Reload | The form the address asks for. Choices made inside Georgia MLS are not kept |
+| Header | Only "Search homes" or only "Rentals" is marked as the current page |
 
-Cause of the first three rows: changing a frame's address adds a step to the
-browser's history. The frame is now replaced, not re-pointed, when the visitor
-moves between for-sale and rentals.
-
-"Start a new search" reloads the form the page was opened for. It is the site's
-own reset; the provider's Reset and Revise Search buttons inside the frame are
-unchanged. The page cannot detect a failed or blank frame (see the note on the
-load event above), so it tells the visitor what to do if the search is blank.
+"Start a new search" sends the visible frame back to its starting form as an
+ordinary step. It is the site's own reset; the provider's Reset and Revise Search
+buttons inside the frame are unchanged. The page cannot detect a failed or blank
+frame (see the note on the load event above), so it tells the visitor what to do if
+the search is blank.
 
 Limits:
 
-- Moving between for-sale and rentals starts that search from its form. Results
-  from the search the visitor left are not kept.
-- After searching in the frame and then moving between for-sale and rentals, Back
-  can need extra presses that appear to do nothing, one for each step taken in the
-  frame that was replaced. Measured in Chromium: two searches gave two such presses.
-- A fix that keeps those results (re-pointing the frame without adding a history
-  step) depends on each browser restoring the frame correctly on Back. That could
-  not be tested in Safari or Firefox here, so the predictable behaviour was chosen.
-- History behaviour was measured in Chromium only. Safari and Firefox are untested.
+- A reload, a new tab or a shared link starts from the form. Only `status` and `q`
+  are in the address.
+- After a reload, Back presses that belong to steps taken in the frame before the
+  reload appear to do nothing; the frame those steps belonged to no longer exists.
+  Measured: two steps, reload, then two presses without effect before Back left
+  the page.
+- The home page has its own copy of the search. It is not kept: a search made there
+  is lost when the visitor leaves the home page. Measured: two steps there, a visit
+  to Advisory, then Back showed the home page with the empty form and needed two
+  further presses without effect.
+- History behaviour was measured in Chromium, and on the real Georgia MLS frame in
+  Microsoft Edge. Safari and Firefox are untested. The design relies only on Back
+  and Forward moving through a frame's own steps, which browsers have long done,
+  and no longer on anything special at the moment of switching.
+- A visitor who has opened both searches has two Georgia MLS pages loaded.
 - `q` is not passed to Georgia MLS. The provider's own Revise Search link carries
   `city=`, so pre-filling City from a link looks possible, but `q` may hold a
   neighborhood or keyword that City would not match. That is a scope decision for
@@ -168,7 +190,8 @@ Regression tests cover the member URL, the pre-selected type parameters for the 
 rental routes, absence of external search links, removal of mock search results, the inquiry
 link, that a requested location is disclosed and never passed to the provider, the
 accepted spellings of `status` and `q`, the tidied address, the single current
-header item, the frame being replaced on a for-sale/rentals change, and the reset.
+header item, a frame for each search that is never re-pointed or removed, the
+search page kept loaded while the visitor is elsewhere, and the reset.
 Run the full frontend suite and production build through repository CI.
 
 Before launch, verify on the actual HTTPS staging origin:
