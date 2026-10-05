@@ -286,6 +286,7 @@ Not driven on Cloud Run: the hourly cap of 30 per instance. It is covered by the
 - Six synthetic requests in the database, one acknowledged.
 - Staff site live with sign-in. One staff user, email verified, one authenticator enrolled.
 - To switch the queue off at once, use the one-line update under step 6.
+- Later on 2026-10-05, under DE-31: an arrival alert was added and two more synthetic requests were sent to test it, making eight. See `docs/de31-inquiry-routing.md`.
 
 ## Cleanup of test data (Gbenga)
 
@@ -316,9 +317,9 @@ gcloud firestore bulk-delete --database="(default)" --collection-ids=inquiries
 6. **No QR code at enrolment.** The setup key is 32 characters typed by hand. The first enrolment failed, most likely on a mistyped key, and the screen that shows the key was sent as a screenshot. A QR code drawn in the page from the same key would remove both problems. Not built yet.
 7. **Two staff-page defects found in these tests and fixed in the pull request that added this section.** A message about a failed attempt stayed on screen after a later attempt succeeded, so "Verification failed…" sat above an open queue. And a failed enrolment gave the same sentence as a wrong sign-in code, with no hint to check the key.
 8. **Cloud Shell has no `uuidgen`.** A test that relied on it sent seven requests with no valid key; they were answered 422 and 429 and stored nothing. Use `python3 -c 'import uuid;print(uuid.uuid4())'`.
-9. **Nobody is told when a request arrives.** Staff must open the queue. Alerts and a response time belong to DE-31 and DE-26.
+9. **Nobody is told when a request arrives.** Staff must open the queue. Alerts and a response time belong to DE-31 and DE-26. Closed on staging later the same day: an arrival alert and the response terms are in `docs/de31-inquiry-routing.md`.
 10. **The Privacy page date.** `POLICIES_UPDATED` must be set to the day online requests open in production, because that is the day the page a visitor sees changes.
 
 ## What this stage does not cover
 
-Production, the live domain, DNS, email notification of new requests (none exists; staff must open the queue), retention or deletion schedules, monitoring and alerts (DE-26, DE-31), and Safari, Firefox and iPhone.
+Production, the live domain, DNS, email notification of new requests (none existed at this stage; see `docs/de31-inquiry-routing.md` for the alert added afterwards), retention or deletion schedules, monitoring and alerts (DE-26, DE-31), and Safari, Firefox and iPhone.
