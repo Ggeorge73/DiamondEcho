@@ -13,6 +13,11 @@ Conflicting payload returns 409, invalid input 422, and absent configuration
 or unconfirmed storage 503. Queued means stored for staff review, not an
 appointment, email delivery or completed response.
 
+Submissions are limited (`inquiries/limits.py`): more than 5 from one
+connection in 10 minutes returns 429, and more than 30 accepted by one
+instance in an hour returns 503, both with `Retry-After`. The counts are in
+memory per instance. The runbook says what this does and does not stop.
+
 GET /api/v1/inquiries/staff?limit=50 and
 PATCH /api/v1/inquiries/staff/{request_id}/acknowledge require a verified,
 nonrevoked Firebase ID token, approved UID, verified email and TOTP sign-in.
