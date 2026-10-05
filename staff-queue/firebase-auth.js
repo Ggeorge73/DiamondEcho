@@ -1,6 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { initializeAuth, inMemoryPersistence, signInWithEmailAndPassword,
   signOut, getMultiFactorResolver, multiFactor, TotpMultiFactorGenerator } from "firebase/auth";
+import { setupAccount, setupIssuer } from "./qr.js";
 
 // Only public Firebase configuration enters this bundle. Tokens stay in SDK memory.
 export function createStaffAuth(config) {
@@ -20,7 +21,10 @@ export function createStaffAuth(config) {
     }
     if (!multiFactor(user).enrolledFactors.some(f => f.factorId === "totp")) {
       secret = await TotpMultiFactorGenerator.generateSecret(await multiFactor(user).getSession());
-      return { type: "enroll", secret: secret.secretKey };
+      // The same key as a setup address an authenticator app can scan. Firebase
+      // puts the two names into the address as given, so they are encoded here.
+      const uri = secret.generateQrCodeUrl(setupAccount(user.email, config.firebase.projectId), setupIssuer());
+      return { type: "enroll", secret: secret.secretKey, uri };
     }
     return { type: "ready" };
   }

@@ -7,11 +7,13 @@
     "test": "node --test staff.test.cjs"
   },
   "dependencies": {
-    "firebase": "12.19.0"
+    "firebase": "12.19.0",
+    "qrcode-generator": "2.0.4"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "5.0.2",
     "esbuild": "0.28.2",
     "jsdom": "16.7.0",
-    "@firebase/rules-unit-testing": "5.0.2"
+    "jsqr": "1.4.0"
   }
 }

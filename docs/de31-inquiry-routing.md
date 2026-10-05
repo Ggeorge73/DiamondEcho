@@ -12,6 +12,9 @@ Written 2026-10-05 by the Operations agent. Every term in the first table was de
 | Business hours | Monday to Saturday, 9:00 to 17:00 Eastern |
 | Response time | Within 4 business hours |
 | Out of hours | The request is accepted and the alert still goes out. The visitor is told on screen that a reply comes in business hours. Answered the next business day; Gbenga may answer sooner |
+| Public holidays | Requests are received as on any day. The reply comes when the office is next open |
+| Away or closed notices | None. The site never says the office or the responder is away; it is always open for requests |
+| Emailed auto-reply to the visitor | None. Gbenga decided against it on 2026-10-05 |
 | Backup responder | None at launch |
 
 ## How a request travels
@@ -37,7 +40,7 @@ Gbenga asked on 2026-10-05 that requests stay open round the clock and that a vi
 - Open or closed is judged from the time the request service recorded, read on the office's Eastern clock. The visitor's own clock and time zone play no part.
 - The words promise a reply in business hours, not within a number of hours. The 4-business-hour figure is an internal target and is not shown to visitors.
 - The hours live in one place, `HOURS` in `frontend/src/lib/contact.js`.
-- Public holidays are not known to the site. On a holiday inside the usual hours the visitor sees the in-hours line, which names the hours and promises nothing about today.
+- Public holidays: by Gbenga's decision of 2026-10-05 the site keeps no holiday calendar and no "away" setting. A request is received as on any day and the reply comes when the office is next open. On a holiday inside the usual hours the visitor sees the in-hours line, which names the hours and promises nothing about today.
 - This is a notice on the screen, **not an email**. A visitor who closes the page has no copy of it. See item 4 under "Not proven, and open".
 
 ## The responder's routine
@@ -61,7 +64,7 @@ The clock runs only inside business hours. This is the Operations agent's readin
 | Sunday, any time | Monday 13:00 |
 | Any day after 17:00 | 13:00 on the next business day |
 
-Not decided: public holidays, and what happens if the one responder is away for a full day.
+Public holidays and days when the responder is away are not counted or announced by the site. The examples above assume an ordinary week; on such a day the reply comes when the office is next open.
 
 ## The alert on staging
 
@@ -162,8 +165,8 @@ To see what is waiting, sign in to the staff page: every request that still show
 1. **Whether the email shows a visitor's IP address or a raw log line.** The request log holds the caller's address and browser string, never the form. Gbenga described the email but did not say either way, so this is unchecked. Settle it before production by reading one alert email in full.
 2. **Production.** Nothing in this document exists there.
 3. **The two Google limits** in the table above were read from Google's documentation, not driven.
-4. **No acknowledgement email goes to the visitor.** The receipt on screen, with its business-hours line, is the only confirmation they get. An emailed auto-reply needs things this project does not have: a mail-sending provider and its account, an API key held in Secret Manager, sender records in the DNS of `diamondecho.com`, new code and tests, and a line on the Privacy page naming the provider. Each is Gbenga's decision.
-5. **Public holidays and responder absence** are not decided.
+4. **No acknowledgement email goes to the visitor, by decision.** The receipt on screen, with its business-hours line, is the only confirmation they get. Gbenga decided on 2026-10-05 that no emailed auto-reply is wanted, so no mail provider, key or DNS record is needed.
+5. **The site does not know public holidays or absences, by decision.** Nothing on it changes on such a day.
 6. **How long requests are kept**, and who deletes them, is not decided (DE-26).
 7. **Nothing measures the response time.** The queue shows when a request arrived and whether it has been acknowledged. It does not show when it was acknowledged, and whether the visitor was answered within 4 business hours is not recorded anywhere.
 8. **The business-hours wording is tested in the repository's tests and in headless Chromium at 320 and 1280 px, not yet seen on staging**, where it appears once the pull request that added it is merged.

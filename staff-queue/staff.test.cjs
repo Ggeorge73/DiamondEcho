@@ -5,13 +5,14 @@ const fs = require("node:fs");
 const html = fs.readFileSync(__dirname + "/index.html", "utf8");
 const script = fs.readFileSync(__dirname + "/app.js", "utf8");
 const pause = () => new Promise(resolve => setTimeout(resolve, 15));
-function setup({enabled=true,auth={},fetch}={}) {
+function setup({enabled=true,auth={},fetch,qr}={}) {
   const dom = new JSDOM(html, {url:"https://staff.example.com",runScripts:"outside-only"});
   const w = dom.window;
   w.DIAMOND_ECHO_STAFF_CONFIG = {enabled, staffOrigin:w.location.origin, apiBase:"https://api.example.com"};
   w.DIAMOND_ECHO_STAFF_AUTH = {signIn:async()=>({type:"mfa"}), completeMfa:async()=>({type:"ready"}),
     getToken:async()=>"named-id-token", signOut:async()=>{}, ...auth};
   w.fetch = fetch || (async()=>({ok:true,status:200,json:async()=>({items:[]})}));
+  if (qr) w.DIAMOND_ECHO_STAFF_QR = qr;
   w.eval(script);
   const el = id => w.document.getElementById(id);
   const submit = id => el(id).dispatchEvent(new w.Event("submit",{bubbles:true,cancelable:true}));
@@ -123,4 +124,80 @@ test("a time that cannot be read is shown as it was sent",async()=>{
   const ui=setup({fetch:listOf({submitted_at:"not-a-time"})});
   await login(ui);
   assert.equal(shown(ui,"Submitted"),"not-a-time");
+});
+
+// ---- QR code at enrolment ----
+const jsQR = require("jsqr");
+const KEY = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+const qrModule = import("./qr.js");
+// The address is put together the way the Firebase SDK does it: the two names go in as given.
+const setupUri = async () => { const {setupAccount,setupIssuer} = await qrModule;
+  return "otpauth://totp/"+setupIssuer()+":"+setupAccount("staff@example.com","demo-diamondecho")+"?secret="+KEY+"&issuer="+setupIssuer()+"&algorithm=SHA1&digits=6"; };
+const enrolling = async (options={}) => { const {qrMatrix} = await qrModule; const uri = await setupUri();
+  const ui = setup({qr:qrMatrix, ...options, auth:{signIn:async()=>({type:"enroll",secret:KEY,uri}),completeEnrollment:async()=>({type:"enrolled"}), ...(options.auth||{})}});
+  ui.submit("signin-form"); await pause(); return {ui,uri}; };
+// Reads the drawn squares back out of the SVG and paints them as pixels, the way a camera would see them.
+function pixels(svg, scale=4) {
+  const size = Number(svg.getAttribute("viewBox").split(" ")[2]), width = size*scale;
+  const data = new Uint8ClampedArray(width*width*4).fill(255);
+  const squares = [...svg.querySelector("path").getAttribute("d").matchAll(/M(\d+) (\d+)h1v1h-1z/g)].map(m=>[Number(m[1]),Number(m[2])]);
+  for (const [x,y] of squares) for (let dy=0; dy<scale; dy++) for (let dx=0; dx<scale; dx++) {
+    const i = ((y*scale+dy)*width + x*scale+dx)*4; data[i]=data[i+1]=data[i+2]=0; }
+  return {data,width,size,squares};
+}
+test("the enrolment code, read back as a camera would read it, is exactly the setup address",async()=>{
+  const {ui,uri} = await enrolling();
+  assert.equal(ui.el("qr-block").hidden,false);
+  const image = pixels(ui.el("qr").querySelector("svg"));
+  const read = jsQR(image.data,image.width,image.width);
+  assert.ok(read,"the code could not be read"); assert.equal(read.data,uri);
+});
+test("the setup address names the issuer, the account with its project, and the same key that is shown",async()=>{
+  const {ui,uri} = await enrolling(); const parsed = new URL(uri);
+  assert.equal(parsed.protocol,"otpauth:"); assert.equal(parsed.host,"totp");
+  assert.equal(decodeURIComponent(parsed.pathname),"/DiamondEcho staff:staff@example.com (demo-diamondecho)");
+  assert.equal(parsed.searchParams.get("issuer"),"DiamondEcho staff");
+  assert.equal(parsed.searchParams.get("secret"),ui.el("secret").textContent);
+  assert.doesNotMatch(uri,/ /);
+});
+test("the code is plain SVG with a quiet border: no image, no canvas, no style attribute, and it has a name",async()=>{
+  const {ui} = await enrolling(); const box = ui.el("qr"), svg = box.querySelector("svg");
+  assert.equal(ui.w.document.querySelectorAll("img, canvas, [style], style").length,0);
+  assert.equal(svg.getAttribute("role"),"img"); assert.match(svg.getAttribute("aria-label"),/QR code/);
+  const {size,squares} = pixels(svg); assert.ok(squares.length>200);
+  for (const [x,y] of squares) assert.ok(x>=4 && y>=4 && x<size-4 && y<size-4);
+  assert.equal(svg.querySelector("rect").getAttribute("fill"),"#ffffff");
+  assert.equal(svg.querySelector("path").getAttribute("fill"),"#000000");
+});
+test("the setup key stays on screen as the way in for someone who cannot scan",async()=>{
+  const {ui} = await enrolling();
+  assert.equal(ui.el("secret").textContent,KEY); assert.equal(ui.el("secret").hidden,false);
+  assert.equal(ui.el("secret-label").textContent,"Cannot scan? Enter this setup key in the app instead:");
+  assert.match(ui.el("enrollment").textContent,/Never share this screen, or a picture of it/);
+});
+test("with no code available, or one that fails to draw, enrolment still works from the key alone",async()=>{
+  for (const qr of [undefined, ()=>{throw new Error("no");}, ()=>[]]) {
+    const {ui} = await enrolling({qr});
+    assert.equal(ui.el("qr-block").hidden,true); assert.equal(ui.el("qr").children.length,0);
+    assert.equal(ui.el("secret").textContent,KEY);
+    assert.equal(ui.el("secret-label").textContent,"Enter this setup key in the app:");
+    ui.el("code").value="123456"; ui.submit("mfa-form"); await pause();
+    assert.match(ui.el("notice").textContent,/Authenticator enrolled/);
+  }
+});
+test("the code and the key are removed on cancel, after enrolment, and are never drawn at an ordinary sign-in",async()=>{
+  const gone = ui => { assert.equal(ui.el("qr").children.length,0); assert.equal(ui.el("qr-block").hidden,true);
+    assert.equal(ui.el("secret").textContent,""); assert.equal(ui.el("secret-label").hidden,true); };
+  let {ui} = await enrolling(); ui.el("cancel-button").click(); await pause(); gone(ui);
+  ({ui} = await enrolling()); ui.el("code").value="123456"; ui.submit("mfa-form"); await pause(); gone(ui);
+  const {qrMatrix} = await qrModule; let calls = 0;
+  ui = setup({qr:text=>{calls++;return qrMatrix(text);}}); ui.submit("signin-form"); await pause();
+  assert.equal(ui.el("mfa-form").hidden,false); gone(ui); assert.equal(calls,0);
+});
+test("a failed enrolment code keeps the same QR code and key on screen for another try",async()=>{
+  const {ui,uri} = await enrolling({auth:{completeEnrollment:async()=>{throw new Error("bad code");}}});
+  ui.el("code").value="000000"; ui.submit("mfa-form"); await pause();
+  assert.match(ui.el("alert").textContent,/Verification failed/);
+  const image = pixels(ui.el("qr").querySelector("svg"));
+  assert.equal(jsQR(image.data,image.width,image.width).data,uri); assert.equal(ui.el("secret").textContent,KEY);
 });
