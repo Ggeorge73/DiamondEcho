@@ -286,7 +286,7 @@ Not driven on Cloud Run: the hourly cap of 30 per instance. It is covered by the
 - Six synthetic requests in the database, one acknowledged.
 - Staff site live with sign-in. One staff user, email verified, one authenticator enrolled.
 - To switch the queue off at once, use the one-line update under step 6.
-- Later on 2026-10-05, under DE-31: an arrival alert was added and two more synthetic requests were sent to test it, making eight. See `docs/de31-inquiry-routing.md`.
+- Later on 2026-10-05, under DE-31: an arrival alert was added and two more synthetic requests were sent to test it, making eight. See `docs/de31-inquiry-routing.md`. All eight were then removed; see "Cleanup of test data" below.
 
 ## Cleanup of test data (Gbenga)
 
@@ -294,6 +294,15 @@ Deleting data is the owner's action. Staging holds only the synthetic requests a
 
 ```bash
 gcloud firestore bulk-delete --database="(default)" --collection-ids=inquiries
+```
+
+Run by Gbenga in Cloud Shell on 2026-10-05 at 17:06 UTC, after the DE-31 alert test, with `--project=diamondecho-staging` added. The command asks "Do you want to continue (Y/n)?" before it starts. A read-only count of the collection returned 8 before and 0 at 17:09 UTC. The count, which changes nothing:
+
+```bash
+curl -s -X POST -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+  -H "x-goog-user-project: diamondecho-staging" -H "Content-Type: application/json" \
+  "https://firestore.googleapis.com/v1/projects/diamondecho-staging/databases/(default)/documents:runAggregationQuery" \
+  -d '{"structuredAggregationQuery":{"structuredQuery":{"from":[{"collectionId":"inquiries"}]},"aggregations":[{"alias":"n","count":{}}]}}'
 ```
 
 ## Rollback (staging only)
