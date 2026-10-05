@@ -1,23 +1,34 @@
 # DE-33 staging setup: second stage
 
-Status: prepared by Claude acting as the Engineering agent on 2026-10-05. **Nothing in this document has been run.** The commands are written from the product documentation and the repository, not from a run. When a step is run, its row under "What has been run" is filled in and any command that needed changing is corrected here, as was done for the first stage in [de33-staging-setup.md](de33-staging-setup.md).
+Status: prepared by Claude acting as the Engineering agent on 2026-10-05. **Steps 1, 2, 3, 4a and 5 were run that day, and six of the eight settings in step 7 were saved. Steps 4b, 4c, 6, 8 and 9 have not been run.** The commands were first written from the product documentation and the repository. Each step that has been run is recorded under "What has been run", and its commands below have been corrected to match what was run (the same commands, entered one at a time rather than as one block). The commands for steps not yet run are still unproven and will be corrected here as each is run, as was done for the first stage in [de33-staging-setup.md](de33-staging-setup.md).
 
 The first stage stood up the API and two staging sites with the inquiry queue disabled. This stage adds the database, staff sign-in with an authenticator app, and real test requests end to end. It is staging only: project `diamondecho-staging`, region `us-east1`, the two `*-staging.pages.dev` sites. No production resource, domain, DNS record or billing setting is touched.
 
 ## What has been run
 
+Gbenga gave his yes in chat on 2026-10-05 to the database location, the staff email, the listed changes, and separately to the Blaze pricing plan when Firebase asked for it. Claude ran these in his browser and Cloud Shell, signed in as him. No password, key or token was typed or seen.
+
 | Step | Result |
 | --- | --- |
-| 1 to 9 | Not run |
+| 1 | Firebase added to `diamondecho-staging`. Google Analytics off. Firebase required a pricing-plan confirmation, "Blaze, pay as you go", because the project already has billing; Gbenga approved it. No monthly fee; the free allowances still apply |
+| 2 | Before: Firestore service off, no database, the API's identity holding no roles. `firebase`, `firebaserules` and `identitytoolkit` had been switched on by step 1. After: all four services on; database `(default)` created, `us-east1`, Native mode, free tier; the API's identity holds exactly `roles/datastore.user` and `roles/firebaseauth.viewer` |
+| 3 | Rules and index settings published from commit `ef1bb51` with `firebase-tools@15.31.0`, which used Cloud Shell's sign-in without asking. Anonymous list and anonymous write both answer 403. The anonymous list already answered 403 before the rules were published: a new database is closed to browsers by default |
+| 4a | Email/Password provider on (email-link sign-in off). Upgraded to Identity Platform; the console warns that this cannot be reversed and that sign-in is charged only above 50,000 monthly users. The three settings calls each answered 200. Read back: authenticator provider `ENABLED` with `adjacentIntervals` 1; `disabledUserSignup` and `disabledUserDeletion` true; improved email privacy true; phone and anonymous sign-in not configured |
+| 4b, 4c | Not run. Waiting for Gbenga to create the staff user |
+| 5 | Web app `DiamondEcho staff staging` registered, Hosting not set up. App ID `1:299705773978:web:7e51d904b59b1582a6d423`, auth domain `diamondecho-staging.firebaseapp.com` |
+| 6 | Not run. Waits for the submission limits to be on `main` |
+| 7 | Six settings saved on the `diamondecho-staff-staging` Pages project (Production): the three addresses, the project ID, the auth domain and the app ID. **Not** yet set: `FIREBASE_WEB_API_KEY` (Gbenga) and `STAFF_QUEUE_ENABLED`. No deployment was retried, so the staff site still serves the disabled page |
+| 8, 9 | Not run |
 
-## Decisions for Gbenga before anything is created
+## Decisions
 
-| Decision | Recommended | Note |
+| Decision | Chosen | Note |
 | --- | --- | --- |
-| Database location | `us-east1` | Same region as the API. **Cannot be changed after the database is created** |
-| Staff sign-in email | An inbox he reads | One named account. The API lists the account's user ID, never the email |
-| Authenticator window | 1 interval either side | A code is accepted for about 90 seconds in total. Google's default is 5 either side |
-| Turning the queue on, on staging | Yes, after the submission limits are merged | The staging API is reachable from the internet. See "Why the limits come first" |
+| Database location | `us-east1`. Approved by Gbenga 2026-10-05 | Same region as the API. **Cannot be changed now that the database exists** |
+| Staff sign-in email | The DiamondEcho realtor inbox. Approved by Gbenga 2026-10-05 | One named account. The API lists the account's user ID, never the email |
+| Pricing plan | Blaze, pay as you go. Approved by Gbenga 2026-10-05 | Required for a project with billing. No monthly fee |
+| Authenticator window | 1 interval either side | A code is accepted for about 90 seconds in total. Google's default is 5 either side. Claude's choice; say if it should be wider |
+| Turning the queue on, on staging | Approved, after the submission limits are merged | The staging API is reachable from the internet. See "Why the limits come first" |
 
 Expected cost: none at this volume. Firestore's free allowance and Identity Platform's free tier (email sign-in up to 50,000 monthly users) cover it, and no text messages are sent because the second factor is an authenticator app. The 25 US dollar budget alert from the first stage stays. An alert is not a spending cap.
 
@@ -37,7 +48,7 @@ No password, authenticator code, enrolment secret or token is typed by an agent,
 
 ## Step 1. Add Firebase to the staging project
 
-In the Firebase console choose "Add project", then "Add Firebase to a Google Cloud project", and pick `diamondecho-staging`. Accept Firebase's terms. Leave Google Analytics **off**. This cannot be undone short of deleting the project.
+In the Firebase console choose "Create a new Firebase project", then "Add Firebase to Google Cloud project", and pick `diamondecho-staging`. The console lists what adding Firebase means, then asks to confirm the **Blaze, pay as you go** pricing plan (the only plan offered to a project that already has billing), then offers Google Analytics: turn it **off**. This cannot be undone short of deleting the project.
 
 ## Step 2. Services, database, roles (Cloud Shell)
 
@@ -50,18 +61,18 @@ REGION="us-east1"
 RUNTIME="diamondecho-api-runtime@${PROJECT_ID}.iam.gserviceaccount.com"
 
 gcloud services enable firestore.googleapis.com identitytoolkit.googleapis.com \
-  firebaserules.googleapis.com firebase.googleapis.com
+  firebaserules.googleapis.com firebase.googleapis.com --quiet
 
 # The database. Native mode. The location is permanent.
 gcloud firestore databases describe --database="(default)" >/dev/null 2>&1 \
-  || gcloud firestore databases create --database="(default)" --location="${REGION}" --type=firestore-native
+  || gcloud firestore databases create --database="(default)" --location="${REGION}" --type=firestore-native --quiet
 
 # The API's own identity held no roles after the first stage. It gets two:
 # read and write the database, and look up a staff account so a disabled or
 # signed-out-everywhere account is refused.
 for ROLE in roles/datastore.user roles/firebaseauth.viewer; do
   gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
-    --member="serviceAccount:${RUNTIME}" --role="${ROLE}" --condition=None >/dev/null
+    --member="serviceAccount:${RUNTIME}" --role="${ROLE}" --condition=None --quiet >/dev/null
 done
 gcloud projects get-iam-policy "${PROJECT_ID}" --flatten="bindings[].members" \
   --filter="bindings.members:${RUNTIME}" --format="value(bindings.role)"
@@ -70,6 +81,8 @@ gcloud projects get-iam-policy "${PROJECT_ID}" --flatten="bindings[].members" \
 
 The last command must print exactly those two roles.
 
+Keep `--quiet` on these commands. Without it, a `gcloud firestore` command run while the Firestore service is off stops and asks whether to enable the service; if its output is being trimmed the question is hidden and the command appears to hang.
+
 ## Step 3. Database rules: deny every browser (Cloud Shell)
 
 The repository's `firestore.rules` refuses all reads and writes from browsers. Only the API, through its own identity, reaches the data.
@@ -77,9 +90,10 @@ The repository's `firestore.rules` refuses all reads and writes from browsers. O
 ```bash
 (
 set -euo pipefail
-rm -rf DiamondEcho && git clone --depth 1 https://github.com/Ggeorge73/DiamondEcho.git && cd DiamondEcho
+D="$(mktemp -d)" && git clone -q --depth 1 https://github.com/Ggeorge73/DiamondEcho.git "${D}/repo" && cd "${D}/repo"
 echo "Rules from commit: $(git rev-parse HEAD)"
-npx --yes firebase-tools@15.31.0 deploy --only firestore:rules,firestore:indexes --project diamondecho-staging
+npx --yes firebase-tools@15.31.0 deploy --only firestore:rules,firestore:indexes \
+  --project diamondecho-staging --non-interactive
 )
 ```
 
@@ -89,12 +103,14 @@ Check, from anywhere, with no sign-in. Both must answer 403:
 B="https://firestore.googleapis.com/v1/projects/diamondecho-staging/databases/(default)/documents"
 curl -s -o /dev/null -w "list  %{http_code}\n" "${B}/inquiries"
 curl -s -o /dev/null -w "write %{http_code}\n" -X POST -H "Content-Type: application/json" \
-  "${B}/inquiries" -d '{"fields":{"probe":{"stringValue":"x"}}}'
+  "${B}/rules_probe" -d '{"fields":{"probe":{"stringValue":"x"}}}'
 ```
+
+The write check aims at a collection of its own, not `inquiries`, so that a mistake in the rules could never put a malformed record in front of the staff queue.
 
 ## Step 4. Sign-in
 
-**4a. Turn on sign-in (Claude, with Gbenga's yes).** In the Firebase console under Authentication: enable the Email/Password provider (not the email-link option), and choose "Upgrade" to Identity Platform, which authenticator codes require. Then in Cloud Shell:
+**4a. Turn on sign-in (Claude, with Gbenga's yes).** In the Firebase console under Authentication choose "Get started", enable the Email/Password provider (leave "Email link" off) and save. Then under "SMS Multi-factor Authentication" choose "Upgrade to enable" and complete the four-step upgrade to Identity Platform, which authenticator codes require. Leave SMS multi-factor itself off. Then in Cloud Shell:
 
 ```bash
 (
@@ -117,6 +133,8 @@ patch emailPrivacyConfig '{"emailPrivacyConfig":{"enableImprovedEmailPrivacy":tr
 
 Each line must print 200.
 
+Reading the configuration back shows `"mfa": {"state": "DISABLED", "providerConfigs": [{"totpProviderConfig": {"adjacentIntervals": 1}, "state": "ENABLED"}]}`. The outer `state` is the text-message second factor, which is off on purpose. The authenticator provider inside it is the one that matters. Whether enrolment then works is proven only by step 8.
+
 **4b. Create the staff user (Gbenga only).** Firebase console, Authentication, Users, "Add user". Enter the staff email and a password he chooses and keeps in his password manager. Copy the **User UID** shown in the list and give it to Claude. The UID is an identifier, not a secret.
 
 **4c. Mark that email as verified (Claude, with Gbenga's yes).** The staff page refuses an unverified email, and it has no "send me a verification email" step. For staging the owner's own address is marked verified by an administrator call. Before this is run, test T6 below is done. Put the UID in the first line:
@@ -134,7 +152,7 @@ This is a gap for production: a real staff member should prove the inbox is thei
 
 ## Step 5. Register the staff web app
 
-Firebase console, Project settings, "Your apps", add a **Web** app named `DiamondEcho staff staging`. Do not enable Firebase Hosting. The console then shows the public configuration: `apiKey`, `authDomain`, `projectId`, `appId`. These identify the project to Google and are shipped inside the staff page; they are not passwords. Access is decided by the API's user-ID list and the second factor, not by this key.
+Firebase console, Project settings, "Your apps", add a **Web** app named `DiamondEcho staff staging`. Leave "Also set up Firebase Hosting" unticked. The console then shows the public configuration: `apiKey`, `authDomain`, `projectId`, `appId`. These identify the project to Google and are shipped inside the staff page; they are not passwords. Access is decided by the API's user-ID list and the second factor, not by this key.
 
 ## Step 6. Redeploy the API with the queue on (Cloud Shell)
 
@@ -181,11 +199,12 @@ gcloud run services update diamondecho-api-staging --region us-east1 \
 
 ## Step 7. Configure the staff staging site (Cloudflare)
 
-In the `diamondecho-staff-staging` Pages project only, Production environment, add these and retry the latest deployment. The existing DiamondEcho Pages project and the public staging project are not changed.
+In the `diamondecho-staff-staging` Pages project only, Production environment, add these. The existing DiamondEcho Pages project and the public staging project are not changed.
+
+Order matters. The build ignores every other setting until `STAFF_QUEUE_ENABLED` is `true`, and then fails on purpose if any is missing. So the six plain values go in first (done), then Gbenga pastes the key, and `STAFF_QUEUE_ENABLED` goes in **last**, followed by a retry of the latest deployment. Set in any other order, the next push to `main` would produce a failed staff build. The dashboard's "Add" panel accepts several `NAME=value` lines pasted into the name field at once.
 
 | Setting | Value | Entered by |
 | --- | --- | --- |
-| `STAFF_QUEUE_ENABLED` | `true` | Claude |
 | `STAFF_API_ORIGIN` | `https://diamondecho-api-staging-299705773978.us-east1.run.app` | Claude |
 | `STAFF_ORIGIN` | `https://diamondecho-staff-staging.pages.dev` | Claude |
 | `PUBLIC_ORIGIN` | `https://diamondecho-staging.pages.dev` | Claude |
@@ -193,6 +212,7 @@ In the `diamondecho-staff-staging` Pages project only, Production environment, a
 | `FIREBASE_AUTH_DOMAIN` | `diamondecho-staging.firebaseapp.com` | Claude |
 | `FIREBASE_WEB_APP_ID` | The `appId` from step 5 | Claude |
 | `FIREBASE_WEB_API_KEY` | The `apiKey` from step 5 | **Gbenga** |
+| `STAFF_QUEUE_ENABLED` | `true`, last | Claude |
 
 The build fails on purpose if any value is missing or the three addresses are not distinct.
 
@@ -249,7 +269,8 @@ gcloud firestore bulk-delete --database="(default)" --collection-ids=inquiries
 2. **The browser key is unrestricted.** Restricting the key from step 5 to the staff site's address and to the sign-in services is a hardening step. It is left until sign-in is proven, because the staff page sends no referrer and a wrong restriction would block sign-in. Test it on staging before production.
 3. **Request logs.** Cloud Run's request log records each caller's IP address and web address for 30 days by default. The Privacy page says so for builds that use the request service. Log retention is an operations decision under DE-26.
 4. **Address lookup** still has no Mapbox or RentCast keys on staging. It needs Secret Manager and is not part of this stage.
-5. **The Privacy page date.** `POLICIES_UPDATED` must be set to the day online requests open in production, because that is the day the page a visitor sees changes.
+5. **`localhost` is an authorised sign-in domain.** Firebase adds it by default beside the two `diamondecho-staging` addresses. The staff page uses email and password only, which this list does not govern, so it is harmless here. Remove it for production.
+6. **The Privacy page date.** `POLICIES_UPDATED` must be set to the day online requests open in production, because that is the day the page a visitor sees changes.
 
 ## What this stage does not cover
 
