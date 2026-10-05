@@ -1,6 +1,6 @@
 # DE-33 staging setup: second stage
 
-Status: prepared by Claude acting as the Engineering agent on 2026-10-05. **Steps 1, 2, 3, 4a and 5 were run that day, and six of the eight settings in step 7 were saved. Steps 4b, 4c, 6, 8 and 9 have not been run.** The commands were first written from the product documentation and the repository. Each step that has been run is recorded under "What has been run", and its commands below have been corrected to match what was run (the same commands, entered one at a time rather than as one block). The commands for steps not yet run are still unproven and will be corrected here as each is run, as was done for the first stage in [de33-staging-setup.md](de33-staging-setup.md).
+Status: prepared by Claude acting as the Engineering agent on 2026-10-05, and **run in full that day**. Every numbered step below has been run on staging and every test in step 9 has a recorded result under "Test results". The commands were first written from the product documentation; where a command needed changing, the text below shows what was actually run. The inquiry queue is **on, on staging only**. Production is untouched.
 
 The first stage stood up the API and two staging sites with the inquiry queue disabled. This stage adds the database, staff sign-in with an authenticator app, and real test requests end to end. It is staging only: project `diamondecho-staging`, region `us-east1`, the two `*-staging.pages.dev` sites. No production resource, domain, DNS record or billing setting is touched.
 
@@ -14,11 +14,14 @@ Gbenga gave his yes in chat on 2026-10-05 to the database location, the staff em
 | 2 | Before: Firestore service off, no database, the API's identity holding no roles. `firebase`, `firebaserules` and `identitytoolkit` had been switched on by step 1. After: all four services on; database `(default)` created, `us-east1`, Native mode, free tier; the API's identity holds exactly `roles/datastore.user` and `roles/firebaseauth.viewer` |
 | 3 | Rules and index settings published from commit `ef1bb51` with `firebase-tools@15.31.0`, which used Cloud Shell's sign-in without asking. Anonymous list and anonymous write both answer 403. The anonymous list already answered 403 before the rules were published: a new database is closed to browsers by default |
 | 4a | Email/Password provider on (email-link sign-in off). Upgraded to Identity Platform; the console warns that this cannot be reversed and that sign-in is charged only above 50,000 monthly users. The three settings calls each answered 200. Read back: authenticator provider `ENABLED` with `adjacentIntervals` 1; `disabledUserSignup` and `disabledUserDeletion` true; improved email privacy true; phone and anonymous sign-in not configured |
-| 4b, 4c | Not run. Waiting for Gbenga to create the staff user |
+| 4b | Staff user created by Gbenga in the Firebase console with a password only he knows. He gave Claude the user ID, which is an identifier and not a secret; it is set on the staging API and is not repeated in this repository |
+| 4c | Run after test T6. One administrator call answered 200; the account then read: email verified True, disabled False |
 | 5 | Web app `DiamondEcho staff staging` registered, Hosting not set up. App ID `1:299705773978:web:7e51d904b59b1582a6d423`, auth domain `diamondecho-staging.firebaseapp.com` |
-| 6 | Not run. Waits for the submission limits to be on `main` |
-| 7 | Six settings saved on the `diamondecho-staff-staging` Pages project (Production): the three addresses, the project ID, the auth domain and the app ID. **Not** yet set: `FIREBASE_WEB_API_KEY` (Gbenga) and `STAFF_QUEUE_ENABLED`. No deployment was retried, so the staff site still serves the disabled page |
-| 8, 9 | Not run |
+| 6, first run | After PR #51 put the limits on `main`. Deployed commit `a05236bbf60dfa03ef416e57cdefd77cc84716ce`, revision `diamondecho-api-staging-00005-l58` (lower-case L), queue on, staff list set to the placeholder `not-a-listed-user` |
+| 6, second run | After test T8. Staff list set to Gbenga's user ID with `gcloud run services update … --update-env-vars`, which keeps the same container image. Revision `diamondecho-api-staging-00006-ltv`, 100% of traffic |
+| 7 | Six plain settings saved first. Gbenga pasted `FIREBASE_WEB_API_KEY` himself. `STAFF_QUEUE_ENABLED=true` was added last and the production deployment of `a05236b` retried: deployment `44a900e3`, build log "Configured isolated staff build complete" |
+| 8 | Gbenga enrolled his authenticator on the second attempt (see "Findings"). The account then read: 1 second factor, kind `totp`, named "DiamondEcho staff" |
+| 9 | All thirteen tests run. Results under "Test results" |
 
 ## Decisions
 
@@ -156,7 +159,7 @@ Firebase console, Project settings, "Your apps", add a **Web** app named `Diamon
 
 ## Step 6. Redeploy the API with the queue on (Cloud Shell)
 
-Run from a `main` that contains `backend/inquiries/limits.py`. This is the first-stage block with three more settings. It is run twice: first with `STAFF_UIDS="not-a-listed-user"`, so that tests T8 and T9 can show a correctly signed-in person who is not on the list being refused; then with the real UID.
+Run from a `main` that contains `backend/inquiries/limits.py`. This is the first-stage block with three more settings. The first run uses `STAFF_UIDS="not-a-listed-user"`, so that test T8 can show a correctly signed-in person who is not on the list being refused.
 
 ```bash
 PUBLIC_ORIGIN="https://diamondecho-staging.pages.dev"
@@ -165,15 +168,15 @@ STAFF_UIDS="not-a-listed-user"
 
 (
 set -euo pipefail
-PROJECT_ID="$(gcloud config get-value project)"
+PROJECT_ID="$(gcloud config get-value project 2>/dev/null)"
 [ "${PROJECT_ID}" = "diamondecho-staging" ] || { echo "Wrong project: ${PROJECT_ID}"; exit 1; }
 REGION="us-east1"
 SERVICE="diamondecho-api-staging"
 RUNTIME_ACCOUNT="diamondecho-api-runtime"
 
-rm -rf DiamondEcho
-git clone --depth 1 https://github.com/Ggeorge73/DiamondEcho.git
-cd DiamondEcho
+D="$(mktemp -d)"
+git clone -q --depth 1 https://github.com/Ggeorge73/DiamondEcho.git "${D}/repo"
+cd "${D}/repo"
 echo "Commit being deployed: $(git rev-parse HEAD)"
 test -f backend/inquiries/limits.py || { echo "This commit has no submission limits. Stopping."; exit 1; }
 
@@ -183,12 +186,21 @@ gcloud run deploy "${SERVICE}" \
   --service-account "${RUNTIME_ACCOUNT}@${PROJECT_ID}.iam.gserviceaccount.com" \
   --allow-unauthenticated \
   --cpu 1 --memory 1Gi --concurrency 1 \
-  --min-instances 0 --max-instances 3 --timeout 30 \
+  --min-instances 0 --max-instances 3 --timeout 30 --quiet \
   --set-env-vars "^@^INQUIRY_STAFF_QUEUE_ENABLED=true@FIREBASE_PROJECT_ID=${PROJECT_ID}@INQUIRY_STAFF_UIDS=${STAFF_UIDS}@PUBLIC_ORIGIN=${PUBLIC_ORIGIN}@STAFF_ORIGIN=${STAFF_ORIGIN}@CORS_ORIGINS=${PUBLIC_ORIGIN},${STAFF_ORIGIN}"
 
 gcloud run services describe "${SERVICE}" --region "${REGION}" --format='value(status.latestReadyRevisionName)'
 )
 ```
+
+The second run changes one setting and nothing else. It does not rebuild, so the commit and the container image stay the same:
+
+```bash
+gcloud run services update diamondecho-api-staging --region us-east1 --quiet \
+  --update-env-vars INQUIRY_STAFF_UIDS=PASTE_STAFF_USER_ID_HERE
+```
+
+Revision names are hard to read in the terminal (`l`, `1` and `I` look alike). Print them a second time in capitals to tell letters from digits: `… --format='value(status.latestReadyRevisionName)' | tr a-z A-Z`.
 
 To weld the slot shut again at once, without a rebuild:
 
@@ -201,7 +213,7 @@ gcloud run services update diamondecho-api-staging --region us-east1 \
 
 In the `diamondecho-staff-staging` Pages project only, Production environment, add these. The existing DiamondEcho Pages project and the public staging project are not changed.
 
-Order matters. The build ignores every other setting until `STAFF_QUEUE_ENABLED` is `true`, and then fails on purpose if any is missing. So the six plain values go in first (done), then Gbenga pastes the key, and `STAFF_QUEUE_ENABLED` goes in **last**, followed by a retry of the latest deployment. Set in any other order, the next push to `main` would produce a failed staff build. The dashboard's "Add" panel accepts several `NAME=value` lines pasted into the name field at once.
+Order matters. The build ignores every other setting until `STAFF_QUEUE_ENABLED` is `true`, and then fails on purpose if any is missing. So the six plain values go in first, then Gbenga pastes the key, and `STAFF_QUEUE_ENABLED` goes in **last**, followed by a retry of the latest deployment. Set in any other order, the next push to `main` would produce a failed staff build. The dashboard's "Add" panel accepts several `NAME=value` lines pasted into the name field at once.
 
 | Setting | Value | Entered by |
 | --- | --- | --- |
@@ -218,7 +230,9 @@ The build fails on purpose if any value is missing or the three addresses are no
 
 ## Step 8. Enrol and sign in (Gbenga only)
 
-Open `https://diamondecho-staff-staging.pages.dev`, sign in with the staff email and password, scan or type the enrolment secret into an authenticator app, and enter the six-digit code. The page signs out after enrolment by design. Sign in again with the password and a fresh code.
+Open `https://diamondecho-staff-staging.pages.dev` and sign in with the staff email and password. The page shows a setup key as 32 characters of text. There is no QR code. In the authenticator app choose "enter a setup key", type the key exactly, choose "time based", and enter the six-digit code the app shows. The page signs out after enrolment by design. Sign in again with the password and a fresh code.
+
+The setup key is the one secret in this stage. Do not screenshot it or send it to anyone. The key uses only the letters A to Z and the digits 2 to 7, so anything that looks like a zero is the letter O and anything that looks like a one is the letter I. A new key is issued at every sign-in until one has been enrolled, so a key that was mistyped or seen by someone else is replaced by cancelling and signing in again.
 
 ## Step 9. Tests, in this order
 
@@ -234,7 +248,7 @@ All test requests use plainly synthetic details: the name `Staging Test`, addres
 | T6 | After 4b, before 4c | Sign in on the staff page with the unverified account | Refused: "Sign-in failed…" and no enrolment secret |
 | T7 | After 4c | Staff API with no token; with a made-up token; with any token from the public site's address | 401; 401; 403 "Staff origin denied." All `no-store` |
 | T8 | After step 8, API still listing `not-a-listed-user` | Gbenga signs in with password and code | The page refuses to show the queue (the API answers 403). This is the "signed in correctly, not on the list" case |
-| T9 | After step 6, second run with the real UID | Gbenga signs in | The three test requests appear with type, contact, address, time and consent |
+| T9 | After step 6, second run with the real UID | Gbenga signs in | The test requests appear with type, contact, address, time and consent |
 | T10 | Same | Acknowledge one; reload and sign in again; a wrong authenticator code | Acknowledged state survives; wrong code refused |
 | T11 | Same | Sign out; press Back | No visitor details on screen or in browser storage |
 | T12 | Same | Staff page and the three forms by keyboard only, and at phone width | Reachable, labelled, nothing cut off |
@@ -243,6 +257,35 @@ All test requests use plainly synthetic details: the name `Staging Test`, addres
 Not reachable through the page, so covered by the automated tests only: a signed-in session with no second factor (the page signs out straight after enrolment), and an expired token.
 
 Optional, and only if Gbenga wants it: disable the staff user in the console, confirm the open staff page is refused on its next call, and enable it again.
+
+## Test results (2026-10-05)
+
+Builds: public site `main` `a05236b` on `https://diamondecho-staging.pages.dev` (`main.9aeb714c.js`); staff site deployment `44a900e3` of the same commit; API revision `00005-l58` for T1 to T8 and `00006-ltv` for T9 to T11. Browser: Edge on Gbenga's computer. Cloud Shell for the command-line checks.
+
+| # | Tester | Result |
+| --- | --- | --- |
+| T1 | Claude | Pass. 9 of 9, exit 0. Staff line answers 401 |
+| T2 | Claude | Pass. Buyer form: "DiamondEcho received your request." with a reference; stored as `queued` |
+| T3 | Claude | Pass. 201, then 200 with the same reference, then 409 "This submission key was already used for a different request." |
+| T4 | Claude | Pass. Seller and tour stored; the tour receipt says the visit is not booked. Empty form: every required field named. No consent tick: refused. Past tour time: "Choose a future date and time." with focus moved to the field |
+| T5 | Claude | Pass. Attempts 1 to 5 from one connection admitted; 6 and 7 answered 429 with `Retry-After: 599` and the sentence the form shows. A different typed `X-Forwarded-For` first entry on each request changed nothing. A run 8 minutes into the window was refused 7 of 7 with `Retry-After` counting down. A browser on another connection was admitted while Cloud Shell was being refused |
+| T6 | Gbenga | Pass. "Sign-in failed…", no setup key. The account record showed the password had been accepted and the email was unverified, so the refusal was for the email |
+| T7 | Claude | Pass. No token 401; made-up token 401; made-up token from the public site's address 403 "Staff origin denied."; another address 403. All `no-store` |
+| T8 | Gbenga | Pass. Signed in with password and code while the list held the placeholder: "Access denied. Sign in with the approved staff account and authenticator." |
+| T9 | Gbenga | Pass. "6 recent request(s)": buyer, seller and tour from the forms and three buyers from Cloud Shell |
+| T10 | Gbenga | Pass. "Request acknowledged."; after a reload and a new sign-in the request still read acknowledged with no button; the code `000000` was refused. The database shows that record `acknowledged`, by his user ID, at 15:47:02 UTC, and the other five `queued` |
+| T11 | Gbenga | Pass. "Signed out."; Back showed no requests |
+| T12 | Claude | Pass, with a limit. Headless Chromium at 320, 390 and 1280 px, 39 of 39 checks: the three forms from first field to receipt by keyboard only; the staff page's sign-in, setup-key, code and queue screens with nothing cut off; Tab order; visible focus ring; buttons 44 px or taller; sign-out leaving nothing on the page or in storage. **Limit:** the staff page was run from the repository with a stand-in for Google sign-in and a stand-in API, because the real one needs Gbenga's password and phone. Not run on a real phone |
+| T13 | Claude | Pass. With records present: anonymous list 403, read of a known record ID 403, write 403 |
+
+Not driven on Cloud Run: the hourly cap of 30 per instance. It is covered by the automated tests and a local run of the real API.
+
+## State left on staging
+
+- Queue **on**. API revision `diamondecho-api-staging-00006-ltv`, staff list = Gbenga's user ID.
+- Six synthetic requests in the database, one acknowledged.
+- Staff site live with sign-in. One staff user, email verified, one authenticator enrolled.
+- To switch the queue off at once, use the one-line update under step 6.
 
 ## Cleanup of test data (Gbenga)
 
@@ -270,7 +313,11 @@ gcloud firestore bulk-delete --database="(default)" --collection-ids=inquiries
 3. **Request logs.** Cloud Run's request log records each caller's IP address and web address for 30 days by default. The Privacy page says so for builds that use the request service. Log retention is an operations decision under DE-26.
 4. **Address lookup** still has no Mapbox or RentCast keys on staging. It needs Secret Manager and is not part of this stage.
 5. **`localhost` is an authorised sign-in domain.** Firebase adds it by default beside the two `diamondecho-staging` addresses. The staff page uses email and password only, which this list does not govern, so it is harmless here. Remove it for production.
-6. **The Privacy page date.** `POLICIES_UPDATED` must be set to the day online requests open in production, because that is the day the page a visitor sees changes.
+6. **No QR code at enrolment.** The setup key is 32 characters typed by hand. The first enrolment failed, most likely on a mistyped key, and the screen that shows the key was sent as a screenshot. A QR code drawn in the page from the same key would remove both problems. Not built yet.
+7. **Two staff-page defects found in these tests and fixed in the pull request that added this section.** A message about a failed attempt stayed on screen after a later attempt succeeded, so "Verification failed…" sat above an open queue. And a failed enrolment gave the same sentence as a wrong sign-in code, with no hint to check the key.
+8. **Cloud Shell has no `uuidgen`.** A test that relied on it sent seven requests with no valid key; they were answered 422 and 429 and stored nothing. Use `python3 -c 'import uuid;print(uuid.uuid4())'`.
+9. **Nobody is told when a request arrives.** Staff must open the queue. Alerts and a response time belong to DE-31 and DE-26.
+10. **The Privacy page date.** `POLICIES_UPDATED` must be set to the day online requests open in production, because that is the day the page a visitor sees changes.
 
 ## What this stage does not cover
 
