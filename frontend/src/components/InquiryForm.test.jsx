@@ -135,6 +135,24 @@ test('503 remains an error; duplicate submit is guarded and retry reuses its key
   expect(container.textContent).toContain('DiamondEcho received your request.');
 });
 
+test('a request refused by the submission limit shows the reason, keeps the form and confirms nothing', async () => {
+  await renderForm('buyer');
+  await fill('fullName', 'Limited Buyer');
+  await fill('email', 'limited@example.com');
+  await fill('message', 'Interested in buying.');
+  await consent();
+  const reason = 'Too many requests were sent from this connection. Please wait a few minutes and try again, or call or email us.';
+  axios.post.mockRejectedValueOnce({ isAxiosError: true, response: { status: 429, data: { detail: reason } } });
+  await submit();
+  const alert = container.querySelector('[role="alert"]');
+  expect(alert.textContent).toContain(reason);
+  expect(alert.textContent).toContain('Your request has not been confirmed');
+  expect(container.textContent).not.toContain('DiamondEcho received your request');
+  expect(input('fullName').value).toBe('Limited Buyer');
+  expect(input('message').value).toBe('Interested in buying.');
+  expect(container.querySelector('button[type="submit"]').disabled).toBe(false);
+});
+
 test('getRandomValues fallback generates a UUID header', async () => {
   Object.defineProperty(globalThis, 'crypto', {
     configurable: true,

@@ -69,6 +69,8 @@ test('privacy page describes requests according to whether forms are open', asyn
   await renderAt('/privacy');
   expect(container.textContent).toContain('Online request forms are not open yet, so this site does not currently collect');
   expect(container.textContent).not.toContain('we receive what you enter');
+  // No request service on this build, so Google Cloud is not involved and is not named.
+  expect(container.textContent).not.toContain('Google Cloud');
 
   await act(async () => { root.unmount(); });
   process.env.REACT_APP_BACKEND_URL = 'https://api.example.test';
@@ -76,6 +78,10 @@ test('privacy page describes requests according to whether forms are open', asyn
   await renderAt('/privacy');
   expect(container.textContent).toContain('we receive what you enter');
   expect(container.textContent).not.toContain('Online request forms are not open yet');
+  // With the request service in use, its host and the submission count are disclosed.
+  expect(container.textContent).toContain("Google Cloud runs DiamondEcho's analysis and request service");
+  expect(container.textContent).toContain('keeps routine request logs');
+  expect(container.textContent).toContain('counts recent requests from each connection for a short time, in memory only');
 });
 
 test('terms page states the limits of listings, Deal Studio and requests', async () => {

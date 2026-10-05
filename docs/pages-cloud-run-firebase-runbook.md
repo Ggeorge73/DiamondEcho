@@ -73,6 +73,8 @@ Required backend environment:
 | STAFF_ORIGIN | Different exact HTTPS staff origin, no trailing slash |
 | CORS_ORIGINS | Only those approved origins; add www only if actually used |
 | INQUIRY_STAFF_QUEUE_ENABLED | false until operational acceptance; then true |
+| INQUIRY_LIMIT_PER_ADDRESS | Optional. Submissions one connection may send in 10 minutes. Default 5. Must be 1 to 1000; anything else uses the default, so the limit cannot be switched off |
+| INQUIRY_LIMIT_PER_HOUR | Optional. Submissions one running instance accepts in an hour from everyone together. Default 30. Same rule |
 | MONTE_CARLO_TIME_BUDGET_SECONDS | Optional. Seconds a simulation may calculate before it returns what it has. Default 20. `0` removes the limit and is only safe where nothing cuts requests off |
 
 The public inquiry/calculator API requires unauthenticated Cloud Run invocation,
@@ -84,10 +86,26 @@ itself with a 404 and the request never reaches the API (DE-33).
 With queue disabled/unconfigured, submissions and staff access return 503.
 The legacy status endpoints are staff-protected, no longer publicly readable.
 
-Before enabling the queue, implement and test provider/edge abuse controls,
-rate limits and request quotas that also cover direct API-hostname access.
-CORS does not stop bots. No distributed rate limiter or CAPTCHA is claimed by
-this PR. This is an explicit public-launch gate, not resolved by max instances.
+Before enabling the queue, test the abuse controls on the deployed service,
+including direct API-hostname access. CORS does not stop bots.
+
+What exists (DE-33, `backend/inquiries/limits.py`): the API refuses a sixth
+submission from one connection inside 10 minutes with 429, and refuses further
+submissions with 503 once one instance has accepted 30 in an hour. Both answers
+carry `Retry-After` and a sentence the form shows the visitor. Replays and
+submissions that fail the field checks count as attempts. On Cloud Run the
+connection is the last `X-Forwarded-For` entry, the one Google's front end
+appends; entries a sender types in front of it are ignored. IPv6 addresses
+are counted per /64.
+
+What it is not: counts are held in each instance's memory, so the real ceiling
+is the per-hour figure times `--max-instances` (90 an hour at the settings
+above), and an instance that has just started begins from zero. A sender who
+rotates addresses is held only by the hourly cap, and can use it up so that
+real visitors are told to call or email instead. There is no CAPTCHA or
+challenge at the form. If the hourly cap is ever reached in production, add a
+challenge (for example Cloudflare Turnstile) before raising the cap. This
+remains a public-launch gate until it has been exercised on staging.
 Review existing public analytics/recording scripts separately under DE-18.
 The production dependency audit reports 41 findings (21 high, 11 moderate,
 9 low; no critical), including the existing React/CRA dependency tree.
