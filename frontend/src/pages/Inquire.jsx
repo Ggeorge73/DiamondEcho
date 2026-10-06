@@ -10,6 +10,20 @@ const copy = {
   tour: { eyebrow: 'Tour request', title: 'Request a property tour.', intro: 'Enter the property address and suggest a date and time. Georgia MLS selections are not transferred here, and your request does not reserve or confirm a tour.' },
 };
 
+// A link can say what the request is about. The mortgage simulator's "Get
+// pre-approved" button uses this: DiamondEcho is not a lender, so the request
+// asks an agent for an introduction to one. The message is only a starting
+// point, and the visitor can change it before sending.
+const topics = {
+  'pre-approval': {
+    kind: 'buyer',
+    eyebrow: 'Mortgage pre-approval',
+    title: 'Ask about getting pre-approved.',
+    intro: 'DiamondEcho is not a lender, and pre-approval comes from a lender. Send this request and an agent can introduce you to one and explain what they will ask for.',
+    message: 'I would like to get pre-approved for a mortgage.',
+  },
+};
+
 // What the page says while no inquiry service is connected to this build.
 const closedCopy = {
   buyer: { title: 'Buyer inquiries are not open yet.', what: 'buyer inquiries' },
@@ -53,7 +67,10 @@ const Inquire = () => {
   const requestedKind = params.get('type');
   const kind = Object.prototype.hasOwnProperty.call(copy, requestedKind) ? requestedKind : 'buyer';
   const open = inquiryServiceConfigured();
-  const content = open ? copy[kind] : { ...copy[kind], title: closedCopy[kind].title, intro: `This page will take ${closedCopy[kind].what} once online requests open.` };
+  const requestedTopic = params.get('topic');
+  const topic = Object.prototype.hasOwnProperty.call(topics, requestedTopic) && topics[requestedTopic].kind === kind ? topics[requestedTopic] : null;
+  const openCopy = topic ? { eyebrow: topic.eyebrow, title: topic.title, intro: topic.intro } : copy[kind];
+  const content = open ? openCopy : { ...copy[kind], title: closedCopy[kind].title, intro: `This page will take ${closedCopy[kind].what} once online requests open.` };
 
   return (
     <main className="de-inquiry-page">
@@ -68,7 +85,7 @@ const Inquire = () => {
             <Link to="/inquire?type=tour" aria-current={kind === 'tour' ? 'page' : undefined}>Tour request</Link>
           </div>
         </div>
-        {open ? <InquiryForm key={kind} kind={kind} /> : <InquiryClosed kind={kind} />}
+        {open ? <InquiryForm key={`${kind}:${topic ? requestedTopic : ''}`} kind={kind} initialMessage={topic ? topic.message : ''} /> : <InquiryClosed kind={kind} />}
       </div>
     </main>
   );
