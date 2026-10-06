@@ -235,9 +235,11 @@ const MortgageSimulator = ({ search = '', hidden = false }) => {
             )}
 
             <div className="calc-cta">
-              <Link className="mf-btn mf-btn--solid" to="/inquire?type=buyer">{prefilled.length > 0 ? 'Contact an agent about this property' : 'Contact an agent about this purchase'} <ArrowRight /></Link>
+              <Link className="mf-btn mf-btn--solid" to="/inquire?type=buyer&topic=pre-approval">Get pre-approved <ArrowRight /></Link>
+              <Link className="mf-btn" to="/inquire?type=buyer">{prefilled.length > 0 ? 'Contact an agent about this property' : 'Contact an agent about this purchase'}</Link>
               <Link className="mf-btn" to="/search"><Search /> Search Georgia homes</Link>
             </div>
+            <p className="calc-footnote">DiamondEcho is not a lender. Pre-approval comes from a lender: send a request and an agent can introduce you to one. The figures above are not sent with it.</p>
             <p className="studio-disclaimer">An estimate from the figures above. It is not a loan offer, a rate quote or a commitment to lend, and no lender has reviewed it. A lender's Loan Estimate states the actual payment. Taxes, insurance and association fees change over time.</p>
           </>
         )}

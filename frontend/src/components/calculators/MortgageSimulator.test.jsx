@@ -130,13 +130,28 @@ test('the schedule switches between yearly and monthly rows', async () => {
   expect(rows()).toHaveLength(30);
 });
 
-test('the call to action goes to the buyer request, and no financing service is offered', async () => {
+test('the calls to action: pre-approval through an agent, a buyer request, and the search', async () => {
   await mount();
-  const action = container.querySelector('.calc-cta a');
-  expect(action.textContent.trim()).toBe('Contact an agent about this purchase');
-  expect(action.getAttribute('href')).toBe('/inquire?type=buyer');
-  expect(text().toLowerCase()).not.toContain('pre-approv');
+  const actions = [...container.querySelectorAll('.calc-cta a')].map((link) => [link.textContent.trim(), link.getAttribute('href')]);
+  expect(actions).toEqual([
+    ['Get pre-approved', '/inquire?type=buyer&topic=pre-approval'],
+    ['Contact an agent about this purchase', '/inquire?type=buyer'],
+    ['Search Georgia homes', '/search'],
+  ]);
+  // The page does not pose as a lender, and the estimate is not called a pre-approval.
+  expect(text()).toContain('DiamondEcho is not a lender. Pre-approval comes from a lender: send a request and an agent can introduce you to one.');
+  expect(text()).toContain('It is not a loan offer, a rate quote or a commitment to lend');
+  expect(text().toLowerCase()).not.toContain('you are pre-approved');
   expect(text().toLowerCase()).not.toContain('prequal');
+});
+
+test('nothing typed in the simulator travels in the pre-approval link', async () => {
+  await mount();
+  await type('price', '777000');
+  await type('downPayment', '13');
+  const link = container.querySelector('.calc-cta a').getAttribute('href');
+  expect(link).toBe('/inquire?type=buyer&topic=pre-approval');
+  expect(link).not.toMatch(/777000|13/);
 });
 
 test('a link from a listing fills the price, taxes and HOA fee and says where they came from', async () => {
@@ -146,7 +161,7 @@ test('a link from a listing fills the price, taxes and HOA fee and says where th
   expect(field('hoaMonthly').value).toBe('140');
   expect(text()).toContain('The price, yearly property taxes and monthly HOA fee came from the link you followed. Check them against the listing.');
   expect(text()).not.toContain('The figures below are an example');
-  expect(container.querySelector('.calc-cta a').textContent.trim()).toBe('Contact an agent about this property');
+  expect(container.querySelectorAll('.calc-cta a')[1].textContent.trim()).toBe('Contact an agent about this property');
   // 420,000 at 6.5% for 30 years is $2,654.69; plus 508.33 + 150 + 140.
   expect(hero()).toBe('$3,453');
 });

@@ -43,6 +43,55 @@ test('tour requests are discoverable from the inquiry page without a sample list
   expect(container.querySelector('.de-inquiry-property')).toBeNull();
 });
 
+// DE-40. The mortgage simulator's "Get pre-approved" button opens the buyer
+// request with the reason written in. DiamondEcho is not a lender.
+describe('a request about mortgage pre-approval', () => {
+  const open = async (address) => {
+    await act(async () => { root.render(<MemoryRouter initialEntries={[address]}><Inquire /></MemoryRouter>); });
+  };
+
+  test('says who pre-approves and starts the message for the visitor', async () => {
+    await open('/inquire?type=buyer&topic=pre-approval');
+    expect(container.querySelector('h1').textContent).toBe('Ask about getting pre-approved.');
+    expect(container.textContent).toContain('DiamondEcho is not a lender, and pre-approval comes from a lender.');
+    expect(container.textContent).toContain('an agent can introduce you to one');
+    expect(container.querySelector('#inquiry-message').value).toBe('I would like to get pre-approved for a mortgage.');
+    // It is still the buyer request: same fields, same consent, nothing extra collected.
+    expect(container.querySelector('a[href="/inquire?type=buyer"][aria-current="page"]')).not.toBeNull();
+    expect(container.querySelector('#inquiry-propertyAddress')).toBeNull();
+    expect([...container.querySelectorAll('form input, form textarea')].map((field) => field.id)).toEqual(['inquiry-fullName', 'inquiry-email', 'inquiry-phone', 'inquiry-message', 'inquiry-consent']);
+    expect(container.querySelector('#inquiry-consent').checked).toBe(false);
+  });
+
+  test('the visitor can change the message', async () => {
+    await open('/inquire?type=buyer&topic=pre-approval');
+    const message = container.querySelector('#inquiry-message');
+    const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+    await act(async () => { setValue.call(message, 'Different words.'); message.dispatchEvent(new Event('input', { bubbles: true })); });
+    expect(container.querySelector('#inquiry-message').value).toBe('Different words.');
+  });
+
+  test('an ordinary buyer request is unchanged', async () => {
+    await open('/inquire?type=buyer');
+    expect(container.querySelector('h1').textContent).toBe('Tell us what you are looking for.');
+    expect(container.querySelector('#inquiry-message').value).toBe('');
+  });
+
+  test.each(['/inquire?type=buyer&topic=free-money', '/inquire?type=seller&topic=pre-approval', '/inquire?type=tour&topic=pre-approval'])('%s does not borrow the pre-approval wording', async (address) => {
+    await open(address);
+    expect(container.textContent).not.toContain('pre-approved');
+    const message = container.querySelector('#inquiry-message');
+    expect(message.value).toBe('');
+  });
+
+  test('with no inquiry service the pre-approval link shows the usual closed notice', async () => {
+    delete process.env.REACT_APP_BACKEND_URL;
+    await open('/inquire?type=buyer&topic=pre-approval');
+    expect(container.querySelector('form')).toBeNull();
+    expect(container.querySelector('h1').textContent).toBe('Buyer inquiries are not open yet.');
+  });
+});
+
 describe('with no inquiry service connected', () => {
   beforeEach(() => { delete process.env.REACT_APP_BACKEND_URL; });
 
