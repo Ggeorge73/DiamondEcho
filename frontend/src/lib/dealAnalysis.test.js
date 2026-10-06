@@ -1,4 +1,4 @@
-import { analyzeDealLocally, BROWSER_MONTE_CARLO_ITERATION_CAP, lossEquivalentReturn, runMonteCarloInBrowser, runMonteCarloLocally } from './dealAnalysis';
+import { analyzeDealLocally, BROWSER_MONTE_CARLO_ITERATION_CAP, lossEquivalentReturn, nextTask, runMonteCarloInBrowser, runMonteCarloLocally } from './dealAnalysis';
 import { buildDealRequest } from './dealRequest';
 
 const johnsCreekDeal = {
@@ -223,4 +223,50 @@ test('a stepped simulation told to stop returns nothing instead of partial figur
   const result = await runMonteCarloInBrowser({ deal: buildDealRequest(landForm), scenarios: threeCases(1000) }, { blockSize: 100, pause: immediately, shouldStop: () => { rounds += 1; return rounds >= 2; } });
   expect(result).toBeNull();
   expect(rounds).toBe(2);
+});
+
+describe('the pause between simulation blocks', () => {
+  const realChannel = global.MessageChannel;
+  let timers;
+  beforeEach(() => { timers = jest.spyOn(global, 'setTimeout'); });
+  afterEach(() => {
+    timers.mockRestore();
+    if (realChannel === undefined) delete global.MessageChannel; else global.MessageChannel = realChannel;
+  });
+
+  // A browser slows the timers of a tab that is not in view to one a second,
+  // then one a minute. A message is not slowed, so the run keeps its pace.
+  class FakeChannel {
+    constructor() {
+      FakeChannel.made += 1;
+      this.port1 = { onmessage: null, close: () => { FakeChannel.closed += 1; } };
+      this.port2 = { postMessage: () => { Promise.resolve().then(() => this.port1.onmessage({ data: null })); } };
+    }
+  }
+
+  test('waits on a message, not a timer, where the browser has message channels', async () => {
+    FakeChannel.made = 0; FakeChannel.closed = 0;
+    global.MessageChannel = FakeChannel;
+    await nextTask();
+    expect(FakeChannel.made).toBe(1);
+    expect(FakeChannel.closed).toBe(1);
+    expect(timers).not.toHaveBeenCalled();
+  });
+
+  test('a whole simulation run sets no timer, so a tab out of view is not slowed', async () => {
+    FakeChannel.made = 0; FakeChannel.closed = 0;
+    global.MessageChannel = FakeChannel;
+    const payload = { deal: buildDealRequest(landForm), scenarios: threeCases(500) };
+    const result = await runMonteCarloInBrowser(payload, { blockSize: 125 });
+    expect(result).toEqual(runMonteCarloLocally(payload));
+    expect(FakeChannel.made).toBe(4);
+    expect(FakeChannel.closed).toBe(4);
+    expect(timers).not.toHaveBeenCalled();
+  });
+
+  test('falls back to a timer where there are no message channels', async () => {
+    delete global.MessageChannel;
+    await nextTask();
+    expect(timers).toHaveBeenCalledTimes(1);
+  });
 });

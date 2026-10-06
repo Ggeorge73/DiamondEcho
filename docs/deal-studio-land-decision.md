@@ -115,6 +115,21 @@ the older residual is never shown. Redeploying the service from `main` is a
 production change that needs Gbenga's yes; after it, the service answers land
 deals itself again.
 
+## Found on production after the merge (DE-38)
+
+The simulation paused between blocks with a zero-delay timer. A browser slows
+the timers of a tab that is not in view: to one a second, and after about five
+minutes to one a minute. On production on 2026-10-06, in a tab that was not in
+view in Edge, a land run of 10,000 iterations for each of three cases reached
+4,500 of 30,000 after about a minute and then advanced 375 in the next 20
+seconds or more. In view, the same run takes about 2 seconds. The figures were
+never wrong; the run was only slow, and showed its progress throughout.
+
+The pause now waits on a message (`MessageChannel`), which browsers do not
+slow, and falls back to a timer where there is no message channel
+(`nextTask` in `frontend/src/lib/dealAnalysis.js`). A browser that puts a tab
+to sleep entirely still stops the run until the visitor returns.
+
 ## Not done
 
 - Address suggestions and public-record prefill (finding 7).

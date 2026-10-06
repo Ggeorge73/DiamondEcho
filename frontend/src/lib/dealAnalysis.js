@@ -379,7 +379,18 @@ export const runMonteCarloLocally = ({ deal, scenarios }) => ({
   }),
 });
 
-const nextTask = () => new Promise((resolve) => { setTimeout(resolve, 0); });
+// Hands control back to the browser between blocks so it can redraw and take
+// input. It waits on a message rather than a timer: a browser slows the timers
+// of a tab that is not in view to one a second and later to one a minute, which
+// stretched a two-second simulation past an hour when the visitor looked at
+// another tab. Messages are not slowed. Where the browser has no message
+// channel, a timer is used.
+export const nextTask = () => new Promise((resolve) => {
+  if (typeof MessageChannel !== 'function') { setTimeout(resolve, 0); return; }
+  const channel = new MessageChannel();
+  channel.port1.onmessage = () => { channel.port1.close(); resolve(); };
+  channel.port2.postMessage(null);
+});
 
 // The same simulation as runMonteCarloLocally, run a block at a time with the
 // cases taking turns, so the page can redraw and report progress in between.
