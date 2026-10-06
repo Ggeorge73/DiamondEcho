@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import axios from 'axios';
 import InvestmentCalculator from './InvestmentCalculator';
-import { analyzeDealLocally, runMonteCarloLocally } from '../lib/dealAnalysis';
+import { analyzeDealLocally, runMonteCarloInBrowser, runMonteCarloLocally } from '../lib/dealAnalysis';
 import { downloadDealWorkbook } from '../lib/dealWorkbook';
 
 jest.mock('react-router-dom', () => ({
@@ -14,7 +14,8 @@ jest.mock('react-router-dom', () => ({
 jest.mock('axios', () => ({ get: jest.fn(), post: jest.fn() }));
 jest.mock('../lib/dealDecision', () => ({
   RENTAL_EVIDENCE_ITEMS: [],
-  buildRentalDecision: jest.fn(() => null),
+  LAND_CHECKLIST_ITEMS: [],
+  buildDecision: jest.fn(() => null),
 }));
 jest.mock('../lib/dealWorkbook', () => ({ downloadDealWorkbook: jest.fn() }));
 jest.mock('../lib/dealAnalysis', () => ({
@@ -22,6 +23,7 @@ jest.mock('../lib/dealAnalysis', () => ({
   BROWSER_MONTE_CARLO_ITERATION_CAP: jest.requireActual('../lib/dealAnalysis').BROWSER_MONTE_CARLO_ITERATION_CAP,
   analyzeDealLocally: jest.fn(),
   runMonteCarloLocally: jest.fn(),
+  runMonteCarloInBrowser: jest.fn(),
 }));
 
 let container;
@@ -79,6 +81,12 @@ beforeEach(async () => {
       },
     })),
   }));
+  // The page runs the simulation in steps. Here that answers with whatever the
+  // one-go fake returns, after reporting progress once, so each test sets one fake.
+  runMonteCarloInBrowser.mockImplementation(async (payload, options = {}) => {
+    if (options.onProgress) options.onProgress(0, 3);
+    return runMonteCarloLocally(payload);
+  });
   process.env.REACT_APP_BACKEND_URL = '';
   global.IS_REACT_ACT_ENVIRONMENT = true;
   container = document.createElement('div');
@@ -153,18 +161,68 @@ test.each(['base', 'risk'])('late %s response cannot restore results after a str
   await useBackend();
 
   let resolveResponse;
-  axios.post.mockReturnValueOnce(new Promise((resolve) => { resolveResponse = resolve; }));
-  if (mode === 'base') await submitBase();
-  else await click('Run Monte Carlo');
+  const pending = new Promise((resolve) => { resolveResponse = resolve; });
+  if (mode === 'base') {
+    axios.post.mockReturnValueOnce(pending);
+    await submitBase();
+  } else {
+    runMonteCarloInBrowser.mockReturnValueOnce(pending);
+    await click('Run Monte Carlo');
+  }
 
   await click('Fix & flip');
   await act(async () => {
-    resolveResponse({ data: mode === 'base'
-      ? { strategy: 'rental', formula_version: 'test', metrics: {}, warnings: [] }
-      : { scenarios: [{ name: 'Committee case', iterations_completed: 10, summaries: { irr: { p10: 0, p50: 0, p90: 0, probability_above_zero: 0 } } }] } });
+    resolveResponse(mode === 'base'
+      ? { data: { strategy: 'rental', formula_version: 'test', metrics: {}, warnings: [] } }
+      : { scenarios: [{ name: 'Committee case', iterations_completed: 10, summaries: { irr: { p10: 0, p50: 0, p90: 0, probability_above_zero: 0 } } }] });
   });
   expect(container.textContent).toContain('Your decision canvas');
   expect(container.querySelector('.studio-risk-results')).toBeNull();
+});
+
+// DE-25: the simulation runs on the visitor's device, so it is never cut short
+// by the analysis service's time limit and sends that service nothing.
+test('Monte Carlo runs on this device even when the analysis service is configured', async () => {
+  await useBackend();
+  await click('Run Monte Carlo');
+  expect(runMonteCarloInBrowser).toHaveBeenCalledTimes(1);
+  expect(axios.post).not.toHaveBeenCalled();
+  expect(container.querySelectorAll('.studio-risk-results article')).toHaveLength(3);
+});
+
+test('a running simulation tells the stepped run to stop once an input changes', async () => {
+  let options;
+  runMonteCarloInBrowser.mockImplementationOnce((payload, given) => { options = given; return new Promise(() => {}); });
+  await click('Run Monte Carlo');
+  expect(options.shouldStop()).toBe(false);
+  await changeField('purchasePrice', '3500000');
+  expect(options.shouldStop()).toBe(true);
+});
+
+test('while the simulation runs the results panel shows progress, not the empty state', async () => {
+  let options; let finish;
+  runMonteCarloInBrowser.mockImplementationOnce((payload, given) => { options = given; return new Promise((resolve) => { finish = resolve; }); });
+  await click('Run Monte Carlo');
+  expect(container.textContent).toContain('Simulating…');
+  expect(container.textContent).not.toContain('Distribution before decision');
+  await act(async () => { options.onProgress(3000, 7500); });
+  expect(container.textContent).toContain('3,000 of 7,500 iterations across the three cases.');
+  const bar = container.querySelector('[role="progressbar"]');
+  expect(bar.getAttribute('aria-valuenow')).toBe('3000');
+  expect(bar.getAttribute('aria-valuemax')).toBe('7500');
+  await act(async () => { finish(runMonteCarloLocally({ deal: {}, scenarios: [] })); });
+  expect(container.querySelector('[role="progressbar"]')).toBeNull();
+});
+
+test('while the base analysis runs the results panel says so', async () => {
+  await useBackend();
+  let resolveResponse;
+  axios.post.mockReturnValueOnce(new Promise((resolve) => { resolveResponse = resolve; }));
+  await submitBase();
+  expect(container.textContent).toContain('Calculating…');
+  expect(container.textContent).not.toContain('Your decision canvas');
+  await act(async () => { resolveResponse({ data: { strategy: 'rental', formula_version: 'test', metrics: {}, warnings: [] } }); });
+  expect(container.textContent).toContain('Analysis complete');
 });
 
 test('changing an assumption clears base and risk results and makes the next request use the new value', async () => {
@@ -178,15 +236,19 @@ test('changing an assumption clears base and risk results and makes the next req
   expect(analyzeDealLocally.mock.lastCall[0].acquisition.purchase_price).toBe(3500000);
 });
 
-test.each(['base', 'risk'])('server 422 on %s is visible and never replaced by a local result', async (mode) => {
+test('server 422 on the base analysis is visible and never replaced by a local result', async () => {
   await useBackend();
   axios.post.mockRejectedValueOnce({ response: { status: 422, data: { detail: 'Invalid assumptions' } } });
-  if (mode === 'base') await submitBase();
-  else await click('Run Monte Carlo');
+  await submitBase();
   expect(container.textContent).toContain('Invalid assumptions');
   expect(analyzeDealLocally).not.toHaveBeenCalled();
-  expect(runMonteCarloLocally).not.toHaveBeenCalled();
   expect(container.querySelector('.studio-result')).toBeNull();
+});
+
+test('a simulation that fails shows its reason and no results', async () => {
+  runMonteCarloInBrowser.mockRejectedValueOnce(new Error("Monte Carlo scenario 'Committee case' produced no valid iterations."));
+  await click('Run Monte Carlo');
+  expect(container.textContent).toContain("Monte Carlo scenario 'Committee case' produced no valid iterations.");
   expect(container.querySelector('.studio-risk-results')).toBeNull();
 });
 
@@ -269,71 +331,43 @@ const changeSelect = async (name, value) => {
   });
 };
 
-test('selecting 10,000 iterations in the browser discloses the 5,000 cap before the run', async () => {
-  expect(container.textContent).not.toContain('This browser runs at most 5,000 iterations per case');
-  await changeSelect('mcIterations', '10000');
-  expect(container.textContent).toContain('This browser runs at most 5,000 iterations per case. 10,000 were selected');
-  await changeSelect('mcIterations', '5000');
-  expect(container.textContent).not.toContain('This browser runs at most 5,000 iterations per case');
-});
-
-test('the API path does not claim a browser cap', async () => {
+test.each(['1000', '2500', '5000', '10000'])('%s iterations per case is within what this device runs, so no cap is announced', async (choice) => {
+  await changeSelect('mcIterations', choice);
+  expect(container.textContent).not.toContain('This browser runs at most');
   await useBackend();
-  await changeSelect('mcIterations', '10000');
+  await changeSelect('mcIterations', choice);
   expect(container.textContent).not.toContain('This browser runs at most');
 });
 
-test('the API path says a large run can stop at the service time limit, and the browser path does not', async () => {
-  const note = "A run this large can reach the analysis service's time limit";
-  await changeSelect('mcIterations', '10000');
-  expect(container.textContent).not.toContain(note);
+test('no service time-limit note is shown, because the simulation does not use the service', async () => {
+  const note = "analysis service's time limit";
   await useBackend();
-  expect(container.textContent).not.toContain(note);
-  await changeSelect('mcIterations', '10000');
-  expect(container.textContent).toContain(`${note}. If it does, every case stops at the same point and the results state how many iterations were run.`);
-  await changeSelect('mcIterations', '5000');
-  expect(container.textContent).toContain(note);
-  await changeSelect('mcIterations', '2500');
-  expect(container.textContent).not.toContain(note);
+  for (const strategy of ['rental', 'land', 'flip']) {
+    if (strategy !== 'rental') await click(strategyButton[strategy]);
+    await changeSelect('mcIterations', '10000');
+    expect(container.textContent).not.toContain(note);
+  }
+  expect(container.textContent).toContain('The simulation runs on this device and shows its progress.');
 });
 
-test('land development is warned from 2,500 on the API path, because the service runs it more slowly', async () => {
-  const note = "A run this large can reach the analysis service's time limit";
-  await useBackend();
-  // Rental at the default of 2,500 finishes on the service, so no note.
-  expect(container.querySelector('[name="mcIterations"]').value).toBe('2500');
-  expect(container.textContent).not.toContain(note);
-  await click(strategyButton.land);
-  expect(container.querySelector('[name="mcIterations"]').value).toBe('2500');
-  expect(container.textContent).toContain(note);
-  await changeSelect('mcIterations', '1000');
-  expect(container.textContent).not.toContain(note);
-  await changeSelect('mcIterations', '2500');
-  await click(strategyButton.flip);
-  expect(container.textContent).not.toContain(note);
-  await changeSelect('mcIterations', '5000');
-  expect(container.textContent).toContain(note);
-});
-
-test('a service run stopped at its time limit shows how many iterations were run', async () => {
-  await useBackend();
-  axios.post.mockResolvedValueOnce({ data: {
+test('a run that stopped early shows how many iterations were run', async () => {
+  runMonteCarloLocally.mockReturnValueOnce({
     scenarios: ['Committee case', 'Downside case', 'Severe stress'].map((name, index) => ({
       name, seed: 2026 + index, iterations_requested: 10000, iterations_completed: 3800, failed_iterations: 0,
       summaries: { irr: { p10: 0.01, p50: 0.08, p90: 0.15, probability_above_zero: 0.75, sample_size: 3800 } },
       warnings: ['Shared note.', 'Service simulation capped at 3,800 iterations for this case to answer in time; 10,000 were requested.'],
     })),
-  } });
+  });
   await click('Run Monte Carlo');
-  await act(async () => { await Promise.resolve(); });
   const cards = [...container.querySelectorAll('.studio-risk-results article')];
   expect(cards).toHaveLength(3);
   for (const card of cards) {
     expect(card.querySelector('small').textContent).toContain('Requested 10,000 · Completed 3,800 · Excluded 0 · Valid for Projected IRR 3,800');
     expect(card.textContent).toContain('Only 3,800 of the 10,000 requested iterations were run.');
-    expect(card.textContent).toContain('75% probability above zero (2,850 of 3,800 valid results)');
+    // DE-25: the first number is the count above zero, and the text says so.
+    expect(card.textContent).toContain('75% probability above zero (2,850 above zero out of 3,800 valid results)');
   }
-  // The counts replace the service's own sentence; it is not shown twice.
+  // The counts replace the engine's own sentence; it is not shown twice.
   expect(container.textContent).not.toContain('Service simulation capped at');
 });
 
@@ -349,7 +383,7 @@ test('risk results show requested, completed, excluded and per-metric sample cou
   const cards = [...container.querySelectorAll('.studio-risk-results article')];
   expect(cards).toHaveLength(3);
   for (const card of cards) {
-    expect(card.textContent).toContain('75% probability above zero (3,000 of 4,000 valid results)');
+    expect(card.textContent).toContain('75% probability above zero (3,000 above zero out of 4,000 valid results)');
     expect(card.querySelector('small').textContent).toContain('Requested 10,000 · Completed 4,990 · Excluded 10 · Valid for Projected IRR 4,000');
     expect(card.textContent).toContain('Only 5,000 of the 10,000 requested iterations were run.');
     expect(card.textContent).toContain('10 iterations were excluded because the sampled inputs produced invalid economics.');
@@ -373,7 +407,7 @@ test('losses with no solvable IRR are shown as counted in the result', async () 
   await click('Run Monte Carlo');
   const cards = [...container.querySelectorAll('.studio-risk-results article')];
   expect(cards[0].textContent).not.toContain('losing iterations had no solvable');
-  expect(cards[2].textContent).toContain('7.56% probability above zero (378 of 5,000 valid results)');
+  expect(cards[2].textContent).toContain('7.56% probability above zero (378 above zero out of 5,000 valid results)');
   expect(cards[2].textContent).toContain('1,140 losing iterations had no solvable Projected IRR. They are counted as losses');
   expect(cards[2].querySelector('dd').textContent).toBe('-100%');
 });
