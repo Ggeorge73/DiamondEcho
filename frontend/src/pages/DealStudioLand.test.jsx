@@ -2,7 +2,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import axios from 'axios';
-import InvestmentCalculator, { landServiceFormulaIsCurrent } from './InvestmentCalculator';
+import InvestmentCalculator, { exampleSwap, LAND_EXAMPLE_SHARED, landServiceFormulaIsCurrent } from './InvestmentCalculator';
 
 // DE-25. The real calculation and decision code runs here; only the network
 // and the Excel download are faked.
@@ -173,18 +173,23 @@ describe('the service and the page agree on land', () => {
 describe('nothing changes silently', () => {
   test('typing an address keeps the asset type, the tab and the figures entered, and says what it cleared', async () => {
     await click('Land development');
+    // A box that already shows the figure cannot be "entered": typing the same
+    // value changes nothing. So what counts as the visitor's is what differs
+    // from the land example the tab opened with.
+    const typed = Object.entries(deal).filter(([name, value]) => field(name).value !== value);
+    expect(typed.length).toBeGreaterThan(10);
     await enterDeal();
     expect(field('propertyType').value).toBe('land');
     await setControl('address', '1');
     await setControl('address', '12 Example Rd, Duluth, GA');
     expect(field('propertyType').value).toBe('land');
     expect(button('Land development').className).toContain('is-active');
-    for (const [name, value] of Object.entries(deal)) expect(field(name).value).toBe(value);
+    for (const [name, value] of typed) expect(field(name).value).toBe(value);
     // Not entered by the visitor, so cleared: the example values.
     expect(field('market').value).toBe('');
     expect(field('siteAcres').value).toBe('');
     expect(notice().textContent).toContain('The example figures were cleared, because they are not facts about this address.');
-    expect(notice().textContent).toContain(`The ${Object.keys(deal).length} figures you entered were kept.`);
+    expect(notice().textContent).toContain(`The ${typed.length} figures you entered were kept.`);
     expect(notice().textContent).toContain('The asset type and strategy were not changed.');
     expect(notice().getAttribute('role')).toBe('status');
   });
@@ -211,7 +216,7 @@ describe('nothing changes silently', () => {
     await setControl('propertyType', 'condo');
     await click('Land development');
     expect(field('propertyType').value).toBe('land');
-    expect(notice().textContent).toBe('Asset type set to Lot / land for the Land development tab. It returns to Condominium when you leave this tab.×');
+    expect(notice().textContent).toBe('Asset type set to Lot / land for the Land development tab. It returns to Condominium when you leave this tab. The example figures you had not changed are now a land example (twelve finished lots on six acres). They are illustrations, not facts about any property.×');
     await click('Rental & commercial');
     expect(field('propertyType').value).toBe('condo');
     expect(notice().textContent).toContain('Asset type set back to Condominium, because Lot / land is analysed only on the Land development tab.');
@@ -320,5 +325,98 @@ describe('Monte Carlo on this device', () => {
       expect(card.textContent).not.toContain('requested iterations were run');
     }
     expect(axios.post).not.toHaveBeenCalled();
+  });
+});
+
+// DE-37. The price, closing costs, hold period and loan terms are one set of
+// boxes for all three tabs. They start as a $3,000,000 apartment-building
+// example, which read as a land deal was a $2.76 million loss before the
+// visitor had typed anything.
+describe('the land tab has its own example', () => {
+  const shared = Object.keys(LAND_EXAMPLE_SHARED);
+  const building = { purchasePrice: '3000000', closingCosts: '75000', initialCapex: '125000', holdMonths: '60', interestOnlyMonths: '0', loanTermYears: '10' };
+
+  test('opening the land tab untouched shows a land deal that works on paper, with the diligence still to do', async () => {
+    await click('Land development');
+    for (const name of shared) expect(field(name).value).toBe(LAND_EXAMPLE_SHARED[name]);
+    expect(field('developmentType').value).toBe('finished_lots');
+    expect(field('dispositionStrategy').value).toBe('sell_finished_lots');
+    expect(field('units').value).toBe('12');
+    expect(field('siteAcres').value).toBe('6');
+    expect(notice().textContent).toContain('are now a land example (twelve finished lots on six acres). They are illustrations, not facts about any property.');
+    // The page already says, above the form, that prefilled numbers are illustrative.
+    expect(text()).toContain('Manual Deal Studio entry. Any prefilled numbers are illustrative');
+    await runBase();
+    const verdict = container.querySelector('.studio-result__verdict');
+    expect(verdict.textContent).toContain('CONDITIONAL GO — VERIFY BEFORE CLOSING');
+    expect(verdict.textContent).toContain('At $375,000 the deal is modeled to earn $474,542 (20.81% of exit value), which meets your targets.');
+    const kpis = [...container.querySelectorAll('.studio-decision-kpis article')].map((item) => item.textContent);
+    expect(kpis[0]).toContain('MAXIMUM LAND PRICE$390,000Exact modeled ceiling $391,945');
+    expect(kpis[3]).toContain('0 of 10 diligence items verified');
+    expect(text()).not.toContain('THE DEAL LOSES MONEY');
+  });
+
+  test('going back to a building tab puts the building example back', async () => {
+    await click('Land development');
+    await click('Rental & commercial');
+    for (const [name, value] of Object.entries(building)) expect(field(name).value).toBe(value);
+    expect(notice().textContent).toContain('The example figures you had not changed are the building example again.');
+    await click('Land development');
+    await click('Fix & flip');
+    for (const [name, value] of Object.entries(building)) expect(field(name).value).toBe(value);
+  });
+
+  test('a figure the visitor typed is never swapped, in either direction', async () => {
+    await setControl('purchasePrice', '985000');
+    await setControl('holdMonths', '36');
+    await click('Land development');
+    expect(field('purchasePrice').value).toBe('985000');
+    expect(field('holdMonths').value).toBe('36');
+    expect(field('closingCosts').value).toBe('15000');      // untouched, so it followed the tab
+    await setControl('closingCosts', '22000');
+    await click('Rental & commercial');
+    expect(field('purchasePrice').value).toBe('985000');
+    expect(field('holdMonths').value).toBe('36');
+    expect(field('closingCosts').value).toBe('22000');
+    expect(field('initialCapex').value).toBe('125000');     // still an example, so it went back
+  });
+
+  test('moving between the two building tabs swaps nothing and says nothing', async () => {
+    await click('Fix & flip');
+    for (const [name, value] of Object.entries(building)) expect(field(name).value).toBe(value);
+    expect(notice()).toBeNull();
+  });
+
+  test('figures cleared for an address stay cleared, and the boxes that do change are named', async () => {
+    await setControl('address', '12 Example Rd');
+    expect(field('purchasePrice').value).toBe('');
+    expect(field('holdMonths').value).toBe('60');           // not a fact about an address, so never cleared
+    await click('Land development');
+    expect(field('purchasePrice').value).toBe('');
+    expect(field('closingCosts').value).toBe('');
+    expect(field('holdMonths').value).toBe('24');
+    expect(notice().textContent).not.toContain('twelve finished lots');
+    expect(notice().textContent).toContain('These example figures, which you had not changed, were set for a land deal: hold period, interest-only period, loan term.');
+    await click('Rental & commercial');
+    expect(field('holdMonths').value).toBe('60');
+    expect(notice().textContent).toContain('were set back for a building: hold period, interest-only period, loan term.');
+  });
+
+  test('no example figure is an empty box, which is what a cleared figure looks like', () => {
+    expect(shared.sort()).toEqual(Object.keys(building).sort());
+    Object.values(LAND_EXAMPLE_SHARED).forEach((value) => expect(value).not.toBe(''));
+    Object.values(building).forEach((value) => expect(value).not.toBe(''));
+  });
+
+  test('exampleSwap changes only boxes that still hold the other example', () => {
+    const start = { ...building, strategy: 'rental' };
+    expect(exampleSwap(start, 'rental', 'land')).toEqual({ ...LAND_EXAMPLE_SHARED });
+    expect(exampleSwap(start, 'rental', 'flip')).toEqual({});
+    expect(exampleSwap(start, 'land', 'land')).toEqual({});
+    expect(exampleSwap({ ...start, purchasePrice: '1' }, 'rental', 'land').purchasePrice).toBeUndefined();
+    // Entered, even though it still equals the example (put back with "Put the example figures back").
+    expect(exampleSwap(start, 'rental', 'land', new Set(['purchasePrice'])).purchasePrice).toBeUndefined();
+    expect(exampleSwap({ ...LAND_EXAMPLE_SHARED }, 'land', 'rental')).toEqual(building);
+    expect(exampleSwap({ ...LAND_EXAMPLE_SHARED, holdMonths: '30' }, 'land', 'flip').holdMonths).toBeUndefined();
   });
 });
