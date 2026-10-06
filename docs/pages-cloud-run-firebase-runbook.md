@@ -64,7 +64,8 @@ Since 2026-10-06 (DE-25) Deal Studio no longer sends its simulation to this
 service. Gbenga's production test stopped at 3,400 of 5,000 rental iterations,
 so the page now runs Monte Carlo in the visitor's browser, a block at a time
 with progress shown: 10,000 iterations per case for three cases took about 2
-seconds on a desktop-class machine. The `/api/v1/deals/monte-carlo` address and
+seconds on a desktop-class machine, in a tab that is in view or (since DE-38)
+out of view. The `/api/v1/deals/monte-carlo` address and
 its time budget are unchanged and still protect the service from any other
 caller. Base analysis still goes to the service. See
 `docs/deal-studio-land-decision.md`.
