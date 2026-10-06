@@ -99,10 +99,12 @@ const Navbar = () => {
     <>
       <header className={`mf-nav ${isScrolled || isMenuOpen ? 'mf-nav--solid' : ''}`}>
         <div className="mf-nav__inner">
-          <Link to="/" className="mf-wordmark" aria-label="DiamondEcho home" onClick={() => { restoreFocusRef.current = false; setIsMenuOpen(false); }}>
+          <Link to="/" className="mf-wordmark" aria-label="Diamond Echo Private Real Estate, home" onClick={() => { restoreFocusRef.current = false; setIsMenuOpen(false); }}>
             <span className="mf-wordmark__mark"><Diamond aria-hidden="true" /></span>
             <span>
-              <strong>DIAMOND ECHO</strong>
+              {/* The space keeps the two lines apart when read as text ("DIAMOND ECHO PRIVATE…");
+                  the lines are stacked, so it takes up no room on screen. */}
+              <strong>DIAMOND ECHO</strong>{' '}
               <small>PRIVATE REAL ESTATE</small>
             </span>
           </Link>
@@ -151,7 +153,7 @@ const Navbar = () => {
 
       {isMenuOpen && (
         <div id="mf-overlay-menu" ref={menuRef} className="mf-menu" role="dialog" aria-modal="true" aria-label="Site menu">
-          <button ref={closeRef} className="mf-menu__close" type="button" onClick={() => { restoreFocusRef.current = true; setIsMenuOpen(false); }} aria-label="Close site menu">
+          <button ref={closeRef} className="mf-menu__close" type="button" onClick={() => { restoreFocusRef.current = true; setIsMenuOpen(false); }}>
             <X aria-hidden="true" /> Close menu
           </button>
           <div className="mf-menu__primary">

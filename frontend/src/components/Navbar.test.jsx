@@ -87,7 +87,7 @@ test('the menu does not offer the concierge on a build with no service', async (
   delete process.env.REACT_APP_BACKEND_URL;
   const { dialog } = await renderMenu(true);
   expect(dialog.textContent).not.toContain('Ask the concierge');
-  expect(container.querySelector('button[aria-label="Open DiamondEcho assistant"]')).toBeNull();
+  expect(container.querySelector('button[aria-label="Ask DiamondEcho assistant"]')).toBeNull();
   // The other menu actions are still there.
   for (const label of ['Search Georgia MLS', 'Run a deal analysis', 'Explore advisory', 'Buyer inquiry', 'Seller consultation']) {
     expect(dialog.textContent).toContain(label);
@@ -104,5 +104,5 @@ test('concierge action hands focus to assistant and closing returns to its trigg
   expect(prompt).not.toBeNull();
   expect(document.activeElement).toBe(prompt);
   await act(async () => container.querySelector('button[aria-label="Close assistant"]').click());
-  expect(document.activeElement).toBe(container.querySelector('button[aria-label="Open DiamondEcho assistant"]'));
+  expect(document.activeElement).toBe(container.querySelector('button[aria-label="Ask DiamondEcho assistant"]'));
 });
