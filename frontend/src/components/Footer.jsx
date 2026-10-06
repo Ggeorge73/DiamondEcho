@@ -52,7 +52,7 @@ const Footer = () => (
       </div>
       <div>
         <h3>Georgia office</h3>
-        <p>8735 Dunwoody Place<br />GA 30350, USA</p>
+        <p>{OFFICE.addressLines[0]}<br />{OFFICE.addressLines[1]}</p>
         <a href={OFFICE.phoneHref}>Direct {OFFICE.phone}</a>
         <a href={OFFICE.emailHref}>{OFFICE.email}</a>
       </div>

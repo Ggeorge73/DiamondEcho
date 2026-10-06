@@ -40,7 +40,7 @@ const InquiryClosed = ({ kind }) => (
       <a href={OFFICE.emailHref}>{OFFICE.email}</a>
     </p>
     <h3>Georgia office</h3>
-    <p>8735 Dunwoody Place<br />GA 30350, USA</p>
+    <p>{OFFICE.addressLines[0]}<br />{OFFICE.addressLines[1]}</p>
     <div className="de-inquiry-closed__actions">
       <Link className="mf-btn mf-btn--solid" to="/search">Search Georgia MLS</Link>
       <Link className="mf-btn" to="/investment-calculator">Open Deal Studio</Link>

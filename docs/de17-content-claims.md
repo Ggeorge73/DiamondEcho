@@ -29,7 +29,7 @@ legal advice".
 
 | Claim | Where | Approved |
 | --- | --- | --- |
-| Georgia office: 8735 Dunwoody Place, GA 30350 | Footer, menu | 2026-09-29 |
+| Georgia office: 2750 Premiere Pkwy, Ste. 200, Duluth, GA 30097 | Footer, menu, inquiry notice, Privacy, Terms | Supplied 2026-10-06: "the Office address for DiamondEcho has to be same as for Virtual Properties Realty.com". It replaces 8735 Dunwoody Place, GA 30350 (approved 2026-09-29) |
 | Direct (678) 516-9717; realtor@diamondecho.com | Footer, menu, inquiry notice, Privacy, Terms | Supplied 2026-10-03; he reported both working 2026-10-04 |
 | Brokerage: Virtual Properties Realty.com; Office (770) 495-5050 | Same places, shown before the direct number | Confirmed 2026-10-04 |
 | The property search is his Georgia MLS page | Home, Search | Accepted homepage, 2026-09-29 |

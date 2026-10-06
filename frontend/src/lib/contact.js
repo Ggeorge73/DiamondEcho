@@ -1,8 +1,11 @@
 // Contact details supplied by Gbenga for publication (DE-17). Change them here
-// only; every page that shows a phone number or inbox reads this file.
+// only; every page that shows the address, a phone number or the inbox reads
+// this file. The office address is the brokerage's office, as Gbenga
+// instructed on 2026-10-06: DiamondEcho's address must be the same as
+// Virtual Properties Realty.com's.
 export const OFFICE = Object.freeze({
   name: 'Georgia office',
-  addressLines: ['8735 Dunwoody Place', 'GA 30350, USA'],
+  addressLines: ['2750 Premiere Pkwy, Ste. 200', 'Duluth, GA 30097'],
   phone: '(678) 516-9717',
   phoneHref: 'tel:+16785169717',
   email: 'realtor@diamondecho.com',
