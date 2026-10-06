@@ -10,8 +10,9 @@ const NotFound = () => {
   useEffect(() => {
     const previousTitle = document.title;
     document.title = TITLE;
-    // The host serves the app shell for every address, so search engines get this
-    // hint from the page itself rather than from a 404 status.
+    // Cloudflare Pages answers an unknown address with 404.html and a 404 status
+    // (public/_redirects, scripts/make-404.mjs). This hint stays for any host
+    // that serves the app shell with a 200 instead, such as the local dev server.
     const robots = document.createElement('meta');
     robots.name = 'robots';
     robots.content = 'noindex';
