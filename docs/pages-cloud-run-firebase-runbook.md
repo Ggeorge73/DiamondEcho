@@ -154,12 +154,19 @@ MX/TXT/email records before any change. Approve www redirects and staff/API
 subdomains explicitly. Do not cancel GoDaddy hosting until the replacement is
 verified and rollback is agreed.
 
+This was done on 2026-10-06: DNS hosting moved to Cloudflare, `diamondecho.com`
+serves the public site, `www` redirects to it and `staff.diamondecho.com`
+serves the staff site. The record of every production step, the DNS records
+that were carried over, the checks and what is still unproven is
+`docs/de13-production-setup.md`.
+
 Tiara runs the Type 7 matrix on the exact release-candidate build and URLs,
 including real email/password + TOTP enrollment/sign-in, negative identity
 cases and all three inquiry types. Lara confirms who checks the queue, response
 SLA, alerting, backup responder, retention and recovery. Gbenga set the routing
-terms on 2026-10-05 and an arrival alert email exists on staging only; see
-`docs/de31-inquiry-routing.md`. No automated retention job is implemented.
+terms on 2026-10-05. An arrival alert email exists on staging and, since
+2026-10-05, in production; see `docs/de31-inquiry-routing.md` and
+`docs/de13-production-setup.md`. No automated retention job is implemented.
 Gbenga alone authorizes merge and production release.
 
 ## 6. Costs, monitoring and rollback

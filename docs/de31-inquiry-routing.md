@@ -202,6 +202,8 @@ Each step is a change to a Google Cloud project and needs Gbenga's yes at the ti
 5. Read that email in full, to the bottom, and compare it with "What the alert email contains". Production carries real visitors, so confirm again that no visitor detail appears.
 6. Acknowledge the synthetic request in the queue so it is not mistaken for a visitor.
 
+Done on 2026-10-05, with one difference from step 4: the synthetic request was sent from Cloud Shell, not through the site's form. The alert opened 57 seconds after it; Gbenga received the email and acknowledged the request in the production queue the next day. Times, names and what is still unproven are in `docs/de13-production-setup.md`, section 4.
+
 ## Undo
 
 On the Alerting page of project `diamondecho-staging`, disable or delete the policy, then the channel. Nothing else depends on them. Requests continue to reach the queue.
