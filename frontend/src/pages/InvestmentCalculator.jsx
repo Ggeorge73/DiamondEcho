@@ -93,14 +93,18 @@ const initialForm = {
   otherProjectCosts: '50000', sellingCosts: '6', discountRate: '10', mcIterations: '2500',
   targetCashOnCash: '8', minimumDscr: '1.2', targetIrr: '15', preliminaryMarketCeiling: '',
   maxImmediateCapex: '', maxAnnualTaxes: '', maxAnnualInsurance: '',
-  developmentType: 'single_family_subdivision', dispositionStrategy: 'build_and_sell',
-  siteAcres: '2.5', parcelCount: '1', currentZoning: '', proposedZoning: '',
+  // The land example: twelve finished lots on six acres, sold as lots. Like
+  // every starting figure on this page it is an illustration, and the page
+  // says so. The figures the land tab shares with the other two tabs are in
+  // LAND_EXAMPLE_SHARED below.
+  developmentType: 'finished_lots', dispositionStrategy: 'sell_finished_lots',
+  siteAcres: '6', parcelCount: '1', currentZoning: '', proposedZoning: '',
   entitlementStatus: 'unentitled', utilityStatus: 'verify', accessStatus: 'verify',
   environmentalStatus: 'phase_i_required', geotechnicalStatus: 'not_started', floodZone: '',
-  wetlandsAcres: '0', developmentMonths: '24', absorptionMonths: '12', siteWorkCost: '300000',
-  hardConstructionCost: '1500000', softCosts: '200000', permitsImpactFees: '100000',
-  environmentalRemediation: '0', developerFee: '100000', landContingency: '10',
-  annualCarryingCosts: '30000', expectedTerminalValue: '4500000', stabilizedNoi: '0',
+  wetlandsAcres: '0', developmentMonths: '12', absorptionMonths: '12', siteWorkCost: '780000',
+  hardConstructionCost: '0', softCosts: '110000', permitsImpactFees: '60000',
+  environmentalRemediation: '0', developerFee: '60000', landContingency: '10',
+  annualCarryingCosts: '12000', expectedTerminalValue: '2280000', stabilizedNoi: '0',
   stabilizedExitCap: '0', targetProfitMargin: '20',
   mcRentMin: '-10', mcRentMode: '2', mcRentMax: '10', mcVacancyMin: '3',
   mcVacancyMode: '6', mcVacancyMax: '14', mcExpenseMin: '-3', mcExpenseMode: '3',
@@ -108,6 +112,34 @@ const initialForm = {
   mcInterestMin: '5.75', mcInterestMode: '6.75', mcInterestMax: '8.5',
   mcArvMin: '-15', mcArvMode: '0', mcArvMax: '10', mcRehabMin: '0',
   mcRehabMode: '10', mcRehabMax: '30',
+};
+
+// DE-37. The price, closing costs, hold period and loan terms are one set of
+// boxes for all three tabs, and they start as an apartment-building example: a
+// $3,000,000 purchase held for five years. Read as a land deal that was a
+// $2.76 million loss before the visitor had typed anything. So while those
+// boxes still hold untouched example figures, opening the Land development tab
+// swaps in the land example's, and leaving it puts the building's back. A
+// figure the visitor typed, or one loaded for an address, is never swapped.
+// No value here may be empty: an empty box is what "cleared for an address"
+// looks like, and a cleared box must never be filled with an example.
+export const LAND_EXAMPLE_SHARED = Object.freeze({
+  purchasePrice: '375000', closingCosts: '15000', initialCapex: '0', holdMonths: '24',
+  interestOnlyMonths: '24', loanTermYears: '2',
+});
+
+const SHARED_EXAMPLE_LABELS = {
+  purchasePrice: 'purchase price', closingCosts: 'closing costs', initialCapex: 'initial capital work',
+  holdMonths: 'hold period', interestOnlyMonths: 'interest-only period', loanTermYears: 'loan term',
+};
+
+// Which of the shared boxes to change when moving between tabs, and to what.
+export const exampleSwap = (form, fromStrategy, toStrategy, entered = new Set()) => {
+  if ((fromStrategy === 'land') === (toStrategy === 'land')) return {};
+  const [from, to] = toStrategy === 'land' ? [initialForm, LAND_EXAMPLE_SHARED] : [LAND_EXAMPLE_SHARED, initialForm];
+  return Object.fromEntries(Object.keys(LAND_EXAMPLE_SHARED)
+    .filter((field) => !entered.has(field) && form[field] === from[field])
+    .map((field) => [field, to[field]]));
 };
 
 const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
@@ -337,19 +369,28 @@ const InvestmentCalculator = () => {
     if (nextType !== previousType) {
       setPropertyProvenance((current) => ({ ...current, propertyType: { source: 'Your input', description: 'Selected for this analysis; verify against the property' } }));
     }
+    // Untouched example figures follow the tab; anything entered stays (DE-37).
+    const swapped = exampleSwap(form, form.strategy, strategy, enteredFields.current);
+    const swappedNames = Object.keys(swapped).map((field) => SHARED_EXAMPLE_LABELS[field]).join(', ');
+    const swapNote = !swappedNames ? ''
+      : !('purchasePrice' in swapped)
+        // Only some boxes still held examples (the rest were typed, or cleared for an address): name them.
+        ? ` These example figures, which you had not changed, were set ${strategy === 'land' ? 'for a land deal' : 'back for a building'}: ${swappedNames}.`
+        : strategy === 'land'
+          ? ' The example figures you had not changed are now a land example (twelve finished lots on six acres). They are illustrations, not facts about any property.'
+          : ' The example figures you had not changed are the building example again.';
+    let message = '';
     if (chosenType === true) {
-      setNotice({ text: `Moved to the ${STRATEGY_LABELS.land} tab, because ${ASSET_TYPE_LABELS.land} is analysed there. Your figures were kept.`, restore: null });
+      message = `Moved to the ${STRATEGY_LABELS.land} tab, because ${ASSET_TYPE_LABELS.land} is analysed there. Your figures were kept.`;
     } else if (typeof chosenType === 'string') {
-      setNotice({ text: `Moved to the ${STRATEGY_LABELS[strategy]} tab, because the ${STRATEGY_LABELS.land} tab only analyses ${ASSET_TYPE_LABELS.land}. Your figures were kept.`, restore: null });
+      message = `Moved to the ${STRATEGY_LABELS[strategy]} tab, because the ${STRATEGY_LABELS.land} tab only analyses ${ASSET_TYPE_LABELS.land}. Your figures were kept.`;
     } else if (nextType !== previousType) {
-      setNotice({
-        text: strategy === 'land'
-          ? `Asset type set to ${ASSET_TYPE_LABELS.land} for the ${STRATEGY_LABELS.land} tab. It returns to ${ASSET_TYPE_LABELS[previousType] || previousType} when you leave this tab.`
-          : `Asset type set back to ${ASSET_TYPE_LABELS[nextType] || nextType}, because ${ASSET_TYPE_LABELS.land} is analysed only on the ${STRATEGY_LABELS.land} tab. Change it in "Asset type" if that is not right.`,
-        restore: null,
-      });
+      message = strategy === 'land'
+        ? `Asset type set to ${ASSET_TYPE_LABELS.land} for the ${STRATEGY_LABELS.land} tab. It returns to ${ASSET_TYPE_LABELS[previousType] || previousType} when you leave this tab.`
+        : `Asset type set back to ${ASSET_TYPE_LABELS[nextType] || nextType}, because ${ASSET_TYPE_LABELS.land} is analysed only on the ${STRATEGY_LABELS.land} tab. Change it in "Asset type" if that is not right.`;
     }
-    setForm((current) => ({ ...current, strategy, propertyType: nextType }));
+    if (message || swapNote) setNotice({ text: `${message}${swapNote}`.trim(), restore: null });
+    setForm((current) => ({ ...current, ...swapped, strategy, propertyType: nextType }));
   };
 
   useEffect(() => {
