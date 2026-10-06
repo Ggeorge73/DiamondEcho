@@ -21,8 +21,10 @@ const createSubmissionKey = () => {
   throw new Error('This browser cannot safely submit the request. Please try an updated browser.');
 };
 
-const InquiryForm = ({ kind }) => {
-  const [values, setValues] = useState(emptyValues);
+// `initialMessage` starts the message box with a sentence the visitor can
+// change, for a link that already says what the request is about.
+const InquiryForm = ({ kind, initialMessage = '' }) => {
+  const [values, setValues] = useState(() => ({ ...emptyValues, message: initialMessage }));
   const [validation, setValidation] = useState({});
   const [error, setError] = useState('');
   const [pending, setPending] = useState(false);
