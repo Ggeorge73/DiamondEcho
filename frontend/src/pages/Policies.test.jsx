@@ -100,6 +100,35 @@ test('terms page states the limits of listings, Deal Studio and requests', async
   expect(container.querySelector('a[href="/privacy"]')).not.toBeNull();
 });
 
+// DE-39. Both tools calculate in the browser and send nothing; the pages say so.
+test('privacy and terms cover the mortgage simulator and the seller net sheet', async () => {
+  await renderAt('/privacy');
+  expect(container.textContent).toContain('Both calculations run entirely in your browser. The figures are not sent to DiamondEcho and are not saved.');
+  await act(async () => { root.unmount(); });
+  root = createRoot(container);
+  await renderAt('/terms');
+  expect(container.textContent).toContain('The mortgage simulator is not a loan offer, a rate quote, a pre-approval or a commitment to lend');
+  expect(container.textContent).toContain('The seller net sheet is not a settlement statement or an appraisal');
+});
+
+test('neither buyer and seller tool sends what is typed anywhere', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const dir = path.resolve(__dirname, '../components/calculators');
+  const sources = [
+    ...fs.readdirSync(dir).filter((name) => /\.jsx?$/.test(name) && !/test/i.test(name)).map((name) => path.join(dir, name)),
+    path.resolve(__dirname, '../lib/mortgage.js'),
+    path.resolve(__dirname, '../lib/netProceeds.js'),
+  ];
+  expect(sources.length).toBeGreaterThanOrEqual(7);
+  sources.forEach((file) => {
+    const source = fs.readFileSync(file, 'utf8');
+    ['axios', 'fetch(', 'XMLHttpRequest', 'sendBeacon', 'localStorage', 'sessionStorage', 'document.cookie', 'indexedDB'].forEach((marker) => {
+      expect(`${path.basename(file)}: ${source.includes(marker) ? marker : ''}`).toBe(`${path.basename(file)}: `);
+    });
+  });
+});
+
 test.each(['/privacy', '/terms'])('%s claims no legal certification or compliance badge', async (address) => {
   await renderAt(address);
   expect(container.textContent).not.toMatch(/GDPR|CCPA|certified|compliant|guarantee[sd]? (of|that)/i);

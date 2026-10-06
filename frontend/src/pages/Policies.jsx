@@ -8,7 +8,7 @@ import './Policies.css';
 // Plain-language drafts for Gbenga's review (DE-18). They describe what this
 // site does today and claim no legal certification. Keep them in step with
 // frontend/public/index.html: a script added there must be described here.
-export const POLICIES_UPDATED = 'October 4, 2026';
+export const POLICIES_UPDATED = 'October 6, 2026';
 
 const usePageTitle = (title) => {
   useEffect(() => {
@@ -122,6 +122,20 @@ export const Privacy = () => {
         </p>
       </section>
 
+      <section>
+        <h2>Mortgage simulator and seller net sheet</h2>
+        <p>
+          The figures you enter in the mortgage simulator and the seller net sheet are
+          used only to calculate the results you see. Both calculations run entirely in
+          your browser. The figures are not sent to DiamondEcho and are not saved.
+        </p>
+        <p>
+          A link that opens the mortgage simulator can carry a home's price, yearly
+          property taxes and association fee in its address. Those are details of the
+          home, not of you.
+        </p>
+      </section>
+
       {assistantAvailable() && (
         <section>
           <h2>Ask DiamondEcho assistant</h2>
@@ -208,6 +222,19 @@ export const Terms = () => {
           shown on the page. Results are illustrations, not predictions or promises of
           any return. They are not financial, investment, tax or legal advice. Speak to
           a qualified professional before making a decision.
+        </p>
+      </section>
+
+      <section>
+        <h2>Mortgage simulator and seller net sheet</h2>
+        <p>
+          Both tools produce estimates from the figures you enter and the assumptions
+          shown on the page. The mortgage simulator is not a loan offer, a rate quote, a
+          pre-approval or a commitment to lend, and no lender reviews it. The seller net
+          sheet is not a settlement statement or an appraisal, and it does not promise a
+          sale price or an amount of proceeds. A lender's Loan Estimate and your closing
+          attorney's settlement statement state the actual figures. Neither tool is
+          financial, tax or legal advice.
         </p>
       </section>
 
