@@ -23,8 +23,10 @@ test('footer lists only the approved Georgia office, phone and inbox', async () 
   await act(async () => { root.render(<MemoryRouter><Footer /></MemoryRouter>); });
   const offices = container.querySelector('.mf-offices');
   expect(offices.textContent).toContain('Georgia office');
-  expect(offices.textContent).toContain('8735 Dunwoody Place');
-  expect(offices.textContent).toContain('GA 30350, USA');
+  expect(offices.textContent).toContain('2750 Premiere Pkwy, Ste. 200');
+  expect(offices.textContent).toContain('Duluth, GA 30097');
+  // The address is the brokerage's office (Gbenga, 2026-10-06); the earlier one is gone.
+  expect(offices.textContent).not.toMatch(/Dunwoody Place|30350/);
   expect([...offices.querySelectorAll('h3')].map((h) => h.textContent)).toEqual(['Brokerage', 'Georgia office']);
   expect(offices.textContent).not.toMatch(/New York|Miami|Los Angeles/);
   // Only the phone number and inbox Gbenga supplied for publication.
@@ -42,8 +44,9 @@ test('open menu no longer advertises the retired offices or 555 phone', async ()
   await act(async () => { container.querySelector('button[aria-label="Open menu"]').click(); });
   const contact = container.querySelector('.mf-menu__contact');
   expect(contact.textContent).toContain('Georgia office');
-  expect(contact.textContent).toContain('8735 Dunwoody Place');
-  expect(contact.textContent).toContain('GA 30350, USA');
+  expect(contact.textContent).toContain('2750 Premiere Pkwy, Ste. 200');
+  expect(contact.textContent).toContain('Duluth, GA 30097');
+  expect(contact.textContent).not.toMatch(/Dunwoody Place|30350/);
   expect(contact.textContent).not.toMatch(/New York|Miami|Los Angeles|555-/);
   const links = [...contact.querySelectorAll('a[href^="tel:"], a[href^="mailto:"]')].map((link) => [link.getAttribute('href'), link.textContent]);
   expect(links).toEqual([
