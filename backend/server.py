@@ -14,7 +14,21 @@ from inquiries.router import router as inquiries_router, require_staff, require_
 from inquiries.firebase import queue_settings
 
 load_dotenv(Path(__file__).parent / ".env")
-app = FastAPI()
+
+# DE-25 finding F4: FastAPI publishes an interactive page listing every route
+# (/docs, /redoc) and the full route description (/openapi.json) unless told
+# not to. A deployed service has no reason to hand that list to anyone who
+# asks, so they are off unless API_DOCS_ENABLED is exactly "true" (for a local
+# run). The routes themselves are unaffected.
+def docs_settings(environ=os.environ):
+    enabled = environ.get("API_DOCS_ENABLED", "").strip().lower() == "true"
+    return {
+        "docs_url": "/docs" if enabled else None,
+        "redoc_url": "/redoc" if enabled else None,
+        "openapi_url": "/openapi.json" if enabled else None,
+    }
+
+app = FastAPI(**docs_settings())
 api = APIRouter(prefix="/api")
 
 @api.get("/")
