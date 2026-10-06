@@ -26,6 +26,8 @@ SOURCES: tuple[KnowledgeSource, ...] = (
     KnowledgeSource("irs-523", "Publication 523: Selling Your Home", "Internal Revenue Service", "https://www.irs.gov/publications/p523", "US federal", REVIEW_DATE, ("sell", "tax", "capital gain", "primary residence")),
     KnowledgeSource("irs-527", "Publication 527: Residential Rental Property", "Internal Revenue Service", "https://www.irs.gov/publications/p527", "US federal", REVIEW_DATE, ("rental", "rent", "tax", "depreciation", "expenses")),
     KnowledgeSource("irs-1031", "Like-Kind Exchanges — Real Estate Tax Tips", "Internal Revenue Service", "https://www.irs.gov/businesses/small-businesses-self-employed/like-kind-exchanges-real-estate-tax-tips", "US federal", REVIEW_DATE, ("1031", "exchange", "commercial", "investment", "tax")),
+    # Read on 2026-10-06 for the seller net sheet (docs/buyer-seller-calculators.md).
+    KnowledgeSource("ga-dor-transfer-tax", "Real Estate Transfer Tax", "Georgia Department of Revenue", "https://dor.georgia.gov/real-estate-transfer-tax", "Georgia", date(2026, 10, 6), ("transfer tax", "closing", "sell", "georgia")),
     KnowledgeSource("irs-business", "Small Business and Self-Employed Tax Center", "Internal Revenue Service", "https://www.irs.gov/businesses/small-businesses-self-employed", "US federal", REVIEW_DATE, ("commercial", "business", "tax", "investment")),
 )
 
