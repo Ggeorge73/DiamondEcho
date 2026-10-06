@@ -44,7 +44,7 @@ the named real-device run.
 | TC14 | DE-14 / DE-20 | Buyer quick prompt, seller follow-up context, source review dates, neutral safety reframing, human queue handoff and service-error recovery work. | DE-20 conversation transcript, redacted |
 | TC15 | DE-15 / DE-21 | Verify any site shortcuts land on embedded Georgia MLS search. Filters operate inside the provider frame; do not claim the site URL preserves filters unless provider behavior is demonstrated. | DE-21 query/URL record |
 | TC16 | DE-16 / DE-22 | Unknown URL gives a clear 404 with working Home/Search; known deep links and refresh work. | DE-22 URL captures |
-| TC17 | DE-17 / DE-23 | A 10,000-iteration browser run discloses the 5,000 cap and exclusions; probabilities show their valid denominator; malformed distributions fail clearly. | DE-23 simulation record |
+| TC17 | DE-17 / DE-23 | A 10,000-iteration run completes on the visitor's device with progress shown (DE-25; the earlier 5,000 browser cap and the service time limit no longer apply to the page); exclusions are disclosed; each probability states how many results were above zero out of how many were valid; malformed distributions fail clearly. | DE-23 simulation record; DE-25 for the device-side run |
 | TC18 | DE-18 / DE-6 | Public site makes no authenticated-portal or self-service seller claim outside Gbenga's approved brokerage/inquiry launch scope. | DE-6 content review |
 
 ## Journey and operational cross-checks

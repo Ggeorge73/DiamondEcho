@@ -13,8 +13,10 @@ and DE-12 supply the acceptance criteria.
    unordered Monte Carlo low/mode/high values. Each must give a clear error
    without a base result, simulation, or export.
 2. With an API configured, send invalid input that returns HTTP 422 from base
-   analysis and Monte Carlo. The browser must show the rejection and must not
-   calculate a local replacement. Test service/network failures separately.
+   analysis. The browser must show the rejection and must not calculate a
+   local replacement. Test service/network failures separately. (Since DE-25
+   Monte Carlo runs on the visitor's device and makes no request; an invalid
+   simulation input is refused on the page before anything runs.)
 3. Analyze at one price, then edit price, rent, vacancy, market, asset type,
    or a simulation driver. Prior base/risk output must clear immediately; a
    late response for the prior inputs must not restore it.
