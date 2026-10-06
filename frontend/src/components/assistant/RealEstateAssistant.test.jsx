@@ -24,7 +24,7 @@ describe('launcher next to the Georgia MLS frame', () => {
   let frameRect;
   const originalSize = { width: window.innerWidth, height: window.innerHeight };
   const settle = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 60)); });
-  const button = () => container.querySelector('button[aria-label="Open DiamondEcho assistant"]');
+  const button = () => container.querySelector('button[aria-label="Ask DiamondEcho assistant"]');
   const label = () => [...button().querySelectorAll('span')].find((node) => node.textContent === 'Ask DiamondEcho');
 
   const savedBackend = process.env.REACT_APP_BACKEND_URL;
@@ -58,7 +58,7 @@ describe('launcher next to the Georgia MLS frame', () => {
   test('shrinks to its icon while over the frame and keeps its accessible name', () => {
     expect(button().dataset.compact).toBe('true');
     expect(label().className).toBe('sr-only');
-    expect(button().getAttribute('aria-label')).toBe('Open DiamondEcho assistant');
+    expect(button().getAttribute('aria-label')).toBe('Ask DiamondEcho assistant');
     expect(button().getAttribute('title')).toBe('Ask DiamondEcho');
   });
 
@@ -88,7 +88,7 @@ test('launcher keeps its label on pages without the search frame', async () => {
   await act(async () => root.render(
     <MemoryRouter initialEntries={['/about']}><RealEstateAssistant /></MemoryRouter>
   ));
-  const trigger = container.querySelector('button[aria-label="Open DiamondEcho assistant"]');
+  const trigger = container.querySelector('button[aria-label="Ask DiamondEcho assistant"]');
   expect(trigger.dataset.compact).toBe('false');
   expect(trigger.textContent).toContain('Ask DiamondEcho');
   await act(async () => root.unmount());
@@ -128,6 +128,6 @@ describe('a build with no service', () => {
   test('offers the launcher once a service address is set', async () => {
     process.env.REACT_APP_BACKEND_URL = 'https://api.example.test';
     await render();
-    expect(container.querySelector('button[aria-label="Open DiamondEcho assistant"]')).not.toBeNull();
+    expect(container.querySelector('button[aria-label="Ask DiamondEcho assistant"]')).not.toBeNull();
   });
 });
