@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Sequence, Tuple
 from uuid import uuid4
@@ -16,7 +17,39 @@ from .models import (
 )
 
 
-FORMULA_VERSION = "diamond-underwriting-1.0.0"
+# 1.1.0 (2026-10-06): residual land value is the land price at which the deal
+# earns exactly the target development margin, and the flood-zone warning reads
+# the FEMA designation instead of treating any text as a zone.
+FORMULA_VERSION = "diamond-underwriting-1.1.0"
+
+
+# FEMA flood-zone designations. Mirrors ``classifyFloodZone`` in
+# frontend/src/lib/floodZone.js; the two must read the same text the same way.
+_FLOOD_MINIMAL = {"X", "C", "X UNSHADED", "X (UNSHADED)"}
+_FLOOD_MODERATE = {"B", "X SHADED", "X (SHADED)", "X500", "0.2 PCT ANNUAL CHANCE FLOOD HAZARD"}
+_FLOOD_SPECIAL = re.compile(r"^(A|AE|AH|AO|AR|A99|A([1-9]|[12][0-9]|30)|V|VE|V([1-9]|[12][0-9]|30)|AR/(A|AE|AH|AO|A([1-9]|[12][0-9]|30)))$")
+
+
+def classify_flood_zone(text: Optional[str]) -> Tuple[str, str]:
+    """Return ``(status, zone)`` for a typed flood-zone entry.
+
+    ``status`` is ``not_entered``, ``unrecognized``, ``minimal``, ``moderate``,
+    ``special`` or ``undetermined``. Text that is not a FEMA designation, such
+    as "Not verified", is ``unrecognized``: nothing is known about the zone.
+    """
+    raw = " ".join(str(text or "").split())
+    if not raw:
+        return "not_entered", ""
+    zone = re.sub(r"^(FEMA\s+)?(FLOOD\s+)?ZONES?\s+", "", raw.upper()).strip()
+    if zone in _FLOOD_MINIMAL:
+        return "minimal", zone
+    if zone in _FLOOD_MODERATE:
+        return "moderate", zone
+    if zone == "D":
+        return "undetermined", zone
+    if _FLOOD_SPECIAL.match(zone):
+        return "special", zone
+    return "unrecognized", ""
 
 
 def _clean(value: Optional[float], digits: int = 8) -> Optional[float]:
@@ -515,12 +548,17 @@ def _land_analysis(
     economic_cost = total_project_cost + origination_fees + total_interest + total_carrying
     break_even_terminal_value = economic_cost / (1 - selling_cost_rate) if selling_cost_rate < 1 else None
     non_land_costs = total_project_cost - acquisition.purchase_price
-    residual_land_value = (
-        terminal_value * (1 - selling_cost_rate) * (1 - land.target_profit_margin)
-        - non_land_costs
-        - total_interest
-        - total_carrying
-    )
+    # The land price at which development profit is exactly the target margin
+    # on gross terminal value, which is how development margin is measured
+    # above. Other costs stay as entered and the financing keeps its modeled
+    # share of project cost, so fees and interest move with the price. Running
+    # the deal again at this price returns the target margin.
+    #   profit(price) = net proceeds - carrying - project cost * (1 + financing load)
+    financing_load = (origination_fees + total_interest) / total_project_cost if total_project_cost > 0 else 0
+    residual_project_cost = (
+        terminal_value * (1 - selling_cost_rate - land.target_profit_margin) - total_carrying
+    ) / (1 + financing_load)
+    residual_land_value = residual_project_cost - non_land_costs
 
     metrics = _common_metrics(request, cash_flows, total_debt, total_project_cost)
     metrics.update(
@@ -553,11 +591,14 @@ def _land_analysis(
             "residual_land_value": _metric(
                 residual_land_value,
                 currency,
-                "net terminal value after target margin less all non-land, carrying, and financing costs",
+                "land price at which development profit equals the target margin on gross terminal value, "
+                "with other costs as entered and financing at its modeled share of project cost",
                 {
                     "terminal_value": terminal_value,
                     "target_profit_margin": land.target_profit_margin,
                     "non_land_costs": non_land_costs,
+                    "carrying_costs": total_carrying,
+                    "financing_cost_per_project_dollar": financing_load,
                 },
             ),
             "break_even_terminal_value": _metric(
@@ -622,10 +663,26 @@ def _land_analysis(
             "Geotechnical suitability is not confirmed; soils, rock, groundwater, slope, and foundation "
             "conditions may affect feasibility."
         )
-    if land.flood_zone and land.flood_zone.strip().upper() != "X":
+    flood_status, flood_zone = classify_flood_zone(land.flood_zone)
+    if flood_status == "special":
         warnings.append(
-            "The entered flood-zone designation requires floodplain, stormwater, elevation, insurance, and "
-            "buildable-area review."
+            f"Flood zone {flood_zone} is a FEMA Special Flood Hazard Area; floodplain, stormwater, elevation, "
+            "insurance, and buildable-area review is required."
+        )
+    elif flood_status == "moderate":
+        warnings.append(
+            f"Flood zone {flood_zone} is a moderate flood-hazard area; confirm stormwater, elevation, and "
+            "insurance requirements."
+        )
+    elif flood_status == "undetermined":
+        warnings.append(
+            "Flood zone D means FEMA has not determined the flood hazard; obtain a flood study before relying "
+            "on the buildable area."
+        )
+    elif flood_status in ("not_entered", "unrecognized"):
+        warnings.append(
+            "The FEMA flood zone is not verified; confirm the designation, base flood elevation, and "
+            "insurance requirement."
         )
     if land.wetlands_acres > 0:
         warnings.append(
@@ -634,7 +691,8 @@ def _land_analysis(
         )
     if residual_land_value < acquisition.purchase_price:
         warnings.append(
-            "The modeled residual land value is below the proposed purchase price at the selected target margin."
+            "The modeled residual land value is below the proposed purchase price, so the deal misses the "
+            "selected target margin at this price."
         )
     if land.planned_units < 1 and land.buildable_square_feet < 1:
         warnings.append("Enter planned units or buildable square feet to evaluate density and unit economics.")
