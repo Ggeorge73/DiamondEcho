@@ -1,1 +1,21 @@
-/* /index.html 200
+# Cloudflare Pages. The addresses the app really has, each answered with the
+# app shell and a 200. Anything else gets 404.html (the same shell, written by
+# scripts/make-404.mjs) and a 404 status, so the app's "Page not found" screen
+# is no longer reported to browsers and search engines as a working page.
+# A new <Route> in src/App.js needs a line here; src/PublicRoutes.test.js fails
+# until it has one.
+/search / 200
+/search/ / 200
+/property/* / 200
+/investment-calculator / 200
+/investment-calculator/ / 200
+/agents / 200
+/agents/ / 200
+/about / 200
+/about/ / 200
+/inquire / 200
+/inquire/ / 200
+/privacy / 200
+/privacy/ / 200
+/terms / 200
+/terms/ / 200

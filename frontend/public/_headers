@@ -5,6 +5,22 @@
 # No script, style or permissions policy is set here: one that has not been
 # tested against the Georgia MLS frame could break the search or its map.
 # Change with a test, not by hand.
+#
+# Strict-Transport-Security (finding F8) tells a browser that has visited once
+# to use https for this exact host for the next 180 days, even if a link says
+# http. It does not name subdomains and does not ask for browser preload lists,
+# so mail and other hosts under the domain are untouched. To withdraw it, send
+# max-age=0 for a while before removing the line.
 /*
   X-Frame-Options: DENY
   Content-Security-Policy: frame-ancestors 'none'
+  Strict-Transport-Security: max-age=15552000
+
+# The same pages are also reachable at Cloudflare's own pages.dev addresses
+# (the project's and each preview's). Search engines are asked not to list
+# those copies; diamondecho.com is the address to list (finding F6).
+https://:project.pages.dev/*
+  X-Robots-Tag: noindex
+
+https://:version.:project.pages.dev/*
+  X-Robots-Tag: noindex

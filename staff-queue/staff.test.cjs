@@ -201,3 +201,10 @@ test("a failed enrolment code keeps the same QR code and key on screen for anoth
   const image = pixels(ui.el("qr").querySelector("svg"));
   assert.equal(jsQR(image.data,image.width,image.width).data,uri); assert.equal(ui.el("secret").textContent,KEY);
 });
+test("the built staff site keeps its security headers, uses https only, and is not listed by search engines",()=>{
+  const build = fs.readFileSync(__dirname + "/build.mjs", "utf8");
+  for (const header of ["Cache-Control: no-store","X-Content-Type-Options: nosniff","Referrer-Policy: no-referrer","X-Frame-Options: DENY",
+    "Strict-Transport-Security: max-age=15552000","X-Robots-Tag: noindex, nofollow"]) assert.ok(build.includes(header), header);
+  // Nothing follows the age: no includeSubDomains (it would reach the mail hosts) and no preload.
+  assert.ok(build.includes("Strict-Transport-Security: max-age=15552000\\n"));
+});

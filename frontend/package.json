@@ -53,6 +53,7 @@
   "scripts": {
     "start": "craco start",
     "build": "craco build",
+    "postbuild": "node scripts/make-404.mjs",
     "test": "craco test"
   },
   "browserslist": {
