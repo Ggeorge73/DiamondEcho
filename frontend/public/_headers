@@ -1,0 +1,10 @@
+# Sent by Cloudflare Pages with every response from the public site (DE-25).
+# The site is never meant to be shown inside another site's frame, so both the
+# older and the newer "do not frame me" headers are sent. The Georgia MLS search
+# is a frame *inside* this site and is not affected.
+# No script, style or permissions policy is set here: one that has not been
+# tested against the Georgia MLS frame could break the search or its map.
+# Change with a test, not by hand.
+/*
+  X-Frame-Options: DENY
+  Content-Security-Policy: frame-ancestors 'none'
