@@ -47,6 +47,11 @@ legal advice".
 | Online requests are not open yet | Inquiry pages | The forms are not shown on the launch build |
 | Individual advisor profiles will appear only after verification | Advisory | No profiles are published |
 | The photographs are illustrative | About image; Privacy names Unsplash | Stock photographs |
+| The mortgage simulator estimates a monthly payment (principal and interest, taxes, insurance, association fees, mortgage insurance) from the figures entered | Intelligence page, footer, Terms | `frontend/src/lib/mortgage.js`; DE-39, `docs/buyer-seller-calculators.md` |
+| The seller net sheet estimates net proceeds (payoff, commission, closing costs, Georgia transfer tax, concessions, prorations) from the figures entered | Intelligence page, footer, Terms | `frontend/src/lib/netProceeds.js`; DE-39 |
+| Both tools calculate in the browser; the figures are not sent or saved | Both tools, Privacy | A test reads their source for any network or storage call (`Policies.test.jsx`) |
+| Georgia transfer tax: $1.00 on the first $1,000, then 10 cents per $100; the same in every county; the seller owes it unless the contract says otherwise | Seller net sheet | Georgia Department of Revenue; O.C.G.A. 48-6-1 |
+| Commission is negotiable and not set by law | Seller net sheet | National Association of REALTORS, practice changes of August 17, 2024 |
 
 ## 3. Changed in this pull request
 
@@ -78,6 +83,8 @@ Not changed. These are his to keep or reword.
 | "Every asset class, one standard." | Home | Brand line |
 | "Every opportunity, fully illuminated." | Home | Brand line |
 | "Underwrite with absolute clarity." | Deal Studio | Brand line |
+| "Know the payment before the offer." | Mortgage simulator | Added 2026-10-06 (DE-39). The agent's words |
+| "See what you keep after closing." | Seller net sheet | Added 2026-10-06 (DE-39). The agent's words. It is an estimate; the page and its seal say so |
 | "Institutional-grade" and "institutional rigor" | Home, Deal Studio | A quality claim about a calculator. Kept as voice; he may prefer plainer words |
 | "Some addresses are found. Others find you." | Home | Brand line |
 | Client-first: "Every decision and transaction begins with the client's goals — and ends only when they are met. Priorities are stated, agreed, and protected." | About | "ends only when they are met" reads as a promise of an outcome |

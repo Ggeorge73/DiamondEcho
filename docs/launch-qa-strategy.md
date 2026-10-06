@@ -46,6 +46,7 @@ the named real-device run.
 | TC16 | DE-16 / DE-22 | Unknown URL gives a clear 404 with working Home/Search; known deep links and refresh work. | DE-22 URL captures |
 | TC17 | DE-17 / DE-23 | A 10,000-iteration run completes on the visitor's device with progress shown (DE-25; the earlier 5,000 browser cap and the service time limit no longer apply to the page); exclusions are disclosed; each probability states how many results were above zero out of how many were valid; malformed distributions fail clearly. | DE-23 simulation record; DE-25 for the device-side run |
 | TC18 | DE-18 / DE-6 | Public site makes no authenticated-portal or self-service seller claim outside Gbenga's approved brokerage/inquiry launch scope. | DE-6 content review |
+| TC19 | DE-39 | Mortgage simulator and seller net sheet open from the Intelligence page and from their own addresses; figures match a hand calculation (payment, PMI below 20% down and its end, Georgia transfer tax, tax proration); example figures are labelled; nothing typed leaves the browser; usable at phone width and by keyboard. | `docs/buyer-seller-calculators.md`; preview capture |
 
 ## Journey and operational cross-checks
 
