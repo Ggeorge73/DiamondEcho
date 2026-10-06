@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from backend.deal_intelligence.engine import FORMULA_VERSION, analyze_deal
+from backend.deal_intelligence.engine import FORMULA_VERSION, analyze_deal, classify_flood_zone
 from backend.deal_intelligence.models import DealAnalysisRequest
 
 
@@ -146,7 +146,7 @@ def test_land_development_matches_the_browser_engine():
         "irr": -0.37373084, "npv": -2737498.34981048, "equity_multiple": 0.22140541,
         "ltv": 1.21441667, "ltc": 0.65, "development_profit": -2756112.29691015,
         "development_roi": -0.77859459, "development_margin": -0.6124694,
-        "total_development_cost": 5_605_000, "residual_land_value": -565679.79691024,
+        "total_development_cost": 5_605_000, "residual_land_value": 2315.27304722,
         "break_even_terminal_value": 7432034.35841515, "cost_per_acre": 2_242_000,
         "cost_per_unit": 467083.33333333, "cost_per_buildable_sf": 311.38888889,
     }
@@ -193,3 +193,75 @@ def test_land_strategy_validation():
         rental_request(land=land_request().land.model_dump())
     with pytest.raises(ValidationError):
         land_request(land={**land_request().land.model_dump(), "unknown_field": 1})
+
+
+def _land_at(price, **land_overrides):
+    """The reference land deal at another price, with the facility kept at 65% of cost."""
+    base = land_request()
+    land = base.land.model_dump()
+    land.update(land_overrides)
+    acquisition = base.acquisition.model_dump()
+    acquisition["purchase_price"] = price
+    development = 300_000 + 1_500_000 + 200_000 + 100_000 + 100_000 + 180_000
+    total_cost = price + 75_000 + 25_000 + 125_000 + development
+    debt = base.debt[0].model_dump()
+    debt["principal"] = total_cost * 0.65
+    return land_request(acquisition=acquisition, debt=[debt], land=land)
+
+
+def test_residual_land_value_is_the_price_that_earns_exactly_the_target_margin():
+    # DE-25: the residual used to take the target margin off net proceeds and
+    # leave out loan fees, so it could sit above the price while the margin
+    # (measured on gross terminal value) missed its target.
+    first = analyze_deal(_land_at(1_200_000, expected_terminal_value=9_000_000))
+    residual = first.metrics["residual_land_value"].value
+    again = analyze_deal(_land_at(residual, expected_terminal_value=9_000_000))
+    assert again.metrics["development_margin"].value == pytest.approx(0.20, abs=1e-7)
+    assert again.metrics["residual_land_value"].value == pytest.approx(residual, rel=1e-9)
+
+
+@pytest.mark.parametrize("price_factor, expect_pass", [(0.98, True), (1.02, False)])
+def test_residual_land_value_and_the_margin_test_never_disagree(price_factor, expect_pass):
+    residual = analyze_deal(_land_at(1_200_000, expected_terminal_value=9_000_000)).metrics["residual_land_value"].value
+    price = residual * price_factor
+    result = analyze_deal(_land_at(price, expected_terminal_value=9_000_000))
+    meets_margin = result.metrics["development_margin"].value >= 0.20
+    price_within_residual = result.metrics["residual_land_value"].value >= price
+    assert meets_margin is expect_pass
+    assert price_within_residual is expect_pass
+    assert any("residual land value is below" in warning for warning in result.warnings) is (not expect_pass)
+
+
+@pytest.mark.parametrize("text, status, zone", [
+    ("", "not_entered", ""), ("   ", "not_entered", ""),
+    ("Not verified", "unrecognized", ""), ("unknown", "unrecognized", ""), ("A31", "unrecognized", ""),
+    ("x", "minimal", "X"), (" zone  x ", "minimal", "X"), ("C", "minimal", "C"),
+    ("FEMA Flood Zone X (shaded)", "moderate", "X (SHADED)"), ("X500", "moderate", "X500"), ("B", "moderate", "B"),
+    ("ae", "special", "AE"), ("Zone AE", "special", "AE"), ("A12", "special", "A12"), ("VE", "special", "VE"),
+    ("AR/AE", "special", "AR/AE"), ("D", "undetermined", "D"),
+])
+def test_flood_zone_text_is_read_as_a_fema_designation_or_not_at_all(text, status, zone):
+    assert classify_flood_zone(text) == (status, zone)
+
+
+def _flood_warnings(text):
+    land = land_request().land.model_dump()
+    land.update(flood_zone=text)
+    return [w for w in analyze_deal(land_request(land=land)).warnings if "lood" in w]
+
+
+def test_text_that_is_not_a_flood_zone_is_reported_as_not_verified():
+    # "Not verified" used to raise the warning meant for an entered hazard zone.
+    for text in ("Not verified", ""):
+        warnings = _flood_warnings(text)
+        assert warnings == [
+            "The FEMA flood zone is not verified; confirm the designation, base flood elevation, and "
+            "insurance requirement."
+        ]
+
+
+def test_flood_warnings_follow_the_designation():
+    assert _flood_warnings("X") == []
+    assert "Special Flood Hazard Area" in _flood_warnings("AE")[0] and "AE" in _flood_warnings("AE")[0]
+    assert "moderate flood-hazard" in _flood_warnings("X (shaded)")[0]
+    assert "has not determined" in _flood_warnings("D")[0]
