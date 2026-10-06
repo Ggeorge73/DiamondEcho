@@ -79,7 +79,8 @@ h1, h2, h3, .display { font-family: 'Sora', 'Inter', sans-serif; }
 .mf-menu__primary { min-width: 0; padding: 120px clamp(30px, 7vw, 110px) 60px; display: flex; flex-direction: column; justify-content: flex-start; border-right: 1px solid var(--line); }
 .mf-menu__primary a { padding: 22px 0; display: grid; grid-template-columns: 40px minmax(0, 1fr) 22px; align-items: center; gap: 10px; border-bottom: 1px solid var(--line); color: var(--ice); text-decoration: none; font-family: 'Sora', sans-serif; font-size: clamp(24px, 3.3vw, 50px); font-weight: 300; letter-spacing: -.01em; line-height: 1.2; overflow-wrap: anywhere; transition: color .3s, padding-left .3s; }
 .mf-menu__primary a:hover { color: var(--steel-bright); padding-left: 14px; }
-.mf-menu__primary a span { color: var(--steel); font-family: 'Inter', sans-serif; font-size: 10px; font-weight: 600; letter-spacing: .26em; }
+/* The item numbers were the darker blue: 3.02 to 1 at 10px (DE-25). */
+.mf-menu__primary a span { color: var(--steel-bright); font-family: 'Inter', sans-serif; font-size: 10px; font-weight: 600; letter-spacing: .26em; }
 .mf-menu__primary a svg { width: 22px; opacity: 0; transition: opacity .3s; }
 .mf-menu__primary a:hover svg { opacity: 1; }
 .mf-menu__secondary { min-width: 0; padding: 120px clamp(28px, 4.5vw, 70px) 60px; display: flex; flex-direction: column; justify-content: flex-start; gap: 44px; }
@@ -310,7 +311,11 @@ h1, h2, h3, .display { font-family: 'Sora', 'Inter', sans-serif; }
 /* ------------------------------------------------------------
    Footer -- offices
    ------------------------------------------------------------ */
-.mf-footer { padding: 100px max(5vw, 40px) 28px; background: var(--abyss); border-top: 1px solid var(--line); color: var(--ice); }
+/* The bottom padding keeps the last line (Equal Housing Opportunity, Privacy,
+   Terms) clear of the Ask DiamondEcho button, which sits 20px from the bottom
+   corner and is 56px tall. With 28px the Privacy and Terms links ended up
+   underneath it at the foot of every page (DE-25). */
+.mf-footer { padding: 100px max(5vw, 40px) 96px; background: var(--abyss); border-top: 1px solid var(--line); color: var(--ice); }
 .mf-footer__top { width: min(100%, 1560px); margin: auto; padding-bottom: 70px; display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 5vw; border-bottom: 1px solid var(--line); }
 .mf-footer__brand strong { display: block; font-family: 'Sora', sans-serif; font-size: 16px; font-weight: 500; letter-spacing: .3em; }
 .mf-footer__brand small { margin-top: 6px; display: block; color: var(--mist); font-size: 8px; font-weight: 600; letter-spacing: .32em; }
@@ -326,7 +331,10 @@ h1, h2, h3, .display { font-family: 'Sora', 'Inter', sans-serif; }
 .mf-offices p { margin: 0 0 16px; color: var(--mist); font-size: 12.5px; line-height: 1.85; }
 .mf-offices a { display: block; color: var(--steel-bright); text-decoration: none; font-size: 12px; line-height: 2; }
 .mf-offices a:hover { color: var(--ice); }
-.mf-footer__legal { width: min(100%, 1560px); margin: auto; padding-top: 26px; display: flex; justify-content: space-between; gap: 18px; color: rgba(229,237,245,.34); font-size: 8px; letter-spacing: .16em; text-transform: uppercase; }
+/* DE-25: this line names the brokerage and carries "Equal Housing Opportunity".
+   It was 8px at 34% opacity, a contrast of 2.76 to 1. It is now 11px at 6.7 to 1
+   (WCAG AA asks for 4.5). */
+.mf-footer__legal { width: min(100%, 1560px); margin: auto; padding-top: 26px; display: flex; justify-content: space-between; gap: 18px; color: rgba(229,237,245,.62); font-size: 11px; line-height: 1.6; letter-spacing: .1em; text-transform: uppercase; }
 .mf-footer__legal a { display: inline-block; padding: 6px 0; color: var(--mist); font-size: 11px; letter-spacing: .12em; text-decoration: none; }
 .mf-footer__legal a:hover, .mf-footer__legal a:focus-visible { color: var(--ice); text-decoration: underline; }
 
@@ -584,7 +592,9 @@ h1, h2, h3, .display { font-family: 'Sora', 'Inter', sans-serif; }
 .studio-metrics span { margin-top: 8px; display: block; color: var(--steel-bright); font-size: 8px; line-height: 1.4; }
 .studio-warnings { margin-top: 30px; padding: 22px; border: 1px solid rgba(94,156,208,.3); background: rgba(45,98,140,.1); }
 .studio-warnings p { margin: 11px 0 0; color: var(--steel-soft); font-size: 9px; line-height: 1.6; }
-.studio-disclaimer { margin-top: 25px; color: rgba(229,237,245,.3); font-size: 7px; line-height: 1.65; letter-spacing: .05em; }
+/* DE-25: the "not an appraisal, not a loan offer" lines were 7px at 30% opacity
+   (2.4 to 1). A disclaimer nobody can read protects nobody. */
+.studio-disclaimer { margin-top: 25px; color: rgba(229,237,245,.62); font-size: 11px; line-height: 1.65; letter-spacing: .03em; }
 .studio-property-search { margin-bottom: 26px; }
 .studio-autocomplete { position: relative; z-index: 12; display: block; }
 .studio-autocomplete > div:first-of-type > svg { width: 15px; flex: none; color: var(--steel-bright); }
@@ -821,7 +831,7 @@ h1, h2, h3, .display { font-family: 'Sora', 'Inter', sans-serif; }
   .mf-tabs__list { grid-template-columns: 1fr 1fr; }
   .mf-kv, .mf-features { grid-template-columns: 1fr; }
   .mf-advisors { grid-template-columns: 1fr; }
-  .mf-footer { padding: 70px 22px 22px; }
+  .mf-footer { padding: 70px 22px 96px; }
   .mf-footer__top { grid-template-columns: 1fr; gap: 44px; }
   .mf-footer__legal { flex-direction: column; gap: 8px; }
   .floating-concierge span { display: none; }
