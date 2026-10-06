@@ -58,10 +58,16 @@ With the 20-second budget, measured on staging on 2026-10-04: a 10,000 request
 returned about 3,450 iterations per case for rental, 3,700 for fix and flip and
 2,300 for land, each in about 20.3 s, and a 1,000 run straight afterwards took
 its normal 5.8 s. Land is the slowest strategy: its default of 2,500 returned
-2,250. Deal Studio therefore warns before a run from 5,000 for rental and flip
-and from 2,500 for land. If the service size, timeout or budget changes,
-re-measure and update `SERVICE_TIME_LIMIT_NOTE_FROM` in
-`frontend/src/pages/InvestmentCalculator.jsx`.
+2,250.
+
+Since 2026-10-06 (DE-25) Deal Studio no longer sends its simulation to this
+service. Gbenga's production test stopped at 3,400 of 5,000 rental iterations,
+so the page now runs Monte Carlo in the visitor's browser, a block at a time
+with progress shown: 10,000 iterations per case for three cases took about 2
+seconds on a desktop-class machine. The `/api/v1/deals/monte-carlo` address and
+its time budget are unchanged and still protect the service from any other
+caller. Base analysis still goes to the service. See
+`docs/deal-studio-land-decision.md`.
 
 Required backend environment:
 

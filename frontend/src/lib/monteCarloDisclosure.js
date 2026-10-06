@@ -34,7 +34,9 @@ export const scenarioDisclosure = (scenario, summary, metricLabel) => {
     ? 'valid sample size not reported'
     : sample === 0
       ? `no valid ${metricLabel} results`
-      : `${count(Math.round(summary.probability_above_zero * sample))} of ${count(sample)} valid results`;
+      // The first number is how many results were above zero, not how many
+      // were valid; say so (DE-25).
+      : `${count(Math.round(summary.probability_above_zero * sample))} above zero out of ${count(sample)} valid results`;
 
   return { counts, notes, denominator, sample };
 };

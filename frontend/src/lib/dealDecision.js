@@ -1,7 +1,9 @@
 import { analyzeDealLocally } from './dealAnalysis';
 import { buildDealRequest } from './dealRequest';
+import { classifyFloodZone, floodZoneVerified } from './floodZone';
 
-export const DECISION_VERSION = 'diamond-decision-1.0.1';
+// 1.1.0 (2026-10-06): land development gets a Go / No-Go decision.
+export const DECISION_VERSION = 'diamond-decision-1.1.0';
 
 const EXPLICIT_EXIT_DOWNSIDE_MULTIPLIER = 0.9;
 const EXPLICIT_EXIT_UPSIDE_MULTIPLIER = 1.1;
@@ -35,14 +37,14 @@ const atPrice = (form, purchasePrice) => {
   });
 };
 
-const findPriceCeiling = ({ form, metricKey, target, minimum = 1000 }) => {
+const findPriceCeiling = ({ form, metricKey, target, minimum = 1000, analyzeAt = atPrice }) => {
   if (!(target > 0)) return null;
   const statedPrice = Math.max(n(form.purchasePrice), 100000);
   let lower = minimum;
   let upper = Math.min(50000000, Math.max(statedPrice * 3, 1000000));
   const passes = (price) => {
     try {
-      const value = metricValue(atPrice(form, price), metricKey);
+      const value = metricValue(analyzeAt(form, price), metricKey);
       return value !== null && value >= target;
     } catch {
       return false;
@@ -196,3 +198,184 @@ export const buildRentalDecision = ({ form, evidence = {} }) => {
     valuationNotice: 'This is an investment-value ceiling based on the entered assumptions—not an appraisal, broker price opinion, or representation of market value.',
   };
 };
+
+// ---------------------------------------------------------------------------
+// Land development: Go / No-Go (DE-25).
+//
+// Six of the ten evidence items are read from the diligence answers already on
+// the form; the other four are ticked by hand.
+export const LAND_EVIDENCE_ITEMS = [
+  { key: 'landEntitlement', label: 'Entitlements in place for the planned use', action: 'Obtain written zoning confirmation and the approvals the plan depends on; allow for the time and cost of any rezoning.', fromForm: (form) => ['fully_entitled', 'shovel_ready'].includes(form.entitlementStatus) },
+  { key: 'landUtilities', label: 'Utility capacity confirmed at the site', action: 'Get will-serve letters for water, sewer, and power, and price any extension or off-site upgrade.', fromForm: (form) => form.utilityStatus === 'available' },
+  { key: 'landAccess', label: 'Legal access confirmed', action: 'Confirm recorded frontage or an easement, curb cuts, and emergency access with title and the road authority.', fromForm: (form) => form.accessStatus === 'legal_confirmed' },
+  { key: 'landEnvironmental', label: 'Environmental review clear', action: 'Complete a Phase I review, and a Phase II if it is indicated, and price any remediation.', fromForm: (form) => form.environmentalStatus === 'clear' },
+  { key: 'landGeotechnical', label: 'Geotechnical report complete and suitable', action: 'Commission borings and a geotechnical report; price any rock, groundwater, slope, or foundation measures.', fromForm: (form) => form.geotechnicalStatus === 'complete_suitable' },
+  { key: 'landFloodZone', label: 'FEMA flood zone looked up', action: 'Look up the FEMA designation and base flood elevation, and get an insurance indication if one is required.', fromForm: (form) => floodZoneVerified(form.floodZone) },
+  { key: 'landTitleSurveyVerified', label: 'Title, survey, easements, and boundaries reviewed', action: 'Review the title commitment and a current survey for easements, encroachments, liens, and restrictions.' },
+  { key: 'landExitValueVerified', label: 'Exit value supported by comparable sales or a signed offer', action: 'Support the terminal value with recent comparable sales, a broker opinion, or a signed purchase agreement.' },
+  { key: 'landBudgetVerified', label: 'Construction budget backed by contractor bids', action: 'Replace allowances with written bids for site work and construction, and confirm the contingency.' },
+  { key: 'landLenderVerified', label: 'Construction lender term sheet confirmed', action: 'Confirm loan-to-cost, rate, fees, interest reserve, draw schedule, recourse, and maturity in a term sheet.' },
+];
+
+// The items the visitor ticks; the rest follow the form.
+export const LAND_CHECKLIST_ITEMS = LAND_EVIDENCE_ITEMS.filter((item) => !item.fromForm);
+
+const LAND_COST_FIELDS = ['siteWorkCost', 'hardConstructionCost', 'softCosts', 'permitsImpactFees', 'environmentalRemediation', 'developerFee'];
+const usd = (value) => Math.round(value).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+const pct = (value) => `${Number((value * 100).toFixed(2))}%`;
+
+const scaleLandCosts = (form, multiplier) => Object.fromEntries(LAND_COST_FIELDS.map((field) => [field, String(n(form[field]) * multiplier)]));
+// Scale whichever input sets the terminal value, as the simulation does.
+const scaleTerminalValue = (form, multiplier) => n(form.expectedTerminalValue) > 0
+  ? { expectedTerminalValue: String(n(form.expectedTerminalValue) * multiplier) }
+  : { stabilizedNoi: String(n(form.stabilizedNoi) * multiplier) };
+
+const landMetrics = (analysis) => ({
+  profit: metricValue(analysis, 'development_profit'),
+  margin: metricValue(analysis, 'development_margin'),
+  roi: metricValue(analysis, 'development_roi'),
+  irr: metricValue(analysis, 'irr'),
+});
+
+const buildLandScenario = (form, name, changes) => ({ name, assumptions: changes, metrics: landMetrics(analyzeForm({ ...form, ...changes })) });
+
+const buildLandScenarios = (form) => [
+  buildLandScenario(form, 'Downside', {
+    ...scaleTerminalValue(form, 0.9),
+    ...scaleLandCosts(form, 1.1),
+    holdMonths: String(n(form.holdMonths) + 6),
+    interestRate: String(n(form.interestRate) + 0.5),
+  }),
+  buildLandScenario(form, 'Base', {}),
+  buildLandScenario(form, 'Upside', {
+    ...scaleTerminalValue(form, 1.05),
+    ...scaleLandCosts(form, 0.95),
+    interestRate: String(Math.max(0, n(form.interestRate) - 0.25)),
+  }),
+];
+
+export const LAND_SCENARIO_NOTE = 'Downside: exit value 10% lower, development costs 10% higher, six months longer, interest 0.5 points higher. Upside: exit value 5% higher, costs 5% lower, interest 0.25 points lower.';
+
+// Other costs stay as entered; the facility is resized to the same share of cost.
+const landAtPrice = (form, purchasePrice) => analyzeForm({ ...form, purchasePrice: String(purchasePrice) });
+
+export const buildLandDecision = ({ form, evidence = {} }) => {
+  if (form.strategy !== 'land') return null;
+  const base = analyzeForm(form);
+  const now = landMetrics(base);
+  const askingPrice = n(form.purchasePrice);
+  const terminalValue = finite(base.metrics?.development_profit?.components?.terminal_value) || 0;
+  const breakEvenTerminalValue = metricValue(base, 'break_even_terminal_value');
+  const targets = { margin: n(form.targetProfitMargin) / 100, irr: n(form.targetIrr) / 100 };
+
+  const residual = metricValue(base, 'residual_land_value');
+  const ceilings = [
+    { key: 'margin', label: targets.margin > 0 ? `${n(form.targetProfitMargin)}% development margin` : 'Break-even (no margin target)', value: residual, source: 'Residual land value' },
+  ];
+  if (targets.irr > 0) ceilings.push({ key: 'irr', label: `${n(form.targetIrr)}% levered IRR`, value: findPriceCeiling({ form, metricKey: 'irr', target: targets.irr, analyzeAt: landAtPrice }), source: 'Return hurdle' });
+  if (n(form.preliminaryMarketCeiling) > 0) ceilings.push({ key: 'market', label: 'Comparable land value', value: n(form.preliminaryMarketCeiling), source: 'Entered by you' });
+
+  // Every ceiling must be met, so the lowest one controls. One that cannot be
+  // met at any price means there is no workable price at all.
+  const workable = terminalValue > 0 && ceilings.every((item) => item.value !== null && item.value > 0);
+  const exactMaximum = workable ? Math.min(...ceilings.map((item) => item.value)) : null;
+  const increment = exactMaximum !== null && exactMaximum < 250000 ? 1000 : 5000;
+  const recommendedMaximum = exactMaximum === null ? null : roundDown(exactMaximum, increment);
+  const hasRecommendedMaximum = recommendedMaximum !== null && recommendedMaximum > 0;
+  const bindingKey = exactMaximum === null ? null : ceilings.find((item) => item.value === exactMaximum)?.key;
+
+  const hurdleResults = [
+    { label: 'Development margin', actual: now.margin, target: targets.margin, pass: now.margin !== null && now.margin >= targets.margin, format: 'rate' },
+  ];
+  if (targets.irr > 0) hurdleResults.push({ label: 'Levered IRR', actual: now.irr, target: targets.irr, pass: now.irr !== null && now.irr >= targets.irr, format: 'rate' });
+
+  const items = LAND_EVIDENCE_ITEMS.map((item) => ({ ...item, verified: item.fromForm ? item.fromForm(form) : Boolean(evidence[item.key]) }));
+  const verified = items.filter((item) => item.verified);
+  const gaps = items.filter((item) => !item.verified).map(({ key, label, action }) => ({ key, label, action }));
+  const confidence = verified.length >= 8 ? 'High' : verified.length >= 5 ? 'Medium' : 'Low';
+
+  const scenarios = buildLandScenarios(form);
+  const downside = scenarios[0].metrics;
+  const flood = classifyFloodZone(form.floodZone);
+  const scheduleMonths = n(form.developmentMonths) + n(form.absorptionMonths);
+
+  // Conditions that stop the deal whatever the price.
+  const stoppers = [];
+  if (form.accessStatus === 'access_unavailable') stoppers.push('There is no confirmed legal access to the site.');
+  if (form.utilityStatus === 'unavailable') stoppers.push('Utilities are unavailable at the site.');
+  // Conditions to resolve before going ahead.
+  const cautions = [];
+  if (downside.profit !== null && downside.profit < 0) cautions.push(`The downside case loses ${usd(Math.abs(downside.profit))}.`);
+  if (scheduleMonths > n(form.holdMonths)) cautions.push(`Development plus absorption is ${scheduleMonths} months, longer than the ${n(form.holdMonths)}-month hold, so carrying costs and interest are understated.`);
+  if (form.environmentalStatus === 'remediation_required' && !(n(form.environmentalRemediation) > 0)) cautions.push('Remediation is required but no remediation cost is entered.');
+  if (flood.status === 'special') cautions.push(`Flood zone ${flood.zone} is a FEMA Special Flood Hazard Area.`);
+  if (n(form.wetlandsAcres) > 0) cautions.push('Wetlands are on the site; the buildable area and permits need confirming.');
+  const walkAwaySignals = [...stoppers, ...cautions];
+
+  const meetsTargets = exactMaximum !== null && askingPrice <= exactMaximum && hurdleResults.every((item) => item.pass);
+  let call = 'NO-GO'; let verdict; let tone = 'red';
+  if (!(terminalValue > 0)) verdict = 'NO-GO — NO EXIT VALUE ENTERED';
+  else if (stoppers.length) verdict = 'NO-GO — SITE CONDITION';
+  else if (now.profit !== null && now.profit <= 0) verdict = 'NO-GO — THE DEAL LOSES MONEY';
+  else if (exactMaximum === null) verdict = 'NO-GO — NO LAND PRICE MEETS YOUR TARGETS';
+  else if (askingPrice > exactMaximum * 1.05) verdict = 'NO-GO AT THIS PRICE — REPRICE OR PASS';
+  else if (!meetsTargets) { call = 'NEGOTIATE'; verdict = 'NEGOTIATE — WITHIN 5% OF THE CEILING'; tone = 'amber'; }
+  else if (cautions.length) { call = 'CONDITIONAL GO'; verdict = 'CONDITIONAL GO — RESOLVE EXCEPTIONS'; tone = 'amber'; }
+  else if (gaps.length) { call = 'CONDITIONAL GO'; verdict = 'CONDITIONAL GO — VERIFY BEFORE CLOSING'; tone = 'amber'; }
+  else { call = 'GO'; verdict = 'GO — MEETS YOUR TARGETS'; tone = 'green'; }
+
+  const gapToAsk = recommendedMaximum === null ? null : askingPrice - recommendedMaximum;
+  const earns = now.profit === null ? 'cannot be valued'
+    : now.profit >= 0 ? `is modeled to earn ${usd(now.profit)}${now.margin === null ? '' : ` (${pct(now.margin)} of exit value)`}`
+      : `is modeled to lose ${usd(Math.abs(now.profit))}`;
+  const missed = hurdleResults.filter((item) => !item.pass).map((item) => (item.label === 'Levered IRR'
+    ? `your ${n(form.targetIrr)}% IRR target`
+    : targets.margin > 0 ? `your ${n(form.targetProfitMargin)}% margin target` : 'break-even'));
+  const marketCeiling = ceilings.find((item) => item.key === 'market');
+  if (marketCeiling && askingPrice > marketCeiling.value) missed.push('the comparable land value you entered');
+  const missedText = missed.length ? missed.join(' and ') : 'your targets';
+  let summary;
+  if (!(terminalValue > 0)) summary = 'Enter an expected gross exit value, or a stabilized NOI with an exit cap rate, so profit can be measured.';
+  else if (stoppers.length) summary = `${stoppers.join(' ')} Resolve this before pricing the land. At ${usd(askingPrice)} the deal ${earns}.`;
+  else if (exactMaximum === null) summary = `At ${usd(askingPrice)} the deal ${earns}. With the costs and exit value entered, no land price meets your targets.`;
+  else if (meetsTargets) summary = `At ${usd(askingPrice)} the deal ${earns}, which meets your targets. The highest land price that still meets them is ${usd(exactMaximum)}.`;
+  else summary = `At ${usd(askingPrice)} the deal ${earns}, short of ${missedText}. The highest land price that meets your targets is ${usd(exactMaximum)}, which is ${usd(askingPrice - exactMaximum)} below this price.`;
+
+  return {
+    version: DECISION_VERSION,
+    strategy: 'land',
+    call,
+    verdict,
+    tone,
+    confidence,
+    evidenceVerified: verified.length,
+    evidenceTotal: items.length,
+    evidenceGaps: gaps,
+    hurdleResults,
+    ceilings: ceilings.map((item) => ({ ...item, binding: item.key === bindingKey })),
+    exactMaximum,
+    recommendedMaximum,
+    askingPrice,
+    gapToAsk,
+    // Shown only when the price has to come down to reach the ceiling.
+    openingRange: hasRecommendedMaximum && askingPrice > recommendedMaximum ? [roundNearest(recommendedMaximum * 0.92, increment), roundNearest(recommendedMaximum * 0.97, increment)] : null,
+    profitability: {
+      profit: now.profit, margin: now.margin, targetMargin: targets.margin, roi: now.roi, irr: now.irr,
+      terminalValue, breakEvenTerminalValue,
+      // How far the exit value can fall before the deal stops making money.
+      cushion: terminalValue > 0 && breakEvenTerminalValue !== null ? (terminalValue - breakEvenTerminalValue) / terminalValue : null,
+    },
+    scenarios,
+    scenarioNote: LAND_SCENARIO_NOTE,
+    walkAwaySignals,
+    summary,
+    valuationNotice: 'This is the most the land is worth to this plan at the figures entered. It is not an appraisal, a broker price opinion, or a statement of market value.',
+  };
+};
+
+// One entry point for the page: the decision for whichever strategy has one.
+export const buildDecision = ({ form, evidence = {} }) => (
+  form.strategy === 'rental' ? buildRentalDecision({ form, evidence })
+    : form.strategy === 'land' ? buildLandDecision({ form, evidence })
+      : null
+);

@@ -1,4 +1,9 @@
-const FORMULA_VERSION = 'diamond-underwriting-web-1.1.0';
+import { floodZoneWarning } from './floodZone';
+
+// 1.2.0 (2026-10-06): residual land value is the land price at which the deal
+// earns exactly the target development margin; the flood-zone warning reads the
+// FEMA designation; Monte Carlo can run in steps so the page stays responsive.
+export const FORMULA_VERSION = 'diamond-underwriting-web-1.2.0';
 
 const clean = (value, digits = 8) => value == null || !Number.isFinite(value) ? null : Number(value.toFixed(digits));
 const ratio = (numerator, denominator) => Math.abs(denominator) < 1e-12 ? null : clean(numerator / denominator);
@@ -38,7 +43,15 @@ const netPresentValue = (cashFlows, annualRate) => {
 
 const annualizedIrr = (cashFlows) => {
   if (!cashFlows.some((value) => value < 0) || !cashFlows.some((value) => value > 0)) return null;
-  const monthlyNpv = (rate) => cashFlows.reduce((total, value, month) => total + value / ((1 + rate) ** month), 0);
+  // Sum of value / (1 + rate)^month, worked from the last month back so each
+  // step is one division. A simulation solves this thousands of times.
+  const lastMonth = cashFlows.length - 1;
+  const monthlyNpv = (rate) => {
+    const growth = 1 + rate;
+    let total = cashFlows[lastMonth];
+    for (let month = lastMonth - 1; month >= 0; month -= 1) total = cashFlows[month] + total / growth;
+    return total;
+  };
   // -99% is a sufficiently broad monthly lower bound without overflowing
   // long-hold terminal cash flows in browser number arithmetic.
   let low = -0.99;
@@ -201,14 +214,22 @@ const analyzeLand = (request, schedules, totalDebt, originationFees) => {
   const economicCost = totalProjectCost + originationFees + totalInterest + totalCarrying;
   const breakEvenTerminalValue = request.exit.selling_cost_rate < 1 ? economicCost / (1 - request.exit.selling_cost_rate) : null;
   const nonLandCosts = totalProjectCost - acquisition.purchase_price;
-  const residualLandValue = terminalValue * (1 - request.exit.selling_cost_rate) * (1 - land.target_profit_margin) - nonLandCosts - totalInterest - totalCarrying;
+  // The land price at which development profit is exactly the target margin on
+  // gross terminal value, which is how development margin is measured below.
+  // Other costs stay as entered and the financing keeps its modeled share of
+  // project cost, so fees and interest move with the price. Running the deal
+  // again at this price returns the target margin.
+  //   profit(price) = net proceeds - carrying - project cost * (1 + financing load)
+  const financingLoad = totalProjectCost > 0 ? (originationFees + totalInterest) / totalProjectCost : 0;
+  const residualProjectCost = (terminalValue * (1 - request.exit.selling_cost_rate - land.target_profit_margin) - totalCarrying) / (1 + financingLoad);
+  const residualLandValue = residualProjectCost - nonLandCosts;
   const metrics = commonMetrics(request, cashFlows, totalDebt, totalProjectCost);
   Object.assign(metrics, {
     development_profit: metric(profit, request.property.currency, 'net disposition proceeds - equity contributions - carrying and financing costs', { terminal_value: terminalValue, selling_costs: sellingCosts, economic_cost: economicCost }),
     development_roi: metric(ratio(profit, equityContributions), 'decimal_rate', 'development profit / total equity contributions', { profit, equity_contributions: equityContributions }),
     development_margin: metric(ratio(profit, terminalValue), 'decimal_rate', 'development profit / gross terminal value', { profit, terminal_value: terminalValue }, terminalValue ? null : 'Development margin is undefined without a terminal value.'),
     total_development_cost: metric(totalProjectCost, request.property.currency, 'land acquisition + transaction + site + hard + soft + entitlement + environmental + developer fee + contingency', { acquisition_cost: acquisitionCost, development_costs: developmentCosts, contingency }),
-    residual_land_value: metric(residualLandValue, request.property.currency, 'net terminal value after target margin less all non-land, carrying, and financing costs', { terminal_value: terminalValue, target_profit_margin: land.target_profit_margin, non_land_costs: nonLandCosts }),
+    residual_land_value: metric(residualLandValue, request.property.currency, 'land price at which development profit equals the target margin on gross terminal value, with other costs as entered and financing at its modeled share of project cost', { terminal_value: terminalValue, target_profit_margin: land.target_profit_margin, non_land_costs: nonLandCosts, carrying_costs: totalCarrying, financing_cost_per_project_dollar: financingLoad }),
     break_even_terminal_value: metric(breakEvenTerminalValue, request.property.currency, 'total economic cost / (1 - selling cost rate)', { economic_cost: economicCost, selling_cost_rate: request.exit.selling_cost_rate }),
     cost_per_acre: metric(ratio(totalProjectCost, land.site_acres), `${request.property.currency}/acre`, 'total development cost / site acres', { total_project_cost: totalProjectCost, site_acres: land.site_acres }),
     cost_per_unit: metric(ratio(totalProjectCost, land.planned_units), `${request.property.currency}/unit`, 'total development cost / planned units', { total_project_cost: totalProjectCost, planned_units: land.planned_units }),
@@ -223,9 +244,10 @@ const analyzeLand = (request, schedules, totalDebt, originationFees) => {
   if (land.access_status !== 'legal_confirmed') warnings.push('Legal and physical access is not confirmed; verify frontage, curb cuts, easements, and emergency access.');
   if (land.environmental_status !== 'clear') warnings.push('Environmental diligence is incomplete or indicates a recognized condition; complete Phase I/II review and quantify remediation.');
   if (land.geotechnical_status !== 'complete_suitable') warnings.push('Geotechnical suitability is not confirmed; soils, rock, groundwater, slope, and foundation conditions may affect feasibility.');
-  if (land.flood_zone && land.flood_zone.trim().toUpperCase() !== 'X') warnings.push('The entered flood-zone designation requires floodplain, stormwater, elevation, insurance, and buildable-area review.');
+  const floodWarning = floodZoneWarning(land.flood_zone);
+  if (floodWarning) warnings.push(floodWarning);
   if ((land.wetlands_acres || 0) > 0) warnings.push('Wetlands were entered; verify delineation, buffers, mitigation, permitting, and the resulting net buildable area.');
-  if (residualLandValue < acquisition.purchase_price) warnings.push('The modeled residual land value is below the proposed purchase price at the selected target margin.');
+  if (residualLandValue < acquisition.purchase_price) warnings.push('The modeled residual land value is below the proposed purchase price, so the deal misses the selected target margin at this price.');
   if (land.planned_units < 1 && land.buildable_square_feet < 1) warnings.push('Enter planned units or buildable square feet to evaluate density and unit economics.');
 
   return { analysis_id: `browser-${Date.now()}`, schema_version: '1.0', formula_version: FORMULA_VERSION, strategy: 'land', computed_at: new Date().toISOString(), metrics, cash_flows: cashFlows, calculation_mode: 'browser', assumptions: { cost_timing: 'Development uses are treated as committed at acquisition; carrying costs and debt service occur monthly.', terminal_value: 'Uses explicit exit value first, otherwise stabilized NOI divided by exit cap rate.', taxes: 'Income taxes, depreciation, tax credits, and entity-level tax effects are not modeled.' }, warnings };
@@ -271,8 +293,10 @@ const lossEquivalentIrr = (analysis) => (
     : lossEquivalentReturn(analysis.metrics?.equity_multiple?.value, analysis.cash_flows.length - 1)
 );
 
-// The browser fallback stops at this many iterations per case to stay responsive.
-export const BROWSER_MONTE_CARLO_ITERATION_CAP = 5000;
+// The most iterations per case the browser runs. It matches the largest choice on
+// the form. Simulation runs in steps (runMonteCarloInBrowser), so the page stays
+// responsive however many are chosen.
+export const BROWSER_MONTE_CARLO_ITERATION_CAP = 10000;
 
 // Same wording as the API so both paths disclose the same limits.
 export const MONTE_CARLO_STANDARD_WARNINGS = [
@@ -280,13 +304,33 @@ export const MONTE_CARLO_STANDARD_WARNINGS = [
   'Review percentile outcomes alongside the deterministic downside case and source evidence.',
 ];
 
-export const runMonteCarloLocally = ({ deal, scenarios }) => ({
-  formula_version: FORMULA_VERSION,
-  scenarios: scenarios.map((scenario) => {
-    const iterations = Math.min(scenario.iterations, BROWSER_MONTE_CARLO_ITERATION_CAP); const random = seededRandom(scenario.seed); const values = {}; let lossesWithoutIrr = 0; let failures = 0; let firstFailure = null;
-    for (let iteration = 0; iteration < iterations; iteration += 1) {
-      const shocked = JSON.parse(JSON.stringify(deal));
-      Object.entries(scenario.drivers).forEach(([driver, distribution]) => {
+// Copies only the parts a draw changes; every value is a number or a string.
+const copyDeal = (deal) => ({
+  ...deal,
+  operating: deal.operating ? { ...deal.operating } : deal.operating,
+  flip: deal.flip ? { ...deal.flip } : deal.flip,
+  land: deal.land ? { ...deal.land } : deal.land,
+  exit: { ...deal.exit },
+  debt: (deal.debt || []).map((loan) => ({ ...loan })),
+});
+
+const LAND_COST_FIELDS = ['site_work_cost', 'hard_construction_cost', 'soft_costs', 'permits_impact_fees', 'environmental_remediation', 'developer_fee'];
+
+// One case's simulation, advanced in steps. Each case keeps its own random
+// stream, so its figures are the same whether it runs in one go or in steps
+// with other cases taking turns in between.
+const createScenarioRun = (deal, scenario) => {
+  const iterations = Math.min(scenario.iterations, BROWSER_MONTE_CARLO_ITERATION_CAP);
+  const random = seededRandom(scenario.seed);
+  const drivers = Object.entries(scenario.drivers);
+  const values = {};
+  let attempted = 0; let lossesWithoutIrr = 0; let failures = 0; let firstFailure = null;
+
+  const step = (count) => {
+    const end = Math.min(iterations, attempted + count);
+    for (; attempted < end; attempted += 1) {
+      const shocked = copyDeal(deal);
+      drivers.forEach(([driver, distribution]) => {
         const draw = triangular(random, distribution);
         if (driver === 'rent_change') shocked.operating.gross_scheduled_rent *= 1 + draw;
         if (driver === 'vacancy_rate') shocked.operating.vacancy_rate = draw;
@@ -300,7 +344,7 @@ export const runMonteCarloLocally = ({ deal, scenarios }) => ({
           else shocked.land.stabilized_noi *= 1 + draw;
         }
         if (driver === 'development_cost_change') {
-          ['site_work_cost', 'hard_construction_cost', 'soft_costs', 'permits_impact_fees', 'environmental_remediation', 'developer_fee'].forEach((key) => { shocked.land[key] *= 1 + draw; });
+          LAND_COST_FIELDS.forEach((key) => { shocked.land[key] *= 1 + draw; });
         }
       });
       let analysis;
@@ -312,11 +356,46 @@ export const runMonteCarloLocally = ({ deal, scenarios }) => ({
         else if (key === 'irr' && lossIrr !== null) { values[key].push(lossIrr); lossesWithoutIrr += 1; }
       });
     }
-    const completed = iterations - failures;
+  };
+
+  const result = () => {
+    const completed = attempted - failures;
     if (completed === 0) throw new Error(`Monte Carlo scenario '${scenario.name}' produced no valid iterations${firstFailure?.message ? `: ${firstFailure.message}` : '.'}`);
     const warnings = [...MONTE_CARLO_STANDARD_WARNINGS];
     if (scenario.iterations > iterations) warnings.push(`Browser simulation capped at ${BROWSER_MONTE_CARLO_ITERATION_CAP.toLocaleString('en-US')} iterations per case for responsiveness; ${scenario.iterations.toLocaleString('en-US')} were requested.`);
     if (failures) warnings.push(`${failures} iterations were excluded because sampled inputs produced invalid economics.`);
     return { name: scenario.name, iterations_requested: scenario.iterations, iterations_completed: completed, failed_iterations: failures, seed: scenario.seed, summaries: Object.fromEntries(Object.entries(values).map(([key, items]) => [key, { ...summarize(items), loss_without_irr_count: key === 'irr' ? lossesWithoutIrr : 0 }])), warnings };
+  };
+
+  return { step, result, total: iterations, done: () => attempted, remaining: () => iterations - attempted };
+};
+
+export const runMonteCarloLocally = ({ deal, scenarios }) => ({
+  formula_version: FORMULA_VERSION,
+  scenarios: scenarios.map((scenario) => {
+    const run = createScenarioRun(deal, scenario);
+    run.step(run.total);
+    return run.result();
   }),
 });
+
+const nextTask = () => new Promise((resolve) => { setTimeout(resolve, 0); });
+
+// The same simulation as runMonteCarloLocally, run a block at a time with the
+// cases taking turns, so the page can redraw and report progress in between.
+// `onProgress(done, total)` is called after every round. If `shouldStop()`
+// returns true the run is abandoned and the promise resolves to null: the
+// inputs changed and the figures would no longer describe them.
+export const runMonteCarloInBrowser = async ({ deal, scenarios }, { onProgress, shouldStop, blockSize = 125, pause = nextTask } = {}) => {
+  const runs = scenarios.map((scenario) => createScenarioRun(deal, scenario));
+  const total = runs.reduce((sum, run) => sum + run.total, 0);
+  const done = () => runs.reduce((sum, run) => sum + run.done(), 0);
+  if (onProgress) onProgress(0, total);
+  while (runs.some((run) => run.remaining() > 0)) {
+    runs.forEach((run) => run.step(blockSize));
+    if (onProgress) onProgress(done(), total);
+    await pause();
+    if (shouldStop && shouldStop()) return null;
+  }
+  return { formula_version: FORMULA_VERSION, scenarios: runs.map((run) => run.result()) };
+};
