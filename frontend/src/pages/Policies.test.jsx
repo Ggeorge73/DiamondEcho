@@ -53,6 +53,9 @@ test('privacy page says what the site does and does not collect', async () => {
   expect(container.querySelector('a[href="tel:+16785169717"]').textContent).toBe('Direct (678) 516-9717');
   expect(container.querySelector('a[href="tel:+17704955050"]').textContent).toBe('Office (770) 495-5050');
   expect(text).toContain('Brokerage: Virtual Properties Realty.com');
+  // The office address is the brokerage's office (Gbenga, 2026-10-06).
+  expect(container.querySelector('.de-policy__contact').textContent).toContain('2750 Premiere Pkwy, Ste. 200Duluth, GA 30097');
+  expect(text).not.toMatch(/Dunwoody Place|30350/);
   expect(container.querySelector('a[href="mailto:realtor@diamondecho.com"]')).not.toBeNull();
   expect(container.querySelector('a[href="/terms"]')).not.toBeNull();
 });

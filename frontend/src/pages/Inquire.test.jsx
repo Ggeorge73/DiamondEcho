@@ -61,8 +61,9 @@ describe('with no inquiry service connected', () => {
     expect(container.textContent).toContain(`DiamondEcho is not yet taking ${what} through this website, so nothing can be sent from this page. No details are collected here.`);
     // No promise that anyone will follow up while nothing can be sent.
     expect(container.textContent).not.toMatch(/advisor can (follow up|review)/);
-    expect(container.textContent).toContain('8735 Dunwoody Place');
-    expect(container.textContent).toContain('GA 30350, USA');
+    expect(container.textContent).toContain('2750 Premiere Pkwy, Ste. 200');
+    expect(container.textContent).toContain('Duluth, GA 30097');
+    expect(container.textContent).not.toMatch(/Dunwoody Place|30350/);
     // The notice gives the approved phone number and inbox, and nothing else.
     const links = [...container.querySelectorAll('a[href^="tel:"], a[href^="mailto:"]')].map((link) => [link.getAttribute('href'), link.textContent]);
     expect(links).toEqual([
