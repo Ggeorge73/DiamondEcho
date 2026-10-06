@@ -18,7 +18,8 @@ const Where = () => {
 };
 const where = () => container.querySelector('[data-testid="where"]').textContent;
 const panel = () => container.querySelector('[aria-label="DiamondEcho real estate assistant"]');
-const launcher = () => container.querySelector('button[aria-label="Open DiamondEcho assistant"]');
+// Found by what it is, not by its label, which was reworded in DE-25.
+const launcher = () => container.querySelector('button[aria-expanded][data-compact]');
 const bubbles = () => [...panel().querySelectorAll('article')];
 const lastBubble = () => bubbles()[bubbles().length - 1];
 const byText = (scope, selector, text) => [...scope.querySelectorAll(selector)].find((node) => node.textContent.trim() === text);
