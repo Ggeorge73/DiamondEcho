@@ -32,6 +32,8 @@ const Footer = () => (
         <nav>
           <Link to="/search">Search Georgia MLS</Link>
           <Link to="/investment-calculator">Deal studio</Link>
+          <Link to="/investment-calculator?tool=mortgage">Mortgage simulator</Link>
+          <Link to="/investment-calculator?tool=net-proceeds">Seller net sheet</Link>
           <Link to="/inquire?type=buyer">Buyer inquiry</Link>
           <Link to="/inquire?type=seller">Seller consultation</Link>
           {assistantAvailable() && (

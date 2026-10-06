@@ -8,6 +8,8 @@ import { downloadDealWorkbook } from '../lib/dealWorkbook';
 
 jest.mock('react-router-dom', () => ({
   MemoryRouter: ({ children }) => children,
+  // The tool switcher above the form is three links.
+  Link: ({ to, children, ...rest }) => require('react').createElement('a', { href: to, ...rest }, children),
   useLocation: () => ({ pathname: '/investment-calculator', search: '' }),
   useNavigate: () => jest.fn(),
 }));

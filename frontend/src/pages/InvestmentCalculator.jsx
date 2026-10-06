@@ -1,11 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   AlertCircle, ArrowRight, BarChart3, Building2, CheckCircle2, ChevronDown,
-  CircleDollarSign, Database, Download, FileSpreadsheet, Home, Loader2,
-  LandPlot, MapPin, RotateCcw, ShieldCheck, Sparkles, TrendingUp
+  CircleDollarSign, Database, Download, FileSpreadsheet, Home, KeyRound, Loader2,
+  LandPlot, MapPin, RotateCcw, ShieldCheck, Sparkles, TrendingUp, Wallet
 } from 'lucide-react';
+import MortgageSimulator from '../components/calculators/MortgageSimulator';
+import SellerNetSheet from '../components/calculators/SellerNetSheet';
+import '../components/calculators/calculators.css';
 import { analyzeDealLocally, BROWSER_MONTE_CARLO_ITERATION_CAP, runMonteCarloInBrowser } from '../lib/dealAnalysis';
 import { scenarioDisclosure, splitWarnings } from '../lib/monteCarloDisclosure';
 import { buildDecision, LAND_CHECKLIST_ITEMS, RENTAL_EVIDENCE_ITEMS } from '../lib/dealDecision';
@@ -18,6 +21,7 @@ import {
 } from '../lib/dealValidation';
 import { buildMonteCarloScenarios, MONTE_CARLO_CASES } from '../lib/monteCarloCases';
 import { resolveListingContext } from '../lib/listingContext';
+import { toolFromSearch } from '../lib/intelligenceTools';
 import { applyPropertyAutofill, prepareAddressEdit, preparePropertyChange } from '../lib/propertyAutofill';
 
 // Monte Carlo runs in the visitor's browser, a block at a time (DE-25). The
@@ -34,6 +38,31 @@ export const landServiceFormulaIsCurrent = (version) => {
   if (!match) return true; // not a version this page can read: leave the result alone
   const [major, minor] = [Number(match[1]), Number(match[2])];
   return major > LAND_SERVICE_FORMULA_MINIMUM[0] || (major === LAND_SERVICE_FORMULA_MINIMUM[0] && minor >= LAND_SERVICE_FORMULA_MINIMUM[1]);
+};
+
+const INTELLIGENCE_TOOLS = [
+  { key: 'deal', to: '/investment-calculator', label: 'Deal Studio', audience: 'For investors', icon: BarChart3 },
+  { key: 'mortgage', to: '/investment-calculator?tool=mortgage', label: 'Mortgage simulator', audience: 'For buyers', icon: KeyRound },
+  { key: 'net-proceeds', to: '/investment-calculator?tool=net-proceeds', label: 'Seller net sheet', audience: 'For sellers', icon: Wallet },
+];
+const TOOL_HERO = {
+  deal: {
+    eyebrow: 'DIAMOND ECHO DEAL ANALYSIS',
+    title: <>Underwrite with<br /><em>absolute clarity.</em></>,
+    seal: <>FORMULA VERSION<br />1.1 · MONTE CARLO</>,
+  },
+  mortgage: {
+    eyebrow: 'DIAMOND ECHO BUYER TOOLS',
+    title: <>Know the payment<br /><em>before the offer.</em></>,
+    text: 'Estimate what a home costs each month: principal and interest, property taxes, insurance, association fees and mortgage insurance, from the figures you enter.',
+    seal: <>AN ESTIMATE<br />NOT A LOAN OFFER</>,
+  },
+  'net-proceeds': {
+    eyebrow: 'DIAMOND ECHO SELLER TOOLS',
+    title: <>See what you keep<br /><em>after closing.</em></>,
+    text: 'Estimate your net proceeds: the sale price less your mortgage payoff, commission, closing costs, Georgia transfer tax, concessions and prorations, from the figures you enter.',
+    seal: <>AN ESTIMATE<br />NOT A CLOSING STATEMENT</>,
+  },
 };
 
 const ASSET_TYPE_LABELS = {
@@ -118,7 +147,20 @@ const AutocompleteField = ({ label, name, value, onChange, suggestions, onSelect
 const InvestmentCalculator = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const listingContext = useMemo(() => resolveListingContext(location.search), [location.search]);
+  // Keyed on the listing part of the address only, so that moving between the
+  // three tools does not reset the Deal Studio form.
+  const listingParam = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return params.has('listing') ? `?listing=${encodeURIComponent(params.get('listing'))}` : '';
+  }, [location.search]);
+  const listingContext = useMemo(() => resolveListingContext(listingParam), [listingParam]);
+  const tool = toolFromSearch(location.search);
+  // A buyer or seller tool is built the first time it is opened and then kept,
+  // so what the visitor typed is still there when they come back to it.
+  const [openedTools, setOpenedTools] = useState(() => new Set([tool]));
+  useEffect(() => {
+    setOpenedTools((current) => (current.has(tool) ? current : new Set([...current, tool])));
+  }, [tool]);
   const [form, setForm] = useState(initialForm);
   const [result, setResult] = useState(null);
   const [analysisSnapshot, setAnalysisSnapshot] = useState(null);
@@ -521,18 +563,31 @@ const InvestmentCalculator = () => {
     : floodZoneStatus === 'special' ? 'Special Flood Hazard Area.'
       : floodZoneStatus === 'not_entered' ? 'Treated as not verified until a zone is entered.' : '';
 
+  const ActiveToolIcon = INTELLIGENCE_TOOLS.find((item) => item.key === tool).icon;
+
   return (
     <main className="deal-studio-page">
       <header className="deal-studio-hero">
         <div>
-          <p className="eyebrow eyebrow--light"><span /> DIAMOND ECHO DEAL ANALYSIS</p>
-          <h1>Underwrite with<br /><em>absolute clarity.</em></h1>
-          <p>Institutional-grade analysis for residences, income property, commercial assets, fix-and-flips, lots, and ground-up development, from the figures you enter.</p>
+          <p className="eyebrow eyebrow--light"><span /> {TOOL_HERO[tool].eyebrow}</p>
+          <h1>{TOOL_HERO[tool].title}</h1>
+          {tool === 'deal'
+            ? <p>Institutional-grade analysis for residences, income property, commercial assets, fix-and-flips, lots, and ground-up development, from the figures you enter.</p>
+            : <p>{TOOL_HERO[tool].text}</p>}
         </div>
-        <div className="deal-studio-hero__seal"><BarChart3 /><span>FORMULA VERSION<br />1.1 · MONTE CARLO</span></div>
+        <div className="deal-studio-hero__seal"><ActiveToolIcon /><span>{TOOL_HERO[tool].seal}</span></div>
       </header>
 
-      <section className="deal-studio-shell">
+      <nav className="studio-tools" aria-label="Intelligence tools">
+        {INTELLIGENCE_TOOLS.map(({ key, to, label, audience, icon: Icon }) => (
+          <Link key={key} to={to} aria-current={tool === key ? 'page' : undefined}><Icon /><span><strong>{label}</strong><small>{audience}</small></span></Link>
+        ))}
+      </nav>
+
+      {openedTools.has('mortgage') && <MortgageSimulator search={location.search} hidden={tool !== 'mortgage'} />}
+      {openedTools.has('net-proceeds') && <SellerNetSheet hidden={tool !== 'net-proceeds'} />}
+
+      <section className="deal-studio-shell" hidden={tool !== 'deal'}>
         <form className="deal-studio-form" onSubmit={analyze} noValidate>
           {listingContext.kind === 'manual' && !propertyRecord && <p className="studio-provider-note" role="status">Manual Deal Studio entry. Any prefilled numbers are illustrative, not facts about a selected listing; verify all assumptions.</p>}
           {listingContext.kind === 'missing' && <p className="studio-provider-note" role="alert">This old sample-property link is unavailable. No listing facts were loaded; enter and verify a property manually or return to Georgia MLS search.</p>}

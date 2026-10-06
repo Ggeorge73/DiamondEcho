@@ -12,10 +12,14 @@ import Inquire from "./pages/Inquire";
 import NotFound from "./pages/NotFound";
 import { Privacy, Terms } from "./pages/Policies";
 import RealEstateAssistant from "./components/assistant/RealEstateAssistant";
+import { scrollKey } from "./lib/intelligenceTools";
 
 const ScrollToTop = () => {
   const { pathname, search } = useLocation();
-  useEffect(() => { window.scrollTo({ top: 0, behavior: "instant" }); }, [pathname, search]);
+  // Moving between the tools on the Intelligence page keeps the same key, so
+  // the page stays where the visitor was.
+  const key = scrollKey(pathname, search);
+  useEffect(() => { window.scrollTo({ top: 0, behavior: "instant" }); }, [key]);
   return null;
 };
 
