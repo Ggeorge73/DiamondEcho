@@ -90,17 +90,28 @@ and asks the visitor to check them against the listing. Only plain positive
 numbers are accepted. When the site has listing pages, each one needs only this
 link.
 
-### Call to action
+### Calls to action
 
-The request offered "Get Pre-Approved" or "Contact Agent About This Property".
-The page uses **"Contact an agent about this purchase"** ("about this property"
-when the figures came from a link), which opens the buyer request form, and a
-second link to the Georgia MLS search.
+Three, in this order:
 
-"Get Pre-Approved" is not used. Pre-approval is something a lender does. Nobody
-has confirmed a lending service or a lender partner for DiamondEcho, and the
-content rules for this site keep unconfirmed services off it. If Gbenga names a
-lender to refer to, the button is one line to add.
+1. **"Get pre-approved"** opens the buyer request with the eyebrow "Mortgage
+   pre-approval" and the message already started ("I would like to get
+   pre-approved for a mortgage."), which the visitor can change.
+2. **"Contact an agent about this purchase"** ("about this property" when the
+   figures came from a link) opens the ordinary buyer request.
+3. **"Search Georgia homes"** opens the Georgia MLS search.
+
+The first build (PR #61) left "Get Pre-Approved" out, because pre-approval is
+something a lender does and no lender was on record. Asked whether he had a
+lender to refer buyers to, Gbenga answered "add it" (2026-10-06, DE-40). He
+did not name a lender, so the button asks an agent for an introduction instead
+of opening a lender's page. Under the buttons, and on the request page, the
+site says: "DiamondEcho is not a lender. Pre-approval comes from a lender: send
+a request and an agent can introduce you to one." Nothing typed in the
+simulator is carried in the link or sent with the request.
+
+When Gbenga names a lender, the button can open that lender's page directly:
+one address in `MortgageSimulator.jsx`.
 
 ## Seller net sheet
 
@@ -166,7 +177,8 @@ the seller's choice." That follows the practice changes that took effect on
 August 17, 2024.
 Source: National Association of REALTORS, <https://www.nar.realtor/the-facts/what-the-nar-settlement-means-for-home-buyers-and-sellers>.
 
-If Gbenga wants starting rates, they are two values in `EXAMPLE_NET_SHEET`.
+Gbenga confirmed this on 2026-10-06: "allow for users to insert commission
+rate". No starting rate is shown.
 
 ### Example figures
 
@@ -225,12 +237,22 @@ Colour is never the only cue: every part and every row is named.
 - Printing or saving a result.
 - Not tested on a real phone, Safari or Firefox.
 
-## For Gbenga to read
+## Decided by Gbenga, 2026-10-06 (DE-40)
 
-1. The two new headings on the page, "Know the payment before the offer." and
-   "See what you keep after closing." They are brand voice and his to reword.
-2. The new paragraphs on the Privacy and Terms pages.
-3. Whether to name a lender for a pre-approval button.
-4. Whether to pre-fill commission rates, and which.
-5. Whether "Request a home valuation" is the service he wants to offer under
-   that name.
+Asked five things after PR #61, he answered: "1: #61 is merged; 2: allow for
+users to insert commission rate; 3: add it; 4: Its reads fine. use it; 5: #60
+is merged."
+
+| Item | Decision |
+| --- | --- |
+| Commission rates | The visitor types them. No starting rate |
+| Pre-approval button | Add it. No lender named yet, so it opens a request for an introduction |
+| The headings "Know the payment before the offer." and "See what you keep after closing." | Approved as written |
+| The new Privacy and Terms paragraphs | Approved as written |
+
+## Still open
+
+1. The lender's name and link, if the pre-approval button should go straight to
+   one.
+2. Whether "Request a home valuation" is the service he wants to offer under
+   that name. He merged the page with it; he has not been asked again.

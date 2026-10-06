@@ -34,6 +34,10 @@ legal advice".
 | Brokerage: Virtual Properties Realty.com; Office (770) 495-5050 | Same places, shown before the direct number | Confirmed 2026-10-04 |
 | The property search is his Georgia MLS page | Home, Search | Accepted homepage, 2026-09-29 |
 | Search-page wording (what the link keeps, "Start a new search", blank-search line) | Search | 2026-10-05, DE-21 |
+| "Know the payment before the offer."; "See what you keep after closing." | Mortgage simulator, seller net sheet | 2026-10-06: "Its reads fine. use it" (DE-40) |
+| The paragraphs on the mortgage simulator and seller net sheet | Privacy, Terms | 2026-10-06, the same answer |
+| No commission rate is pre-filled; the visitor types their own | Seller net sheet | 2026-10-06: "allow for users to insert commission rate" |
+| A "Get pre-approved" button | Mortgage simulator | 2026-10-06: "add it". No lender was named, so the button asks an agent for an introduction and the page says "DiamondEcho is not a lender" |
 
 ## 2. Describes what the site does; checked against the code
 
@@ -47,6 +51,7 @@ legal advice".
 | Online requests are not open yet | Inquiry pages | The forms are not shown on the launch build |
 | Individual advisor profiles will appear only after verification | Advisory | No profiles are published |
 | The photographs are illustrative | About image; Privacy names Unsplash | Stock photographs |
+| "Get pre-approved" opens the buyer request with the message started; nothing typed in the simulator goes with it | Mortgage simulator, request page | `MortgageSimulator.jsx`, `Inquire.jsx`; tests in `MortgageSimulator.test.jsx` and `Inquire.test.jsx` |
 | The mortgage simulator estimates a monthly payment (principal and interest, taxes, insurance, association fees, mortgage insurance) from the figures entered | Intelligence page, footer, Terms | `frontend/src/lib/mortgage.js`; DE-39, `docs/buyer-seller-calculators.md` |
 | The seller net sheet estimates net proceeds (payoff, commission, closing costs, Georgia transfer tax, concessions, prorations) from the figures entered | Intelligence page, footer, Terms | `frontend/src/lib/netProceeds.js`; DE-39 |
 | Both tools calculate in the browser; the figures are not sent or saved | Both tools, Privacy | A test reads their source for any network or storage call (`Policies.test.jsx`) |
@@ -83,8 +88,6 @@ Not changed. These are his to keep or reword.
 | "Every asset class, one standard." | Home | Brand line |
 | "Every opportunity, fully illuminated." | Home | Brand line |
 | "Underwrite with absolute clarity." | Deal Studio | Brand line |
-| "Know the payment before the offer." | Mortgage simulator | Added 2026-10-06 (DE-39). The agent's words |
-| "See what you keep after closing." | Seller net sheet | Added 2026-10-06 (DE-39). The agent's words. It is an estimate; the page and its seal say so |
 | "Institutional-grade" and "institutional rigor" | Home, Deal Studio | A quality claim about a calculator. Kept as voice; he may prefer plainer words |
 | "Some addresses are found. Others find you." | Home | Brand line |
 | Client-first: "Every decision and transaction begins with the client's goals — and ends only when they are met. Priorities are stated, agreed, and protected." | About | "ends only when they are met" reads as a promise of an outcome |
