@@ -40,13 +40,14 @@ As staging stage one, with the production names. Billing account "My Billing Acc
 
 Runtime identity: `diamondecho-api-runtime@diamondecho-prod.iam.gserviceaccount.com`. After batch 3 it holds exactly `roles/datastore.user` and `roles/firebaseauth.viewer`.
 
-Cloud Run: 1 CPU, 1 GiB, concurrency 1, timeout 30 s, minimum 0 and maximum 3 instances, open to the internet (the API does its own checks). Deployed from `main` at `f84c9ea`; later revisions changed settings only and kept the same container image.
+Cloud Run: 1 CPU, 1 GiB, concurrency 1, timeout 30 s, minimum 0 and maximum 3 instances, open to the internet (the API does its own checks). First deployed from `main` at `f84c9ea`; revisions 2 and 3 changed settings only and kept that container image. Revision 4 is a new image built from `main` at `50705a5`, with the settings unchanged.
 
 | Revision | Change |
 | --- | --- |
 | `diamondecho-api-00001-lj9` | First deploy, queue off |
 | `diamondecho-api-00002-9zg` | Queue on, one staff user ID listed |
 | `diamondecho-api-00003-prh` | `PUBLIC_ORIGIN`, `STAFF_ORIGIN`, `CORS_ORIGINS` moved to the `diamondecho.com` addresses |
+| `diamondecho-api-00004-kiq` | New image from `main` at `50705a5` (formula `diamond-underwriting-1.1.0`). Serving all requests since 2026-10-06, shortly before 21:00 UTC |
 
 Always pass `--project diamondecho-prod`. Cloud Shell's default project can be either staging or production, depending on how the session was opened.
 
@@ -149,6 +150,22 @@ There was no DMARC record and no DKIM record. Forwarding was not set up. Before 
 - From the page at `diamondecho.com`, an empty request to the API answers 422 with the missing fields named.
 - Mail records from a public resolver after the move: the same 11 answers.
 
+### API redeploy and visitor monitoring (2026-10-06, 20:42 to 21:05 UTC)
+
+Both changes had the owner's yes in chat ("yes to both").
+
+**API moved from `f84c9ea` to `50705a5`.** The only backend files that differ between the two commits are `backend/deal_intelligence/engine.py`, its README and its test. The new revision was started with no visitors on it, tested at a temporary address, and only then given the traffic:
+
+1. `gcloud run deploy diamondecho-api --source backend --project diamondecho-prod --region us-east1 --no-traffic --tag candidate --quiet`, from a fresh clone whose commit read `50705a5`. Result: `diamondecho-api-00004-kiq`, serving 0 percent.
+2. Settings compared from the saved service description before and after: runtime identity, 1 CPU, 1 GiB, concurrency 1, timeout 30 s, maximum 3 instances, and the six environment variables are identical.
+3. Candidate checks: `/health` 200; the staff list with no sign-in 401; an empty request 422; the reference land request of `backend/tests` answers formula `diamond-underwriting-1.1.0` with residual land value 2,315.27, development profit -2,756,112.30, margin -0.6125 and IRR -0.3737, the same figures a local run of the engine at `50705a5` gives. The same request to the old revision, minutes earlier, answered formula `1.0.0` with residual -565,679.80.
+4. `gcloud run services update-traffic diamondecho-api --to-latest --project diamondecho-prod --region us-east1`, then `--remove-tags candidate`. The service is back to one entry: latest revision, 100 percent. The temporary address answers 404.
+5. On production afterwards: `/health` 200 and the staff list 401, three times each; the reference request answers formula `1.1.0` and 2,315.27; on `diamondecho.com/investment-calculator`, "Land development" then "Run base analysis" called the API (200) and the page showed formula version 1.1 and "Residual land value $2,315".
+
+Not done: no request was sent through the form, and a return to revision 3 was not rehearsed (see "Undo").
+
+**Cloudflare Real User Monitoring switched off** for the `diamondecho.com` zone (Speed, then Real User Monitoring, then "Disable completely"). Cloudflare had been adding its `beacon.min.js` script to every page, which the Privacy page's "no analytics" sentence did not allow for. The script was still in the pages one minute after the switch. It was absent from the HTML of `diamondecho.com` at 20:46 UTC, and at 21:02 to 21:05 UTC neither `diamondecho.com` nor `staff.diamondecho.com` had it in the HTML or the loaded page, and neither page made a request to it.
+
 ## Proven by the owner
 
 | Date | What Gbenga did | Result |
@@ -167,7 +184,7 @@ These were done at the `pages.dev` staff address, before the domain move.
 3. A request sent through the form at `diamondecho.com`, its alert and its appearance in the queue. The one stored request was sent from Cloud Shell.
 4. A restore from backup.
 5. The staff page on a real phone browser, Safari and Firefox.
-6. Rollback of a Pages deployment or a Cloud Run revision has not been exercised in production.
+6. Rollback of a Pages deployment or a Cloud Run revision has not been exercised in production. The 10-06 redeploy moved forward only.
 7. Production holds one synthetic record, "Production Alert Test". Removing it is the owner's action.
 
 ## Findings to carry forward
@@ -184,6 +201,7 @@ These were done at the `pages.dev` staff address, before the domain move.
 ## Undo
 
 - **Close the request slot at once:** `gcloud run services update diamondecho-api --region us-east1 --project diamondecho-prod --update-env-vars INQUIRY_STAFF_QUEUE_ENABLED=false`. The form then answers 503 and stores nothing.
+- **Return the API to the earlier code:** `gcloud run services update-traffic diamondecho-api --to-revisions=diamondecho-api-00003-prh=100 --project diamondecho-prod --region us-east1`. Revision 3 is kept for this. Land figures then come from formula `1.0.0` again. This pins traffic to revision 3, so a later deploy serves nothing until `--to-latest` is run.
 - **Silence the alert:** disable the policy; do not remove it.
 - **Move DNS back:** at GoDaddy choose "GoDaddy Nameservers". If GoDaddy does not restore its record list, re-enter the nineteen records in the table above. Then set `PUBLIC_ORIGIN`, `STAFF_ORIGIN` and `CORS_ORIGINS` on the API, and `STAFF_ORIGIN` and `PUBLIC_ORIGIN` on the staff Pages project, back to the `pages.dev` addresses and rebuild the staff site.
 - Removing a record, a policy, a schedule, a project or stored requests is a deletion and is the owner's to run.
