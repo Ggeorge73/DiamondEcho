@@ -19,16 +19,42 @@ export const PROPERTY_ASSUMPTION_FIELDS = [
 
 const hasValue = (value) => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
 
+// Site diligence and project-program choices cannot carry to another parcel.
+const SITE_CHOICE_RESETS = {
+  developmentType: '', dispositionStrategy: '', entitlementStatus: '',
+  utilityStatus: 'verify', accessStatus: 'verify',
+  environmentalStatus: 'phase_i_required', geotechnicalStatus: 'not_started',
+};
+
+// A different property was chosen from the suggestions, or a listing link was
+// opened: nothing about the last property carries over. The Land development
+// tab only analyses land, so the asset type stays "Lot / land" there.
 export const preparePropertyChange = (form, address = '') => {
-  const next = { ...form, address, market: '', propertyType: 'single_family' };
+  const next = { ...form, address, market: '', propertyType: form.strategy === 'land' ? 'land' : 'single_family' };
   PROPERTY_ASSUMPTION_FIELDS.forEach((field) => { next[field] = ''; });
-  // Site diligence and project-program choices cannot carry to another parcel.
-  Object.assign(next, {
-    developmentType: '', dispositionStrategy: '', entitlementStatus: '',
-    utilityStatus: 'verify', accessStatus: 'verify',
-    environmentalStatus: 'phase_i_required', geotechnicalStatus: 'not_started',
-  });
+  Object.assign(next, SITE_CHOICE_RESETS);
   return next;
+};
+
+// The address box was typed in (DE-25). Figures the visitor entered themselves
+// are theirs and stay. Figures they did not enter, the example values or facts
+// loaded for another address, are cleared, because they say nothing about this
+// property. The asset type and the strategy are never changed by typing.
+// Returns the new form and what was cleared, so the page can say so and offer
+// to put it back.
+export const prepareAddressEdit = (form, address, entered = []) => {
+  const kept = new Set(entered);
+  const next = { ...form, address };
+  const cleared = {};
+  const reset = (field, value) => {
+    if (kept.has(field) || form[field] === value || form[field] === undefined) return;
+    cleared[field] = form[field];
+    next[field] = value;
+  };
+  PROPERTY_ASSUMPTION_FIELDS.forEach((field) => reset(field, ''));
+  reset('market', '');
+  Object.entries(SITE_CHOICE_RESETS).forEach(([field, value]) => reset(field, value));
+  return { form: next, cleared };
 };
 
 const normalizePropertyType = (value = '') => {

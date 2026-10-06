@@ -13,21 +13,23 @@ const scenario = (iterations) => ({
   drivers: { rent_change: { minimum: -0.1, mode: 0, maximum: 0.08 }, vacancy_rate: { minimum: 0.03, mode: 0.06, maximum: 0.14 } },
 });
 
-test('browser run of 10,000 reports the 5,000 cap, the counts and the sample behind each probability', () => {
-  const [result] = runMonteCarloLocally({ deal, scenarios: [scenario(10000)] }).scenarios;
-  expect(BROWSER_MONTE_CARLO_ITERATION_CAP).toBe(5000);
-  expect(result.iterations_requested).toBe(10000);
-  expect(result.iterations_completed + result.failed_iterations).toBe(5000);
-  expect(result.warnings.some((warning) => warning.includes('capped at 5,000 iterations') && warning.includes('10,000 were requested'))).toBe(true);
+test('a request above the device cap reports the cap, the counts and the sample behind each probability', () => {
+  // The cap equals the largest choice on the form (DE-25); the service allows
+  // up to 20,000, so a larger request can still arrive and must be disclosed.
+  const [result] = runMonteCarloLocally({ deal, scenarios: [scenario(12000)] }).scenarios;
+  expect(BROWSER_MONTE_CARLO_ITERATION_CAP).toBe(10000);
+  expect(result.iterations_requested).toBe(12000);
+  expect(result.iterations_completed + result.failed_iterations).toBe(10000);
+  expect(result.warnings.some((warning) => warning.includes('capped at 10,000 iterations') && warning.includes('12,000 were requested'))).toBe(true);
   for (const summary of Object.values(result.summaries)) {
     expect(Number.isInteger(summary.sample_size)).toBe(true);
     expect(summary.sample_size).toBeLessThanOrEqual(result.iterations_completed);
   }
   const disclosure = scenarioDisclosure(result, result.summaries.irr, 'IRR');
-  expect(disclosure.counts[0]).toBe('Requested 10,000');
+  expect(disclosure.counts[0]).toBe('Requested 12,000');
   expect(disclosure.counts).toContain(`Completed ${result.iterations_completed.toLocaleString('en-US')}`);
-  expect(disclosure.notes[0]).toBe('Only 5,000 of the 10,000 requested iterations were run.');
-  expect(disclosure.denominator).toMatch(/^[\d,]+ of [\d,]+ valid results$/);
+  expect(disclosure.notes[0]).toBe('Only 10,000 of the 12,000 requested iterations were run.');
+  expect(disclosure.denominator).toMatch(/^[\d,]+ above zero out of [\d,]+ valid results$/);
 });
 
 test('a run within the cap carries no cap notice', () => {
@@ -45,7 +47,9 @@ test('the denominator is the metric sample, not the iteration count', () => {
     'IRR',
   );
   expect(disclosure.counts).toEqual(['Requested 1,000', 'Completed 990', 'Excluded 10', 'Valid for IRR 800']);
-  expect(disclosure.denominator).toBe('200 of 800 valid results');
+  // The first number counts results above zero; the wording must say so, or it
+  // reads as "200 valid results" (DE-25).
+  expect(disclosure.denominator).toBe('200 above zero out of 800 valid results');
   expect(disclosure.notes).toEqual([
     '10 iterations were excluded because the sampled inputs produced invalid economics.',
     '190 completed iterations had no defined IRR and are left out of the figures above.',
@@ -98,7 +102,7 @@ test('losses with no solvable IRR are stated as counted, not left out', () => {
     { probability_above_zero: 0.0756, sample_size: 5000, loss_without_irr_count: 1140 },
     'Projected IRR',
   );
-  expect(disclosure.denominator).toBe('378 of 5,000 valid results');
+  expect(disclosure.denominator).toBe('378 above zero out of 5,000 valid results');
   expect(disclosure.notes).toEqual([
     '1,140 losing iterations had no solvable Projected IRR. They are counted as losses, using the annual return implied by cash returned over cash invested (-100% when nothing came back).',
   ]);

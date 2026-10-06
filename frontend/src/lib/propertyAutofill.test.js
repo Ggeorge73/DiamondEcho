@@ -1,4 +1,4 @@
-import { applyPropertyAutofill, preparePropertyChange, PROPERTY_ASSUMPTION_FIELDS } from './propertyAutofill';
+import { applyPropertyAutofill, prepareAddressEdit, preparePropertyChange, PROPERTY_ASSUMPTION_FIELDS } from './propertyAutofill';
 
 const previous = {
   address: 'Old home', market: 'Old City, CA', propertyType: 'multifamily',
@@ -53,4 +53,35 @@ test('missing provider values do not silently reuse previous property values', (
   expect(result.form).toMatchObject({ purchasePrice: '', rentableSquareFeet: '', propertyTaxes: '', insurance: '', rehabCost: '' });
   expect(result.reviewFields).toContain('Purchase price or current ask');
   expect(result.sourceLabel).toMatch(/Illustrative deal example/);
+});
+
+// DE-25: typing an address used to wipe every figure and flip the asset type.
+test('typing an address keeps the figures the visitor entered and clears the rest', () => {
+  const { form, cleared } = prepareAddressEdit(previous, '1 New Rd', ['purchasePrice', 'annualRent', 'market', 'entitlementStatus']);
+  expect(form).toMatchObject({ address: '1 New Rd', purchasePrice: '3000000', annualRent: '360000', market: 'Old City, CA', entitlementStatus: 'fully_entitled' });
+  expect(form).toMatchObject({ units: '', propertyTaxes: '', insurance: '', rehabCost: '', siteWorkCost: '', expectedTerminalValue: '' });
+  expect(form).toMatchObject({ developmentType: '', dispositionStrategy: '', utilityStatus: 'verify', accessStatus: 'verify', environmentalStatus: 'phase_i_required', geotechnicalStatus: 'not_started' });
+  expect(cleared).toMatchObject({ units: '12', propertyTaxes: '54000', utilityStatus: 'available', developmentType: 'multifamily' });
+  expect(cleared).not.toHaveProperty('purchasePrice');
+  expect(cleared).not.toHaveProperty('market');
+});
+
+test('typing an address never changes the asset type, the strategy or the investor preferences', () => {
+  for (const [strategy, propertyType] of [['rental', 'multifamily'], ['land', 'land'], ['flip', 'condo']]) {
+    const { form } = prepareAddressEdit({ ...previous, strategy, propertyType }, '1 New Rd', []);
+    expect(form).toMatchObject({ strategy, propertyType, ltv: '65', targetIrr: '15' });
+  }
+});
+
+test('what was cleared can be put back exactly, and a second keystroke clears nothing more', () => {
+  const first = prepareAddressEdit(previous, '1', ['purchasePrice']);
+  expect({ ...first.form, ...first.cleared, address: previous.address }).toEqual(previous);
+  const second = prepareAddressEdit(first.form, '1 N', ['purchasePrice']);
+  expect(second.cleared).toEqual({});
+  expect(second.form).toEqual({ ...first.form, address: '1 N' });
+});
+
+test('a property chosen from the list keeps the land tab on Lot / land', () => {
+  expect(preparePropertyChange({ ...previous, strategy: 'land', propertyType: 'land' }, 'New parcel').propertyType).toBe('land');
+  expect(preparePropertyChange({ ...previous, strategy: 'rental', propertyType: 'multifamily' }, 'New home').propertyType).toBe('single_family');
 });

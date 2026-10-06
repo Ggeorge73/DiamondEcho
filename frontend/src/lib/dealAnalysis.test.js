@@ -1,4 +1,5 @@
-import { analyzeDealLocally, lossEquivalentReturn, runMonteCarloLocally } from './dealAnalysis';
+import { analyzeDealLocally, BROWSER_MONTE_CARLO_ITERATION_CAP, lossEquivalentReturn, runMonteCarloInBrowser, runMonteCarloLocally } from './dealAnalysis';
+import { buildDealRequest } from './dealRequest';
 
 const johnsCreekDeal = {
   strategy: 'rental',
@@ -128,4 +129,98 @@ test('an under-water sale after some income is scored by cash returned over cash
   expect(result.summaries.irr.loss_without_irr_count).toBe(250);
   expect(result.summaries.irr.p50).toBeCloseTo(multiple ** (12 / 60) - 1, 9);
   expect(result.summaries.irr.probability_above_zero).toBe(0);
+});
+
+// ---------------------------------------------------------------------------
+// DE-25: land residual, flood zone, and the stepped simulation.
+const landForm = {
+  address: '', strategy: 'land', propertyType: 'land', market: 'Atlanta, GA', units: '4', rentableSquareFeet: '12000',
+  purchasePrice: '985000', closingCosts: '20000', dueDiligenceCosts: '15000', initialCapex: '0', holdMonths: '24',
+  ltv: '65', interestRate: '6.75', amortizationYears: '30', interestOnlyMonths: '24', loanTermYears: '2', originationFee: '1',
+  sellingCosts: '6', discountRate: '10', developmentType: 'single_family_subdivision', dispositionStrategy: 'build_and_sell',
+  siteAcres: '2.5', parcelCount: '1', currentZoning: '', proposedZoning: '', entitlementStatus: 'unentitled',
+  utilityStatus: 'verify', accessStatus: 'verify', environmentalStatus: 'phase_i_required', geotechnicalStatus: 'not_started',
+  floodZone: '', wetlandsAcres: '0', developmentMonths: '18', absorptionMonths: '6', siteWorkCost: '250000',
+  hardConstructionCost: '1400000', softCosts: '150000', permitsImpactFees: '60000', environmentalRemediation: '0',
+  developerFee: '80000', landContingency: '10', annualCarryingCosts: '24000', expectedTerminalValue: '4300000',
+  stabilizedNoi: '0', stabilizedExitCap: '0', targetProfitMargin: '20',
+};
+const landAt = (changes = {}) => analyzeDealLocally(buildDealRequest({ ...landForm, ...changes }));
+
+test('residual land value is the price at which the deal earns exactly the target margin', () => {
+  // It used to take the target margin off net proceeds and leave out loan fees,
+  // so it could sit above the price while the margin missed its target.
+  const first = landAt();
+  expect(first.metrics.development_margin.value).toBeCloseTo(0.13359738, 8);
+  expect(first.metrics.residual_land_value.value).toBeCloseTo(724062.14302033, 6);
+  const again = landAt({ purchasePrice: String(first.metrics.residual_land_value.value) });
+  expect(again.metrics.development_margin.value).toBeCloseTo(0.2, 7);
+  expect(again.metrics.residual_land_value.value).toBeCloseTo(first.metrics.residual_land_value.value, 4);
+});
+
+test.each([[0.98, true], [1.02, false]])('at %s times the residual, the margin test and the residual agree', (factor, passes) => {
+  const price = landAt().metrics.residual_land_value.value * factor;
+  const result = landAt({ purchasePrice: String(price) });
+  expect(result.metrics.development_margin.value >= 0.2).toBe(passes);
+  expect(result.metrics.residual_land_value.value >= price).toBe(passes);
+  expect(result.warnings.some((warning) => warning.includes('residual land value is below'))).toBe(!passes);
+});
+
+test('the land figures match the analysis service for its reference deal', () => {
+  // Same request and same figures as test_land_development_matches_the_browser_engine
+  // in backend/tests/deal_intelligence/test_engine.py.
+  const result = landAt({
+    units: '12', rentableSquareFeet: '18000', purchasePrice: '3000000', closingCosts: '75000', dueDiligenceCosts: '25000',
+    initialCapex: '125000', holdMonths: '60', interestOnlyMonths: '0', loanTermYears: '10', developmentMonths: '24',
+    absorptionMonths: '12', siteWorkCost: '300000', hardConstructionCost: '1500000', softCosts: '200000',
+    permitsImpactFees: '100000', developerFee: '100000', annualCarryingCosts: '30000', expectedTerminalValue: '4500000',
+  });
+  expect(result.metrics.development_profit.value).toBeCloseTo(-2756112.29691015, 6);
+  expect(result.metrics.development_margin.value).toBeCloseTo(-0.6124694, 8);
+  expect(result.metrics.irr.value).toBeCloseTo(-0.37373084, 8);
+  expect(result.metrics.residual_land_value.value).toBeCloseTo(2315.27304722, 6);
+  expect(result.metrics.break_even_terminal_value.value).toBeCloseTo(7432034.35841515, 6);
+});
+
+test('"Not verified" typed as the flood zone is not treated as an entered zone', () => {
+  const flood = (text) => landAt({ floodZone: text }).warnings.filter((warning) => /lood/.test(warning));
+  expect(flood('Not verified')).toEqual(['The FEMA flood zone is not verified; confirm the designation, base flood elevation, and insurance requirement.']);
+  expect(flood('')).toEqual(flood('Not verified'));
+  expect(flood('X')).toEqual([]);
+  expect(flood('AE')[0]).toContain('Special Flood Hazard Area');
+});
+
+const landDrivers = {
+  terminal_value_change: { minimum: -0.15, mode: 0, maximum: 0.1 },
+  development_cost_change: { minimum: 0, mode: 0.1, maximum: 0.3 },
+  interest_rate: { minimum: 0.0575, mode: 0.0675, maximum: 0.085 },
+};
+const threeCases = (iterations) => ['Committee case', 'Downside case', 'Severe stress'].map((name, index) => ({ name, iterations, seed: 2026 + index * 97, drivers: landDrivers }));
+const immediately = () => Promise.resolve();
+
+test('the stepped simulation gives exactly the figures of the one-go simulation and reports progress', async () => {
+  const payload = { deal: buildDealRequest(landForm), scenarios: threeCases(600) };
+  const progress = [];
+  const stepped = await runMonteCarloInBrowser(payload, { onProgress: (done, total) => progress.push([done, total]), blockSize: 125, pause: immediately });
+  expect(stepped).toEqual(runMonteCarloLocally(payload));
+  expect(progress[0]).toEqual([0, 1800]);
+  expect(progress[progress.length - 1]).toEqual([1800, 1800]);
+  expect(progress.map(([done]) => done)).toEqual([...progress.map(([done]) => done)].sort((a, b) => a - b));
+  expect(stepped.scenarios.map((scenario) => scenario.iterations_completed)).toEqual([600, 600, 600]);
+});
+
+test('every choice on the form is run in full: 10,000 per case is within the cap', async () => {
+  expect(BROWSER_MONTE_CARLO_ITERATION_CAP).toBe(10000);
+  const result = await runMonteCarloInBrowser({ deal: buildDealRequest(landForm), scenarios: threeCases(10000).slice(0, 1) }, { blockSize: 2500, pause: immediately });
+  const [scenario] = result.scenarios;
+  expect(scenario.iterations_requested).toBe(10000);
+  expect(scenario.iterations_completed + scenario.failed_iterations).toBe(10000);
+  expect(scenario.warnings.some((warning) => warning.includes('capped'))).toBe(false);
+});
+
+test('a stepped simulation told to stop returns nothing instead of partial figures', async () => {
+  let rounds = 0;
+  const result = await runMonteCarloInBrowser({ deal: buildDealRequest(landForm), scenarios: threeCases(1000) }, { blockSize: 100, pause: immediately, shouldStop: () => { rounds += 1; return rounds >= 2; } });
+  expect(result).toBeNull();
+  expect(rounds).toBe(2);
 });
