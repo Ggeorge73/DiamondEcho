@@ -130,10 +130,54 @@ slow, and falls back to a timer where there is no message channel
 (`nextTask` in `frontend/src/lib/dealAnalysis.js`). A browser that puts a tab
 to sleep entirely still stops the run until the visitor returns.
 
+## The land tab's own example
+
+Before this, the Land development tab opened on the apartment-building
+example's price and hold period: a $3,000,000 purchase held five years. With
+the land costs beside it, the untouched page read "NO-GO — THE DEAL LOSES
+MONEY", a $2,756,112 loss, before a visitor had typed anything.
+
+The land tab now opens on an example of its own, twelve finished lots on six
+acres, sold as lots:
+
+| Figure | Example |
+| --- | --- |
+| Land price | $375,000 |
+| Closing costs, due diligence | $15,000, $25,000 |
+| Site work and infrastructure | $780,000 |
+| Soft costs, permits and impact fees, developer fee | $110,000, $60,000, $60,000 |
+| Contingency | 10% of site work |
+| Carrying costs | $12,000 a year |
+| Development, then sales | 12 months, then 12 months |
+| Loan | 65% of cost, 6.75%, interest only, 2 years |
+| Sale of the lots | $2,280,000 ($190,000 a lot), 6% selling costs |
+| Target margin | 20% of exit value |
+
+Untouched, it reads **"CONDITIONAL GO — VERIFY BEFORE CLOSING"**: a $474,542
+profit, 20.81% of exit value, a highest workable land price of $391,945
+(shown as $390,000), and 0 of 10 diligence items verified. The page and the
+service give the same figures for it. It was chosen to show a deal that works
+on paper and still has every piece of diligence to do, which is the state a
+real land deal starts in.
+
+**These are made-up figures, not a real property, a market estimate or advice.**
+The page says so in two places: the line above the form ("Any prefilled numbers
+are illustrative") and the note shown on opening the tab. Gbenga can replace
+any of them; they are in `initialForm` and `LAND_EXAMPLE_SHARED` in
+`frontend/src/pages/InvestmentCalculator.jsx`.
+
+How the swap works. The land-only boxes simply start with these values. Six
+boxes are shared with the other two tabs (purchase price, closing costs,
+initial capital work, hold period, interest-only period, loan term). While one
+of those still holds an untouched example figure, opening the land tab changes
+it to the land example's and leaving puts the building's back, and the note
+says so. A figure the visitor typed is never changed. A box cleared because an
+address was typed stays empty. Buildable square feet is not swapped, because
+its land value would be an empty box, and an empty box must never be refilled
+with an example.
+
 ## Not done
 
 - Address suggestions and public-record prefill (finding 7).
 - A Go / No-Go for fix and flip.
-- A land-specific example: the land tab's untouched example figures reuse the
-  rental example's price and hold period and read as a loss-making deal.
 - The decision is not written into the Excel workbook.

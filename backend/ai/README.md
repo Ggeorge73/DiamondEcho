@@ -7,7 +7,9 @@ This package is the safe, auditable boundary for DiamondEcho's real-estate assis
 - answers common buying, selling, renting, mortgage, tax, and investment questions;
 - attaches authoritative citations to regulated-topic answers;
 - requests a state/locality before making jurisdiction-sensitive claims;
-- blocks protected-class housing steering and common sensitive credentials;
+- turns protected-class housing steering, tenant selection by protected traits, and requests to rate a place towards neutral criteria, and refuses common sensitive credentials;
+- reads a short reply against the question it answers, using the recent conversation the page sends (nothing is stored);
+- points to this site's own tools and, when a person is the right next step, to the request form;
 - routes deal arithmetic to deterministic mortgage, rental, fix-and-flip, and commercial calculators;
 - marks estimates, professional-review needs, and handoff recommendations in structured API fields.
 
