@@ -115,6 +115,14 @@ test.each([
   expect(container.querySelectorAll('.studio-risk-results article')).toHaveLength(3);
 });
 
+// DE-25: DiamondEcho works in Georgia; the illustrative starting market is a
+// Georgia one, and the first analysis is sent with it.
+test('the illustrative starting market is Atlanta, GA', async () => {
+  expect(container.querySelector('[name="market"]').value).toBe('Atlanta, GA');
+  await submitBase();
+  expect(analyzeDealLocally.mock.calls[0][0].property.market).toBe('Atlanta, GA');
+});
+
 test('an incomplete risk summary shows a recoverable error', async () => {
   runMonteCarloLocally.mockReturnValueOnce({
     scenarios: [{ name: 'Committee case', iterations_completed: 10, summaries: {} }],

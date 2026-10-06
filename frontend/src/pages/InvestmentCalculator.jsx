@@ -35,7 +35,7 @@ const MARKET_OPTIONS = [
 ];
 
 const initialForm = {
-  address: '', strategy: 'rental', propertyType: 'multifamily', market: 'Austin, TX',
+  address: '', strategy: 'rental', propertyType: 'multifamily', market: 'Atlanta, GA',
   units: '12', rentableSquareFeet: '18000', purchasePrice: '3000000',
   closingCosts: '75000', dueDiligenceCosts: '25000', initialCapex: '125000', holdMonths: '60',
   ltv: '65', interestRate: '6.75', amortizationYears: '30', interestOnlyMonths: '0',
