@@ -8,7 +8,7 @@ Prepared by Claude acting as the Engineering agent on 2026-10-03. This table rec
 - Commands, npm 10.9.3: `npm audit --json` for the whole lockfile, and `npm audit --omit=dev --workspace staff-queue --json`.
 - The same counts appear in the audit workflow run on PR #22 (run 37134363124, artifact `build-toolchain.json`).
 - Installed versions and dev flags are read from `package-lock.json`. "Pulled in by" comes from `npm explain`.
-- The release-candidate rerun that DE-34 requires is still outstanding. This table must be re-checked against that commit.
+- The audit was rerun on 2026-10-07 (see the update of that date). It must be run again on the commit that launches.
 
 ## Counts
 
@@ -83,7 +83,60 @@ Conditions. The acceptance lapses, and this section must be revisited, if any of
 - `braces` 3.0.3 (high): there is no patched release. 3.0.3 is the latest and the advisory covers it. It expands glob patterns written in this repository's own tool configuration. Recheck at each audit run and update when a fix is published.
 - `@tootallnate/once` 1.1.2 (low): test-only, on a code path used when jsdom fetches through a proxy, which the tests do not do. The earlier option of upgrading the staff `jsdom` does not clear it: a lockfile dry run with staff `jsdom` 30.1.1 still reports the package, because Jest under `react-scripts` keeps `jsdom` 16. It also adds a Node engine requirement. It clears with DE-36.
 
-After these two decisions every one of the 22 remaining advisories has a recorded disposition. Still outstanding on DE-34: the release-candidate rerun of the audit.
+After these two decisions every one of the 22 remaining advisories has a recorded disposition. Still outstanding on DE-34: the release-candidate rerun of the audit. (Rerun on 2026-10-07; see the update of that date.)
+
+## Update, 2026-10-07: six advisories that were not there on 2026-10-03, two of them critical
+
+The audit was run again on `main` at `908ea0c` at about 00:25 UTC on 2026-10-07, with npm 10.9.4 and the same four scopes as the audit workflow.
+
+| Scope | Result |
+| --- | --- |
+| Frontend, what visitors receive (`npm audit --omit=dev --workspace frontend`) | 0 |
+| Staff queue, what staff receive (`npm audit --omit=dev --workspace staff-queue`) | 0 |
+| Backend runtime (`pip-audit` 2.10.1 on the frozen runtime packages) | No known vulnerabilities |
+| Whole lockfile, build and test tools included (`npm audit`) | **102 packages: 2 critical, 62 high, 35 moderate, 3 low.** It was 69 on 2026-10-03 |
+
+The lockfile holds the same versions of these six packages as it did on 2026-10-03 (checked against the lockfile of that day, commit `ef31e52`). The advisories are what is new:
+
+| Package | Severity | Advisory | Where it runs |
+| --- | --- | --- | --- |
+| `proxy-addr` 2.0.7 | **critical** | GHSA-jqcg-44mw-7w3h, address spoofing through an IPv4-mapped IPv6 trusted range | `express` inside `webpack-dev-server`: the local development server only |
+| `shell-quote` 1.9.0 | **critical** | GHSA-pqg4-j6r4-53mv, command injection through a line terminator in `quote()` | `react-dev-utils` and `launch-editor`: opening a browser or an editor from the local development server |
+| `compression` 1.8.1 | high | GHSA-vc2v-76pw-4v95, memory leak when a response is cut short | `webpack-dev-server` only |
+| `source-map-js` 1.2.1 | high | GHSA-68fv-2mgg-jv7q, the event loop can be held up by a crafted source map | `postcss`, during the build |
+| `postcss-selector-parser` 6.1.4 and 7.1.4 | moderate | GHSA-rj75-hqrm-r3gf, slow parsing of very long selectors | Tailwind and the `react-scripts` stylesheet steps, during the build |
+| `sprintf-js` 1.0.3 | moderate | GHSA-hp3w-g68c-fv3c, denial of service through an unbounded precision | `argparse` under `js-yaml` 3, during build and tests |
+
+None of the six is in a file a visitor or a member of staff receives.
+
+**Condition 5 of decision 3 says the acceptance lapses if a critical advisory appears. Two have.** So the acceptance was revisited instead of carried forward.
+
+What was done. `npm audit fix` without `--force` changes five packages, each inside the version range its parent already asks for: `proxy-addr` 2.0.8, `shell-quote` 1.12.0, `compression` 1.8.2, `source-map-js` 1.2.2, and the 7.x copy of `postcss-selector-parser` to 7.1.6. No `package.json` changes.
+
+Counts with those updates:
+
+- Whole lockfile: 98 packages (0 critical, 60 high, 35 moderate, 3 low).
+- Frontend, staff and backend scopes stay at 0.
+- 12 root packages and 24 distinct advisories remain: the 22 with a disposition above, and two new ones that have no update inside the range.
+
+The moderate count is 35, not 5, because npm counts every package that depends on an affected one: 24 packages are rated moderate only through `postcss-selector-parser` 6 and 5 only through `sprintf-js`. They are two advisories.
+
+Checked with the updated lockfile, after `npm ci`:
+
+- The public site built with the production API address is byte-identical to what `908ea0c` serves today: `main.18241c82.js`, `main.d4914150.css` and `index.html`, same SHA-256 as on `diamondecho.com`. Visitors receive the same files.
+- Frontend tests 499 of 499, staff tests 22 of 22.
+- The development server (`craco start` on `127.0.0.1`) compiles, answers on `/` and `/search`, and compresses its responses. Opening a browser or an editor from it, the path that uses `shell-quote`, was not exercised.
+
+**Two new advisories remain and need Gbenga's decision (5):**
+
+- `postcss-selector-parser` 6.1.4 (moderate). There is no patched 6.x release (6.1.4 is the last and the advisory covers everything below 7.1.6); the plugins that ask for 6 come with `react-scripts`. It parses selectors written in this repository's own stylesheets.
+- `sprintf-js` 1.0.3 (moderate). No patched release exists; the advisory covers every version up to the latest, 1.1.3. It comes with `js-yaml` 3, already listed above.
+
+Engineering's recommendation: accept both for launch on the conditions of decision 3, and let them clear with DE-36. Risk acceptance is Gbenga's alone. As with decisions 3 and 4, merging the pull request that adds this section records his acceptance; if he does not accept, he should say so on the pull request and this paragraph comes out.
+
+With that, condition 5 holds again: no critical advisory is reported.
+
+Still outstanding: the audit must be run once more on the commit that launches. New advisories can appear on any day, as these did.
 
 ## Decisions
 
@@ -94,6 +147,7 @@ After these two decisions every one of the 22 remaining advisories has a recorde
 | 2a | `underscore`: handle on its own with an override, or leave for decision 3 | 1 advisory | Decided by Gbenga on 2026-10-03: apply the override. See the update above |
 | 3 | Replace `react-scripts`, or accept its build-time findings | 20 advisories in 8 packages | Decided on 2026-10-03: accept for launch on conditions; replace under DE-36. See the update above |
 | 4 | Accept `braces` (no patched release) and the low-severity `@tootallnate/once` test finding, or upgrade staff `jsdom` | 2 advisories | Decided on 2026-10-03: accept both. The `jsdom` upgrade does not clear the finding. See the update above |
+| 5 | Accept `postcss-selector-parser` 6 and `sprintf-js` (no update inside the range), or bring DE-36 forward | 2 advisories, both moderate | **Open, 2026-10-07.** Engineering recommends accepting. See the update above |
 
 ## Disposition by root package
 
