@@ -26,8 +26,10 @@ Georgia MLS frame itself is empty in these runs and was not checked.
 ## What it found
 
 No wrong status, missing heading, sideways scroll or script error in any of the
-79 states. axe-core reported four kinds of fault, all rated serious, and one
-more turned up while checking the fixes:
+79 states. axe-core reported three failing rules, all rated serious: colour
+contrast, links told apart by colour alone, and spoken names that leave out the
+visible words. They are rows 1 to 5 below. Row 6 was not reported by the tool;
+it turned up while checking the fixes and was then measured:
 
 | # | Fault | Where | Fix |
 | --- | --- | --- | --- |
