@@ -78,7 +78,17 @@ const cellXml = (descriptor, rowIndex, columnIndex) => {
   if (!descriptor || descriptor.value == null) return '';
   const reference = `${columnName(columnIndex)}${rowIndex}`;
   const style = descriptor.style ? ` s="${descriptor.style}"` : '';
-  if (descriptor.formula) return `<c r="${reference}"${style}><f>${xmlEscape(descriptor.formula)}</f><v>${Number.isFinite(descriptor.value) ? descriptor.value : 0}</v></c>`;
+  if (descriptor.formula) {
+    // The stored result is what a spreadsheet shows before it recalculates:
+    // Excel's Protected View, phone and mail previews, and LibreOffice by
+    // default. It has to be the real answer, with text stored as text. A
+    // formula whose answer is not known here is stored with no result at all,
+    // never with a stand-in zero.
+    const formula = `<f>${xmlEscape(descriptor.formula)}</f>`;
+    if (typeof descriptor.value === 'string') return `<c r="${reference}" t="str"${style}>${formula}<v>${xmlEscape(descriptor.value)}</v></c>`;
+    if (Number.isFinite(descriptor.value)) return `<c r="${reference}"${style}>${formula}<v>${descriptor.value}</v></c>`;
+    return `<c r="${reference}"${style}>${formula}</c>`;
+  }
   if (typeof descriptor.value === 'number') return `<c r="${reference}"${style}><v>${descriptor.value}</v></c>`;
   return `<c r="${reference}" t="inlineStr"${style}><is><t xml:space="preserve">${xmlEscape(descriptor.value)}</t></is></c>`;
 };
@@ -163,17 +173,41 @@ const inputRows = ({ form, request }) => {
   return { rows, rowMap };
 };
 
+// ",0.00804" for an annual 10.09%: the second argument of IRR.
+export const irrGuess = (annualRate) => {
+  if (!Number.isFinite(annualRate) || annualRate <= -1) return '';
+  const monthly = (1 + annualRate) ** (1 / 12) - 1;
+  return `,${Number(monthly.toFixed(6))}`;
+};
+
+// The year a month belongs to on the "Monthly Cash Flow" sheet (column B).
+const flowYear = (flow) => (flow.month === 0 ? 0 : Math.ceil(flow.month / 12));
+
+// What each "Annual Cash Flow" SUMIF adds up to, from the same rows the
+// monthly sheet is written from, with the same signs.
+export const annualTotals = (cashFlows, year) => cashFlows.filter((flow) => flowYear(flow) === year).reduce((total, flow) => ({
+  operating: total.operating + flow.operating_cash_flow,
+  debt: total.debt - Math.abs(flow.debt_service),
+  capital: total.capital - Math.abs(flow.capital_costs),
+  saleLessPayoff: total.saleLessPayoff + flow.sale_proceeds - Math.abs(flow.loan_payoff),
+  equity: total.equity + flow.net_cash_flow,
+}), { operating: 0, debt: 0, capital: 0, saleLessPayoff: 0, equity: 0 });
+
 const buildWorkbookParts = ({ form, request, result }) => {
   const { rows: inputs, rowMap } = inputRows({ form, request });
   const cashStart = 5; const cashEnd = cashStart + result.cash_flows.length - 1;
   const cashRows = [[cell('Monthly Levered Cash Flow', 1), null, null, null, null, null, null, null], [cell(`Exact ${request.acquisition.hold_months}-month schedule used by the website calculation.`, 2), null, null, null, null, null, null, null], [], [cell('Month', 3), cell('Year', 3), cell('Operating Cash Flow', 3), cell('Debt Service', 3), cell('Capital Costs', 3), cell('Net Sale Proceeds', 3), cell('Loan Payoff', 3), cell('Net Cash Flow', 3)]];
-  result.cash_flows.forEach((flow) => cashRows.push([cell(flow.month, 8), cell(flow.month === 0 ? 0 : Math.ceil(flow.month / 12), 8), cell(flow.operating_cash_flow, 5), cell(-Math.abs(flow.debt_service), 5), cell(-Math.abs(flow.capital_costs), 5), cell(flow.sale_proceeds, 5), cell(-Math.abs(flow.loan_payoff), 5), cell(flow.net_cash_flow, 5)]));
+  result.cash_flows.forEach((flow) => cashRows.push([cell(flow.month, 8), cell(flowYear(flow), 8), cell(flow.operating_cash_flow, 5), cell(-Math.abs(flow.debt_service), 5), cell(-Math.abs(flow.capital_costs), 5), cell(flow.sale_proceeds, 5), cell(-Math.abs(flow.loan_payoff), 5), cell(flow.net_cash_flow, 5)]));
 
   const summaryRows = [[cell('DIAMOND ECHO — DEAL-SPECIFIC ANALYSIS', 1), null, null, null], [cell(`${form.address || 'Property not specified'} · ${request.strategy.toUpperCase()} · generated ${new Date().toISOString().slice(0, 10)}`, 2), null, null, null], [], [cell('Investment Committee Metric', 3), cell('Result', 3), cell('Unit', 3), cell('Method / Formula', 3)]];
   (metricOrder[request.strategy] || Object.keys(result.metrics)).forEach((key) => {
     const item = result.metrics[key]; if (!item) return;
     let formula = null;
-    if (key === 'irr' && item.value != null) formula = `(1+IRR('Monthly Cash Flow'!$H$${cashStart}:$H$${cashEnd}))^12-1`;
+    // IRR is found by trial and error from a starting guess. Left to its
+    // default of 10% a month, a spreadsheet can stop short of the answer or
+    // give up (LibreOffice returned 7.4% for a 10.1% deal and #N/A for a
+    // loss-making one). The guess is the monthly rate the website found.
+    if (key === 'irr' && item.value != null) formula = `(1+IRR('Monthly Cash Flow'!$H$${cashStart}:$H$${cashEnd}${irrGuess(item.value)}))^12-1`;
     if (key === 'npv') formula = `NPV((1+'Inputs'!$B$${rowMap.discount_rate})^(1/12)-1,'Monthly Cash Flow'!$H$${cashStart + 1}:$H$${cashEnd})+'Monthly Cash Flow'!$H$${cashStart}`;
     if (key === 'equity_multiple' && item.value != null) formula = `SUMIF('Monthly Cash Flow'!$H$${cashStart}:$H$${cashEnd},\">0\",'Monthly Cash Flow'!$H$${cashStart}:$H$${cashEnd})/ABS(SUMIF('Monthly Cash Flow'!$H$${cashStart}:$H$${cashEnd},\"<0\",'Monthly Cash Flow'!$H$${cashStart}:$H$${cashEnd}))`;
     const displayUnit = item.unit === 'decimal_rate' ? '%' : item.unit === 'multiple' || item.unit === 'ratio' ? 'x' : item.unit;
@@ -186,12 +220,23 @@ const buildWorkbookParts = ({ form, request, result }) => {
   const annualRows = [[cell('Annual Cash Flow Summary', 1), null, null, null, null, null, null], [cell('Formula-linked roll-up of the monthly cash-flow schedule.', 2), null, null, null, null, null, null], [], [cell('Year', 3), cell('Operating Cash Flow', 3), cell('Debt Service', 3), cell('Capital Costs', 3), cell('Net Sale / Payoff', 3), cell('Equity Cash Flow', 3)]];
   for (let year = 1; year <= years; year += 1) {
     const row = annualRows.length + 1;
-    annualRows.push([cell(year, 8), cell(0, 5, `SUMIF('Monthly Cash Flow'!$B$${cashStart}:$B$${cashEnd},A${row},'Monthly Cash Flow'!$C$${cashStart}:$C$${cashEnd})`), cell(0, 5, `SUMIF('Monthly Cash Flow'!$B$${cashStart}:$B$${cashEnd},A${row},'Monthly Cash Flow'!$D$${cashStart}:$D$${cashEnd})`), cell(0, 5, `SUMIF('Monthly Cash Flow'!$B$${cashStart}:$B$${cashEnd},A${row},'Monthly Cash Flow'!$E$${cashStart}:$E$${cashEnd})`), cell(0, 5, `SUMIF('Monthly Cash Flow'!$B$${cashStart}:$B$${cashEnd},A${row},'Monthly Cash Flow'!$F$${cashStart}:$F$${cashEnd})+SUMIF('Monthly Cash Flow'!$B$${cashStart}:$B$${cashEnd},A${row},'Monthly Cash Flow'!$G$${cashStart}:$G$${cashEnd})`), cell(0, 5, `SUMIF('Monthly Cash Flow'!$B$${cashStart}:$B$${cashEnd},A${row},'Monthly Cash Flow'!$H$${cashStart}:$H$${cashEnd})`)]);
+    const totals = annualTotals(result.cash_flows, year);
+    annualRows.push([cell(year, 8), cell(totals.operating, 5, `SUMIF('Monthly Cash Flow'!$B$${cashStart}:$B$${cashEnd},A${row},'Monthly Cash Flow'!$C$${cashStart}:$C$${cashEnd})`), cell(totals.debt, 5, `SUMIF('Monthly Cash Flow'!$B$${cashStart}:$B$${cashEnd},A${row},'Monthly Cash Flow'!$D$${cashStart}:$D$${cashEnd})`), cell(totals.capital, 5, `SUMIF('Monthly Cash Flow'!$B$${cashStart}:$B$${cashEnd},A${row},'Monthly Cash Flow'!$E$${cashStart}:$E$${cashEnd})`), cell(totals.saleLessPayoff, 5, `SUMIF('Monthly Cash Flow'!$B$${cashStart}:$B$${cashEnd},A${row},'Monthly Cash Flow'!$F$${cashStart}:$F$${cashEnd})+SUMIF('Monthly Cash Flow'!$B$${cashStart}:$B$${cashEnd},A${row},'Monthly Cash Flow'!$G$${cashStart}:$G$${cashEnd})`), cell(totals.equity, 5, `SUMIF('Monthly Cash Flow'!$B$${cashStart}:$B$${cashEnd},A${row},'Monthly Cash Flow'!$H$${cashStart}:$H$${cashEnd})`)]);
   }
 
   const positiveDistributions = result.cash_flows.filter((flow) => flow.net_cash_flow > 0).length;
   const saleProceeds = result.cash_flows.reduce((sum, flow) => sum + flow.sale_proceeds, 0);
-  const checks = [[cell('Checks & Warnings', 1), null, null, null, null, null], [cell('One assertion per row; REVIEW flags require judgment rather than representing a formula error.', 2), null, null, null, null, null], [], [cell('Check', 3), cell('Actual', 3), cell('Expected', 3), cell('Difference', 3), cell('Tolerance', 3), cell('Status', 3)], [cell('Cash-flow row count'), cell(result.cash_flows.length), cell(request.acquisition.hold_months + 1), cell(0, 8, 'B5-C5'), cell(0), cell('OK', 12, 'IF(ABS(D5)<=E5,"OK","FAIL")')], [cell('Initial equity is an outflow'), cell(result.cash_flows[0].net_cash_flow, 5), cell('Negative'), null, null, cell('OK', 12, 'IF(B6<0,"OK","FAIL")')], [cell('Positive distributions available for IRR'), cell(positiveDistributions), cell('At least 1'), null, null, cell(positiveDistributions ? 'OK' : 'REVIEW', positiveDistributions ? 12 : 14, 'IF(B7>=1,"OK","REVIEW")')], [cell('Terminal sale proceeds'), cell(saleProceeds, 5), cell('Greater than 0'), null, null, cell(saleProceeds > 0 ? 'OK' : 'REVIEW', saleProceeds > 0 ? 12 : 14, 'IF(B8>0,"OK","REVIEW")')], [cell('Overall model status'), null, null, null, null, cell('OK', 12, 'IF(COUNTIF(F5:F8,"FAIL")>0,"FAIL",IF(COUNTIF(F5:F8,"REVIEW")>0,"REVIEW","OK"))')], [], [cell('WARNINGS', 2), null, null, null, null, null]];
+  // Each status is worked out here exactly as its formula works it out, so
+  // the stored word and the recalculated word are the same word.
+  const rowDifference = result.cash_flows.length - (request.acquisition.hold_months + 1);
+  const rowStatus = Math.abs(rowDifference) <= 0 ? 'OK' : 'FAIL';
+  const equityStatus = result.cash_flows[0].net_cash_flow < 0 ? 'OK' : 'FAIL';
+  const distributionStatus = positiveDistributions >= 1 ? 'OK' : 'REVIEW';
+  const saleStatus = saleProceeds > 0 ? 'OK' : 'REVIEW';
+  const statuses = [rowStatus, equityStatus, distributionStatus, saleStatus];
+  const overallStatus = statuses.includes('FAIL') ? 'FAIL' : statuses.includes('REVIEW') ? 'REVIEW' : 'OK';
+  const statusStyle = (status) => (status === 'OK' ? 12 : 14);
+  const checks = [[cell('Checks & Warnings', 1), null, null, null, null, null], [cell('One assertion per row; REVIEW flags require judgment rather than representing a formula error.', 2), null, null, null, null, null], [], [cell('Check', 3), cell('Actual', 3), cell('Expected', 3), cell('Difference', 3), cell('Tolerance', 3), cell('Status', 3)], [cell('Cash-flow row count'), cell(result.cash_flows.length), cell(request.acquisition.hold_months + 1), cell(rowDifference, 8, 'B5-C5'), cell(0), cell(rowStatus, statusStyle(rowStatus), 'IF(ABS(D5)<=E5,"OK","FAIL")')], [cell('Initial equity is an outflow'), cell(result.cash_flows[0].net_cash_flow, 5), cell('Negative'), null, null, cell(equityStatus, statusStyle(equityStatus), 'IF(B6<0,"OK","FAIL")')], [cell('Positive distributions available for IRR'), cell(positiveDistributions), cell('At least 1'), null, null, cell(distributionStatus, statusStyle(distributionStatus), 'IF(B7>=1,"OK","REVIEW")')], [cell('Terminal sale proceeds'), cell(saleProceeds, 5), cell('Greater than 0'), null, null, cell(saleStatus, statusStyle(saleStatus), 'IF(B8>0,"OK","REVIEW")')], [cell('Overall model status'), null, null, null, null, cell(overallStatus, statusStyle(overallStatus), 'IF(COUNTIF(F5:F8,"FAIL")>0,"FAIL",IF(COUNTIF(F5:F8,"REVIEW")>0,"REVIEW","OK"))')], [], [cell('WARNINGS', 2), null, null, null, null, null]];
   result.warnings.forEach((warning) => checks.push([cell(warning, 14), null, null, null, null, null]));
 
   const cover = [[cell('DIAMOND ECHO', 1), null, null, null], [cell('Deal-Specific Institutional Real Estate Analysis', 2), null, null, null], [], [cell('Property', 3), cell(form.address || 'Not entered')], [cell('Strategy', 3), cell(request.strategy)], [cell('Formula version', 3), cell(result.formula_version)], [cell('Generated', 3), cell(new Date().toISOString())], [cell('Model status', 3), cell('Review the Checks & Warnings sheet before reliance.')], [], [cell('HOW TO USE', 2), null, null, null], [cell('1'), cell('This workbook contains the exact assumptions and cash flows submitted through the Deal Analysis page.')], [cell('2'), cell('Blue-font inputs document the submitted assumptions; calculation outputs reconcile to the website result.')], [cell('3'), cell('IRR is intentionally shown as undefined when cash flows do not include both an outflow and a positive distribution.')], [cell('4'), cell('This is an illustrative underwriting tool, not an appraisal, tax opinion, credit decision, or investment recommendation.')]];
@@ -221,7 +266,7 @@ export const buildDealWorkbook = ({ form, request, result }) => {
   const workbookRels = `${XML_HEADER}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${sheets.map((_, index) => `<Relationship Id="rId${index + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${index + 1}.xml"/>`).join('')}<Relationship Id="rId${sheets.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`;
   const now = new Date().toISOString();
   const core = `${XML_HEADER}<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>DiamondEcho Deal-Specific Analysis</dc:title><dc:creator>DiamondEcho</dc:creator><dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified></cp:coreProperties>`;
-  const app = `${XML_HEADER}<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>DiamondEcho Deal Analysis</Application><AppVersion>1.1</AppVersion></Properties>`;
+  const app = `${XML_HEADER}<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>DiamondEcho Deal Analysis</Application><AppVersion>1.2</AppVersion></Properties>`;
   const entries = [{ name: '[Content_Types].xml', content: contentTypes }, { name: '_rels/.rels', content: rootRels }, { name: 'docProps/core.xml', content: core }, { name: 'docProps/app.xml', content: app }, { name: 'xl/workbook.xml', content: workbook }, { name: 'xl/_rels/workbook.xml.rels', content: workbookRels }, { name: 'xl/styles.xml', content: stylesXml() }];
   sheets.forEach((sheet, index) => entries.push({ name: `xl/worksheets/sheet${index + 1}.xml`, content: worksheetXml(sheet) }));
   return zipStore(entries);
