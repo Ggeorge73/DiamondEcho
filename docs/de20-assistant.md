@@ -26,6 +26,13 @@ for Georgia only, the Department of Revenue's transfer tax page.
    numbers are refused. Then fair housing, described below.
 2. **A person** (`intent.wants_human`): "talk to an agent", "call me", "a
    human". The answer explains the request form and links to it.
+   **A tour** (`intent.asks_for_tour`), when the message names no topic of its
+   own: "I would like to tour a property", "Can I schedule a showing?", "Could
+   I see the house this weekend?". The answer links to the tour request form
+   and says a tour request is a request, not a booking. "Showing" alone is not
+   enough ("the market is showing signs of cooling"), and a question with a
+   topic keeps its answer ("What should I look for when touring a house I want
+   to buy?" gets buyer guidance).
 3. **Thanks**: answered as thanks.
 4. **Topic** (`backend/ai/intent.py`), first match wins: deal analysis, closing
    costs, loans, selling, renting, buying. Whole words only: "current" is not
@@ -105,6 +112,38 @@ Two halves, and they do not have to arrive together:
   fair-housing check) goes live only when the API is redeployed, which needs
   Gbenga's yes. Until then production keeps the old answers.
 
+**2026-10-07: both halves are live.** The service was redeployed from `main`
+at `f8853da` with Gbenga's yes (revision `diamondecho-api-00007-deh`, serving
+all requests from 01:05 UTC). Record in `docs/de13-production-setup.md`.
+
+## Checked on production (2026-10-07, 01:07 to 01:10 UTC)
+
+Against the production service, 18 messages in 15 conversations, sent the way
+the panel sends them. Every answer is byte-identical to the answer a local copy
+of the service at `f8853da` gives. Then on `diamondecho.com`, in the panel
+itself:
+
+| Criterion | Seen on production |
+| --- | --- |
+| Buyer quick prompt gets buyer guidance | The button "Help me plan a home purchase" gets the purchase answer, with links to the Mortgage Simulator and the Georgia MLS search. Before the redeploy it got the opening menu |
+| Seller location follow-up continues | "I want to sell my house", then "A primary home in Atlanta, Georgia": the answer begins "Thanks. For a primary home in Georgia"; the state box fills with GA; the next question about closing costs is answered for Georgia |
+| Dates match source metadata | Each source shows its publisher and its own date: sources from three publishers read "reviewed Jul 9, 2026" and the Georgia Department of Revenue reads "reviewed Oct 6, 2026" |
+| Human handoff reaches approved intake | "Can I talk to an agent?" in that selling conversation shows "Send a seller request to a DiamondEcho agent" linking to `/inquire?type=seller`, with "Your chat is not sent with the request." |
+| Service errors recover | One request was pointed at an address that does not exist, in the test browser only; production was not made to fail. The panel said the question was not lost and offered "Try again" and the request link. "Try again" got the answer, and the question appears once |
+| Safety paraphrases are reframed | "Which neighborhoods are best for families with kids?" gets the fair-housing reply with the HUD source. Before the redeploy it got the opening menu |
+
+Also: `/docs`, `/redoc` and `/openapi.json` on the service answer 404 (DE-25
+finding F4).
+
+**Found in this check, fixed here, not live yet.** "I would like to tour a
+property" got the opening menu: only a message that also asked for a person
+("... can someone call me") was pointed to the tour form. A plain tour request
+now gets the tour form (see "How a message is read"). This is a change to the
+service, so it reaches production only at the next API redeploy, which needs
+Gbenga's yes.
+
+Not sent in this check: no request through any form.
+
 ## Checked in a browser
 
 Chromium, 1280 px and 390 px wide, the built site against a local copy of the
@@ -122,8 +161,8 @@ header. The panel is now shorter by the height of the header.
 ## Not done
 
 - No real phone, Safari, Firefox or screen reader.
-- Not checked on a deployed service; previews have no service address, so the
-  assistant is not offered there at all.
+- Previews have no service address, so the assistant is not offered there at
+  all; the deployed check was made on production, after the redeploy.
 - State sources. Only Georgia's transfer tax has a reviewed source. For any
   other state, and for Georgia landlord and tenant law, the answer says it has
   no reviewed source and gives no figure.
