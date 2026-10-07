@@ -89,8 +89,11 @@ const initialForm = {
   utilities: '12000', payrollAdmin: '18000', managementFee: '4', reserves: '30000',
   annualBelowNoiCosts: '10000', incomeGrowth: '3', expenseGrowth: '3', exitCap: '6.5',
   explicitSalePrice: '',
-  arv: '4200000', rehabCost: '450000', rehabContingency: '10', monthlyHolding: '7500',
-  otherProjectCosts: '50000', sellingCosts: '6', discountRate: '10', mcIterations: '2500',
+  // The fix-and-flip example: one single-family house, bought, renovated and
+  // sold in ten months. An illustration like the rest. The figures the flip
+  // tab shares with the other two tabs are in FLIP_EXAMPLE_SHARED below.
+  arv: '360000', rehabCost: '65000', rehabContingency: '10', monthlyHolding: '1800',
+  otherProjectCosts: '6000', sellingCosts: '6', discountRate: '10', mcIterations: '2500',
   targetCashOnCash: '8', minimumDscr: '1.2', targetIrr: '15', preliminaryMarketCeiling: '',
   maxImmediateCapex: '', maxAnnualTaxes: '', maxAnnualInsurance: '',
   // The land example: twelve finished lots on six acres, sold as lots. Like
@@ -128,17 +131,43 @@ export const LAND_EXAMPLE_SHARED = Object.freeze({
   interestOnlyMonths: '24', loanTermYears: '2',
 });
 
+// DE-25. The same happened on the Fix & flip tab: the apartment building held
+// for five years read as a flip that lost $930,936. The flip tab has its own
+// example too, one single-family house, and it shares three more boxes with
+// the other tabs than land does (units, square feet, due diligence). The same
+// rules apply: only untouched example figures move, and none may be empty.
+export const FLIP_EXAMPLE_SHARED = Object.freeze({
+  units: '1', rentableSquareFeet: '1800', purchasePrice: '180000', closingCosts: '5500',
+  dueDiligenceCosts: '1500', initialCapex: '0', holdMonths: '10',
+  interestOnlyMonths: '10', loanTermYears: '1',
+});
+
+const SHARED_EXAMPLE_FIELDS = Object.keys(FLIP_EXAMPLE_SHARED);
+const BUILDING_EXAMPLE_SHARED = Object.fromEntries(SHARED_EXAMPLE_FIELDS.map((field) => [field, initialForm[field]]));
+// Each tab's example, for the boxes the tabs share.
+const SHARED_EXAMPLES = {
+  rental: BUILDING_EXAMPLE_SHARED,
+  flip: FLIP_EXAMPLE_SHARED,
+  land: { ...BUILDING_EXAMPLE_SHARED, ...LAND_EXAMPLE_SHARED },
+};
+// The asset type each building example is about. Land has its own rule: the
+// Land development tab only analyses Lot / land.
+export const EXAMPLE_ASSET_TYPES = Object.freeze({ rental: 'multifamily', flip: 'single_family' });
+
 const SHARED_EXAMPLE_LABELS = {
-  purchasePrice: 'purchase price', closingCosts: 'closing costs', initialCapex: 'initial capital work',
+  units: 'units', rentableSquareFeet: 'square feet', purchasePrice: 'purchase price',
+  closingCosts: 'closing costs', dueDiligenceCosts: 'due diligence', initialCapex: 'initial capital work',
   holdMonths: 'hold period', interestOnlyMonths: 'interest-only period', loanTermYears: 'loan term',
 };
 
 // Which of the shared boxes to change when moving between tabs, and to what.
-export const exampleSwap = (form, fromStrategy, toStrategy, entered = new Set()) => {
-  if ((fromStrategy === 'land') === (toStrategy === 'land')) return {};
-  const [from, to] = toStrategy === 'land' ? [initialForm, LAND_EXAMPLE_SHARED] : [LAND_EXAMPLE_SHARED, initialForm];
-  return Object.fromEntries(Object.keys(LAND_EXAMPLE_SHARED)
-    .filter((field) => !entered.has(field) && form[field] === from[field])
+// `held` names the boxes that are the visitor's own or loaded for an address.
+export const exampleSwap = (form, fromStrategy, toStrategy, held = new Set()) => {
+  const from = SHARED_EXAMPLES[fromStrategy];
+  const to = SHARED_EXAMPLES[toStrategy];
+  if (!from || !to || fromStrategy === toStrategy) return {};
+  return Object.fromEntries(SHARED_EXAMPLE_FIELDS
+    .filter((field) => !held.has(field) && form[field] === from[field] && to[field] !== from[field])
     .map((field) => [field, to[field]]));
 };
 
@@ -222,6 +251,10 @@ const InvestmentCalculator = () => {
   const enteredFields = useRef(new Set());
   // The asset type in use before the Land development tab, to return to.
   const lastBuiltType = useRef(null);
+  // Whether the asset type is still the example's: nobody chose it and nothing
+  // loaded it. While it is, it follows the tab like the other example figures.
+  const assetTypeIsExample = useRef(true);
+  const lastBuiltWasExample = useRef(false);
   const resultsRef = useRef(null);
   const backendUrl = useMemo(() => (process.env.REACT_APP_BACKEND_URL || '').replace(/\/$/, ''), []);
   const sessionToken = useMemo(() => globalThis.crypto?.randomUUID?.() || `session-${Date.now()}`, []);
@@ -336,6 +369,7 @@ const InvestmentCalculator = () => {
     }
     invalidateAnalysis();
     enteredFields.current.add(name);
+    if (name === 'propertyType') assetTypeIsExample.current = false;
     setPropertyProvenance((current) => ({ ...current, [name]: { source: 'Your input', description: 'Entered for this analysis; verify before relying on it' } }));
     setForm((current) => ({ ...current, [name]: value }));
   };
@@ -358,36 +392,53 @@ const InvestmentCalculator = () => {
     invalidateAnalysis();
     const previousType = form.propertyType;
     let nextType = previousType;
+    // The untouched example asset type moved with the example (rental and flip).
+    let exampleTypeMoved = false;
     if (strategy === 'land') {
-      if (previousType !== 'land') lastBuiltType.current = previousType;
+      if (previousType !== 'land') {
+        lastBuiltType.current = previousType;
+        lastBuiltWasExample.current = assetTypeIsExample.current && previousType === EXAMPLE_ASSET_TYPES[form.strategy];
+      }
       nextType = 'land';
     } else if (typeof chosenType === 'string') {
       nextType = chosenType;
+      assetTypeIsExample.current = false;
     } else if (previousType === 'land') {
-      nextType = lastBuiltType.current || (strategy === 'flip' ? 'single_family' : 'multifamily');
+      nextType = lastBuiltWasExample.current
+        ? EXAMPLE_ASSET_TYPES[strategy]
+        : lastBuiltType.current || EXAMPLE_ASSET_TYPES[strategy];
+      assetTypeIsExample.current = lastBuiltWasExample.current;
+    } else if (assetTypeIsExample.current && previousType === EXAMPLE_ASSET_TYPES[form.strategy]) {
+      nextType = EXAMPLE_ASSET_TYPES[strategy];
+      exampleTypeMoved = nextType !== previousType;
     }
-    if (nextType !== previousType) {
+    if (nextType !== previousType && !exampleTypeMoved) {
       setPropertyProvenance((current) => ({ ...current, propertyType: { source: 'Your input', description: 'Selected for this analysis; verify against the property' } }));
     }
-    // Untouched example figures follow the tab; anything entered stays (DE-37).
-    const swapped = exampleSwap(form, form.strategy, strategy, enteredFields.current);
-    const swappedNames = Object.keys(swapped).map((field) => SHARED_EXAMPLE_LABELS[field]).join(', ');
+    // Untouched example figures follow the tab; anything entered, or loaded for
+    // an address, stays (DE-37, DE-25).
+    const held = new Set([...enteredFields.current, ...Object.keys(propertyProvenance)]);
+    const swapped = exampleSwap(form, form.strategy, strategy, held);
+    const swappedNames = [...(exampleTypeMoved ? ['asset type'] : []), ...Object.keys(swapped).map((field) => SHARED_EXAMPLE_LABELS[field])].join(', ');
+    const andType = exampleTypeMoved ? ', and the asset type,' : '';
     const swapNote = !swappedNames ? ''
       : !('purchasePrice' in swapped)
         // Only some boxes still held examples (the rest were typed, or cleared for an address): name them.
-        ? ` These example figures, which you had not changed, were set ${strategy === 'land' ? 'for a land deal' : 'back for a building'}: ${swappedNames}.`
+        ? ` These example figures, which you had not changed, were set ${strategy === 'land' ? 'for a land deal' : strategy === 'flip' ? 'for a fix and flip' : 'back for a building'}: ${swappedNames}.`
         : strategy === 'land'
           ? ' The example figures you had not changed are now a land example (twelve finished lots on six acres). They are illustrations, not facts about any property.'
-          : ' The example figures you had not changed are the building example again.';
+          : strategy === 'flip'
+            ? ` The example figures you had not changed${andType} are now a fix-and-flip example (one single-family house). They are illustrations, not facts about any property.`
+            : ` The example figures you had not changed${andType} are the building example again.`;
     let message = '';
     if (chosenType === true) {
       message = `Moved to the ${STRATEGY_LABELS.land} tab, because ${ASSET_TYPE_LABELS.land} is analysed there. Your figures were kept.`;
     } else if (typeof chosenType === 'string') {
       message = `Moved to the ${STRATEGY_LABELS[strategy]} tab, because the ${STRATEGY_LABELS.land} tab only analyses ${ASSET_TYPE_LABELS.land}. Your figures were kept.`;
-    } else if (nextType !== previousType) {
+    } else if (nextType !== previousType && !exampleTypeMoved) {
       message = strategy === 'land'
-        ? `Asset type set to ${ASSET_TYPE_LABELS.land} for the ${STRATEGY_LABELS.land} tab. It returns to ${ASSET_TYPE_LABELS[previousType] || previousType} when you leave this tab.`
-        : `Asset type set back to ${ASSET_TYPE_LABELS[nextType] || nextType}, because ${ASSET_TYPE_LABELS.land} is analysed only on the ${STRATEGY_LABELS.land} tab. Change it in "Asset type" if that is not right.`;
+        ? `Asset type set to ${ASSET_TYPE_LABELS.land} for the ${STRATEGY_LABELS.land} tab. ${lastBuiltWasExample.current ? 'It is set back' : `It returns to ${ASSET_TYPE_LABELS[previousType] || previousType}`} when you leave this tab.`
+        : `Asset type set ${nextType === lastBuiltType.current ? 'back to' : 'to'} ${ASSET_TYPE_LABELS[nextType] || nextType}, because ${ASSET_TYPE_LABELS.land} is analysed only on the ${STRATEGY_LABELS.land} tab. Change it in "Asset type" if that is not right.`;
     }
     if (message || swapNote) setNotice({ text: `${message}${swapNote}`.trim(), restore: null });
     setForm((current) => ({ ...current, ...swapped, strategy, propertyType: nextType }));
@@ -410,6 +461,8 @@ const InvestmentCalculator = () => {
     setPropertySourceLabel('');
     enteredFields.current = new Set();
     lastBuiltType.current = null;
+    lastBuiltWasExample.current = false;
+    assetTypeIsExample.current = listingContext.kind !== 'missing';
     setNotice(null);
     setForm(listingContext.kind === 'missing'
       ? preparePropertyChange(initialForm)
@@ -418,6 +471,7 @@ const InvestmentCalculator = () => {
 
   const applyProperty = (record) => {
     const autofill = applyPropertyAutofill(form, record);
+    assetTypeIsExample.current = false;
     setPropertyRecord(record);
     setForm(autofill.form);
     setPropertyProvenance(autofill.provenance);
