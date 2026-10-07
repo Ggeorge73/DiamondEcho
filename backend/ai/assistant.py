@@ -151,6 +151,19 @@ class RealEstateAssistant:
             if handoff.kind == "tour":
                 answer += " A tour request is a request, not a booking."
             risk_level = "general"
+        elif topic is None and intent.asks_for_tour(message):
+            # "I would like to tour a property" names no topic and asks for no
+            # person, yet a tour is arranged by a person. It used to get the
+            # opening menu; it now gets the tour request form.
+            handoff = _HANDOFFS["tour"]
+            topic = prior_topic
+            answer = (
+                "To see a property in person, send a tour request with the form on this site. It goes to the staff "
+                "queue, and a team member can follow up using the contact details you give; the form shows when "
+                "replies are sent. Nothing from this chat is sent with it, so name the property in the form. "
+                "A tour request is a request, not a booking."
+            )
+            risk_level = "general"
         elif intent.is_thanks(message):
             topic = prior_topic
             answer = "You’re welcome. Ask another question whenever you like."

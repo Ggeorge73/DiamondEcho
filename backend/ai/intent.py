@@ -69,6 +69,14 @@ _HUMAN = _compile((
 ))
 _TOUR = _compile(("tour", "showing", "see the house", "see the home", "see the property", "view the property", "visit the property", "walk through", "walkthrough"))
 
+# Asking to be shown a property. "Showing" on its own is left out: "the market
+# is showing signs of cooling" is not a request.
+_TOUR_REQUEST = _compile((
+    "tour", "touring", "a showing", "private showing", "see the house", "see the home", "see the property",
+    "see this house", "see this home", "see this property", "see it in person", "view the property",
+    "view the house", "view the home", "visit the property", "walk through", "walkthrough",
+))
+
 _THANKS = re.compile(r"^(?:ok(?:ay)?|thanks?(?: you)?(?: so much| very much)?|thank you|great|got it|perfect|cool|understood|that helps)[\s.!,]*(?:thanks?(?: you)?|thank you)?[\s.!]*$", re.I)
 
 _STATES = {
@@ -158,6 +166,11 @@ def wants_human(text: str) -> bool:
 
 def wants_tour(text: str) -> bool:
     return matches(text, _TOUR)
+
+
+def asks_for_tour(text: str) -> bool:
+    """Whether the message asks to be shown a property, with or without asking for a person."""
+    return matches(text, _TOUR_REQUEST)
 
 
 def is_thanks(text: str) -> bool:
