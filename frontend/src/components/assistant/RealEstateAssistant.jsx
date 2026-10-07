@@ -245,12 +245,12 @@ const AssistantPanel = () => {
               <textarea ref={promptRef} value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); sendMessage(); } }} placeholder="Ask a real-estate question…" rows={2} maxLength={6000} className="max-h-28 min-h-12 flex-1 resize-none border-0 bg-transparent px-2 py-1 text-sm outline-none" />
               <button type="submit" disabled={loading || !message.trim()} aria-label="Send message" className="rounded-lg bg-[#5e9cd0] p-3 text-white transition hover:bg-[#7fb3de] disabled:cursor-not-allowed disabled:opacity-40"><Send className="h-4 w-4" /></button>
             </div>
-            <p className="mt-2 text-center text-[10px] text-[#dce8f2]/45">Don’t share SSNs, account credentials, or payment-card details.</p>
+            <p className="mt-2 text-center text-[11px] text-[#dce8f2]/75">Don’t share SSNs, account credentials, or payment-card details.</p>
           </form>
         </section>
       )}
 
-      <button ref={triggerRef} onClick={() => { if (open) closeAssistant(); else setOpen(true); }} aria-expanded={open} aria-label="Open DiamondEcho assistant" title={compact ? "Ask DiamondEcho" : undefined} data-compact={compact ? "true" : "false"} className={`ml-auto flex h-14 items-center gap-2 border border-[#2d628c]/50 bg-[#0c1826] text-white shadow-xl transition hover:-translate-y-0.5 hover:bg-[#2d628c] ${compact ? "w-14 justify-center px-0" : "px-5"}`}>
+      <button ref={triggerRef} onClick={() => { if (open) closeAssistant(); else setOpen(true); }} aria-expanded={open} aria-label="Ask DiamondEcho assistant" title={compact ? "Ask DiamondEcho" : undefined} data-compact={compact ? "true" : "false"} className={`ml-auto flex h-14 items-center gap-2 border border-[#2d628c]/50 bg-[#0c1826] text-white shadow-xl transition hover:-translate-y-0.5 hover:bg-[#2d628c] ${compact ? "w-14 justify-center px-0" : "px-5"}`}>
         <MessageCircle className="h-5 w-5 text-[#d9c28f]" /><span className={compact ? "sr-only" : "text-[10px] font-semibold uppercase tracking-[0.15em]"}>Ask DiamondEcho</span>
       </button>
     </div>
