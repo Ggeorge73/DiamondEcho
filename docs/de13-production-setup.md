@@ -47,7 +47,8 @@ Cloud Run: 1 CPU, 1 GiB, concurrency 1, timeout 30 s, minimum 0 and maximum 3 in
 | `diamondecho-api-00001-lj9` | First deploy, queue off |
 | `diamondecho-api-00002-9zg` | Queue on, one staff user ID listed |
 | `diamondecho-api-00003-prh` | `PUBLIC_ORIGIN`, `STAFF_ORIGIN`, `CORS_ORIGINS` moved to the `diamondecho.com` addresses |
-| `diamondecho-api-00004-kiq` | New image from `main` at `50705a5` (formula `diamond-underwriting-1.1.0`). Serving all requests since 2026-10-06, shortly before 21:00 UTC |
+| `diamondecho-api-00004-kiq` | New image from `main` at `50705a5` (formula `diamond-underwriting-1.1.0`). Served all requests from 2026-10-06, shortly before 21:00 UTC, to 2026-10-07 01:05 UTC. Kept as the fallback |
+| `diamondecho-api-00007-deh` | New image from `main` at `f8853da` (assistant topics, continued conversations and fair-housing check; route list switched off). Serving all requests since 2026-10-07 01:05 UTC. Numbers 5 and 6 name no revision: the list shows 1, 2, 3, 4 and 7 |
 
 Always pass `--project diamondecho-prod`. Cloud Shell's default project can be either staging or production, depending on how the session was opened.
 
@@ -166,6 +167,23 @@ Not done: no request was sent through the form, and a return to revision 3 was n
 
 **Cloudflare Real User Monitoring switched off** for the `diamondecho.com` zone (Speed, then Real User Monitoring, then "Disable completely"). Cloudflare had been adding its `beacon.min.js` script to every page, which the Privacy page's "no analytics" sentence did not allow for. The script was still in the pages one minute after the switch. It was absent from the HTML of `diamondecho.com` at 20:46 UTC, and at 21:02 to 21:05 UTC neither `diamondecho.com` nor `staff.diamondecho.com` had it in the HTML or the loaded page, and neither page made a request to it.
 
+### API redeploy from `f8853da` (2026-10-07, 00:52 to 01:10 UTC)
+
+The owner's yes in chat: "Yes, redeploy the production API from main."
+
+**API moved from `50705a5` to `f8853da`.** The backend files that differ between the two commits are the assistant (`backend/ai/`), one knowledge source (`backend/services/knowledge/catalog.py`), the switch for the route list in `backend/server.py`, and tests. `backend/requirements-runtime.txt` and the Dockerfile are unchanged. Same routine as the day before:
+
+1. Before anything changed, the old revision was asked 18 assistant questions and gave the old answers; `/docs`, `/redoc` and `/openapi.json` answered 200.
+2. `gcloud run deploy diamondecho-api --source backend --project diamondecho-prod --region us-east1 --no-traffic --tag candidate --quiet`, from the Cloud Shell clone at `f8853da` with nothing uncommitted. 00:52:46 to 00:53:46 UTC. Result: `diamondecho-api-00007-deh`, serving 0 percent.
+3. Settings compared from the service description saved before and read after: runtime identity, 1 CPU, 1 GiB, concurrency 1, timeout 30 s, maximum 3 instances, the six environment variable names and their values, the port and the startup probe are identical, and no annotation differs. Only the image changed.
+4. Candidate checks at its temporary address (01:04 UTC): `/health` 200; the staff list with no sign-in 401; an empty request 422; `/docs`, `/redoc` and `/openapi.json` 404; the reference land request answers formula `diamond-underwriting-1.1.0` with residual land value 2,315.27, the same as before; 18 assistant messages in 15 conversations, sent the way the page sends them, each answer byte-identical to a local copy of the service at `f8853da`.
+5. `gcloud run services update-traffic diamondecho-api --to-latest`, then `--remove-tags candidate`, 01:05:29 to 01:05:37 UTC. The service is back to one entry: latest revision, 100 percent. The temporary address answers 404.
+6. On production afterwards: `/health` 200, staff list 401, the three route-list addresses 404 (01:05 UTC); the same 18 assistant answers and the land figures again identical (01:07 UTC); and on `diamondecho.com` the six assistant criteria of DE-20 were seen in the panel itself (`docs/de20-assistant.md`).
+
+Not done: no request was sent through a form, and a return to revision 4 was not rehearsed (see "Undo").
+
+Left in the owner's Cloud Shell home, his to remove: `api-before2.json` and `api-after2.json` (service descriptions, which include the environment variable values), `cmp2.py`, `cmp2.out`, `deploy2.log`, `traffic2.log`, beside the three items from the day before.
+
 ## Proven by the owner
 
 | Date | What Gbenga did | Result |
@@ -184,7 +202,7 @@ These were done at the `pages.dev` staff address, before the domain move.
 3. A request sent through the form at `diamondecho.com`, its alert and its appearance in the queue. The one stored request was sent from Cloud Shell.
 4. A restore from backup.
 5. The staff page on a real phone browser, Safari and Firefox.
-6. Rollback of a Pages deployment or a Cloud Run revision has not been exercised in production. The 10-06 redeploy moved forward only.
+6. Rollback of a Pages deployment or a Cloud Run revision has not been exercised in production. The redeploys of 10-06 and 10-07 moved forward only.
 7. Production holds one synthetic record, "Production Alert Test". Removing it is the owner's action.
 
 ## Findings to carry forward
@@ -201,7 +219,7 @@ These were done at the `pages.dev` staff address, before the domain move.
 ## Undo
 
 - **Close the request slot at once:** `gcloud run services update diamondecho-api --region us-east1 --project diamondecho-prod --update-env-vars INQUIRY_STAFF_QUEUE_ENABLED=false`. The form then answers 503 and stores nothing.
-- **Return the API to the earlier code:** `gcloud run services update-traffic diamondecho-api --to-revisions=diamondecho-api-00003-prh=100 --project diamondecho-prod --region us-east1`. Revision 3 is kept for this. Land figures then come from formula `1.0.0` again. This pins traffic to revision 3, so a later deploy serves nothing until `--to-latest` is run.
+- **Return the API to the earlier code:** `gcloud run services update-traffic diamondecho-api --to-revisions=diamondecho-api-00004-kiq=100 --project diamondecho-prod --region us-east1`. Revision 4 (`50705a5`) is kept for this. The assistant then gives its earlier answers again and the route list is public again; land figures stay on formula `1.1.0`. Revision 3 (`f84c9ea`, formula `1.0.0`) is also still there. Either command pins traffic to the named revision, so a later deploy serves nothing until `--to-latest` is run. Not rehearsed.
 - **Silence the alert:** disable the policy; do not remove it.
 - **Move DNS back:** at GoDaddy choose "GoDaddy Nameservers". If GoDaddy does not restore its record list, re-enter the nineteen records in the table above. Then set `PUBLIC_ORIGIN`, `STAFF_ORIGIN` and `CORS_ORIGINS` on the API, and `STAFF_ORIGIN` and `PUBLIC_ORIGIN` on the staff Pages project, back to the `pages.dev` addresses and rebuild the staff site.
 - Removing a record, a policy, a schedule, a project or stored requests is a deletion and is the owner's to run.
