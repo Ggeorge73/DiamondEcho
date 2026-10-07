@@ -271,6 +271,38 @@ def test_a_tour_request_is_described_as_a_request_not_a_booking():
     assert ask("I want to tour a house, can someone call me").answer.endswith("A tour request is a request, not a booking.")
 
 
+@pytest.mark.parametrize("message,earlier", [
+    ("I would like to tour a property", ()),
+    ("Can I schedule a showing?", ()),
+    ("Could I see the house this weekend?", ()),
+    ("When can I do a walkthrough?", ()),
+    ("Can I tour it?", (("user", "Help me plan a home purchase"),)),
+])
+def test_asking_for_a_tour_points_to_the_tour_form_without_asking_for_a_person(message, earlier):
+    # Found on production after the 2026-10-07 redeploy: "I would like to tour
+    # a property" got the opening menu, because only "... can someone call me"
+    # counted as wanting a person.
+    response = ask(message, earlier)
+    assert response.handoff_recommended is True
+    assert (response.handoff.kind, response.handoff.topic) == ("tour", None)
+    assert response.answer.startswith("To see a property in person, send a tour request")
+    assert "Nothing from this chat is sent with it" in response.answer
+    assert response.answer.endswith("A tour request is a request, not a booking.")
+    assert response.citations == [] and response.links == []
+
+
+@pytest.mark.parametrize("message", [
+    "Is the market showing signs of cooling?",
+    "What should I look for when touring a house I want to buy?",
+    "How do I get a mortgage for a house I toured?",
+    "Is tourism good for short-term rental income?",
+])
+def test_a_message_that_is_not_a_tour_request_keeps_its_own_answer(message):
+    response = ask(message)
+    assert response.handoff is None or response.handoff.kind != "tour"
+    assert not response.answer.startswith("To see a property in person")
+
+
 def test_a_regulated_question_offers_the_form_and_a_plain_one_does_not():
     assert ask("What tax do I owe when I sell my rental?").handoff.kind == "seller"
     plain = ask("Help me plan a home purchase")
