@@ -135,12 +135,18 @@ itself:
 Also: `/docs`, `/redoc` and `/openapi.json` on the service answer 404 (DE-25
 finding F4).
 
-**Found in this check, fixed here, not live yet.** "I would like to tour a
-property" got the opening menu: only a message that also asked for a person
-("... can someone call me") was pointed to the tour form. A plain tour request
-now gets the tour form (see "How a message is read"). This is a change to the
-service, so it reaches production only at the next API redeploy, which needs
-Gbenga's yes.
+**Found in this check and fixed.** "I would like to tour a property" got the
+opening menu: only a message that also asked for a person ("... can someone
+call me") was pointed to the tour form. A plain tour request now gets the tour
+form (see "How a message is read").
+
+**Live since 2026-10-07 01:45 UTC** (revision `diamondecho-api-00010-car`, from
+`main` at `d151b51`, on Gbenga's yes). Seen in the panel on `diamondecho.com`:
+"I would like to tour a property" gets the tour answer with "Request a
+property tour"; the link opens `/inquire?type=tour` ("Request a property
+tour.") and closes the panel; "Is the market showing signs of cooling?" still
+gets the general answer. The 18 messages were sent again and every answer is
+byte-identical to a local copy of the service at `d151b51`.
 
 Not sent in this check: no request through any form.
 
