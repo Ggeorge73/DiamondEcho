@@ -172,9 +172,15 @@ initial capital work, hold period, interest-only period, loan term). While one
 of those still holds an untouched example figure, opening the land tab changes
 it to the land example's and leaving puts the building's back, and the note
 says so. A figure the visitor typed is never changed. A box cleared because an
-address was typed stays empty. Buildable square feet is not swapped, because
-its land value would be an empty box, and an empty box must never be refilled
-with an example.
+address was typed stays empty. Buildable square feet is not swapped between the
+building and land examples, because its land value would be an empty box, and
+an empty box must never be refilled with an example.
+
+The Fix & flip tab has an example of its own as well, added later and described
+in [deal-studio-flip-example.md](deal-studio-flip-example.md). It works the
+same way and shares three more boxes (units, square feet, due diligence), so
+moving from the flip tab to the land tab sets those three back to the figures
+the land tab has always shown.
 
 ## Not done
 

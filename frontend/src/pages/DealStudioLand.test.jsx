@@ -2,7 +2,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import axios from 'axios';
-import InvestmentCalculator, { exampleSwap, LAND_EXAMPLE_SHARED, landServiceFormulaIsCurrent } from './InvestmentCalculator';
+import InvestmentCalculator, { exampleSwap, FLIP_EXAMPLE_SHARED, LAND_EXAMPLE_SHARED, landServiceFormulaIsCurrent } from './InvestmentCalculator';
 
 // DE-25. The real calculation and decision code runs here; only the network
 // and the Excel download are faked.
@@ -225,13 +225,23 @@ describe('nothing changes silently', () => {
     expect(field('propertyType').value).toBe('condo');
   });
 
-  test('switching between rental and fix and flip leaves the asset type alone', async () => {
+  test('an asset type the visitor chose is left alone when switching between rental and fix and flip', async () => {
+    await setControl('propertyType', 'office');
+    await click('Fix & flip');
+    expect(field('propertyType').value).toBe('office');
+    expect(notice().textContent).not.toContain('asset type');
+    await click('Rental & commercial');
+    expect(field('propertyType').value).toBe('office');
+  });
+
+  test('the untouched example asset type follows the example between rental and fix and flip, and the note says so', async () => {
     expect(field('propertyType').value).toBe('multifamily');
     await click('Fix & flip');
-    expect(field('propertyType').value).toBe('multifamily');
-    expect(notice()).toBeNull();
+    expect(field('propertyType').value).toBe('single_family');
+    expect(notice().textContent).toContain('The example figures you had not changed, and the asset type, are now a fix-and-flip example (one single-family house).');
     await click('Rental & commercial');
     expect(field('propertyType').value).toBe('multifamily');
+    expect(notice().textContent).toContain('The example figures you had not changed, and the asset type, are the building example again.');
   });
 
   test('choosing Lot / land moves to the land tab, and choosing another type there moves back, each with a note', async () => {
@@ -361,9 +371,10 @@ describe('the land tab has its own example', () => {
     await click('Rental & commercial');
     for (const [name, value] of Object.entries(building)) expect(field(name).value).toBe(value);
     expect(notice().textContent).toContain('The example figures you had not changed are the building example again.');
+    // Leaving for Fix & flip puts that tab's own example in instead (DE-25).
     await click('Land development');
     await click('Fix & flip');
-    for (const [name, value] of Object.entries(building)) expect(field(name).value).toBe(value);
+    for (const name of shared) expect(field(name).value).toBe(FLIP_EXAMPLE_SHARED[name]);
   });
 
   test('a figure the visitor typed is never swapped, in either direction', async () => {
@@ -381,10 +392,13 @@ describe('the land tab has its own example', () => {
     expect(field('initialCapex').value).toBe('125000');     // still an example, so it went back
   });
 
-  test('moving between the two building tabs swaps nothing and says nothing', async () => {
+  test('a typed figure is kept between the two building tabs as well', async () => {
+    await setControl('purchasePrice', '985000');
     await click('Fix & flip');
-    for (const [name, value] of Object.entries(building)) expect(field(name).value).toBe(value);
-    expect(notice()).toBeNull();
+    expect(field('purchasePrice').value).toBe('985000');
+    await click('Rental & commercial');
+    expect(field('purchasePrice').value).toBe('985000');
+    expect(field('holdMonths').value).toBe('60');
   });
 
   test('figures cleared for an address stay cleared, and the boxes that do change are named', async () => {
@@ -411,7 +425,7 @@ describe('the land tab has its own example', () => {
   test('exampleSwap changes only boxes that still hold the other example', () => {
     const start = { ...building, strategy: 'rental' };
     expect(exampleSwap(start, 'rental', 'land')).toEqual({ ...LAND_EXAMPLE_SHARED });
-    expect(exampleSwap(start, 'rental', 'flip')).toEqual({});
+    expect(exampleSwap(start, 'rental', 'rental')).toEqual({});
     expect(exampleSwap(start, 'land', 'land')).toEqual({});
     expect(exampleSwap({ ...start, purchasePrice: '1' }, 'rental', 'land').purchasePrice).toBeUndefined();
     // Entered, even though it still equals the example (put back with "Put the example figures back").
