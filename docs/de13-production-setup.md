@@ -62,6 +62,8 @@ The same steps as `docs/de33-staging-stage-two.md` steps 1 to 5, with these diff
 - **Staff user.** Gbenga created the user. At his instruction it was moved to `realtor@diamondecho.com` and marked verified by the administrator call in stage-two step 4c, in one request.
 - **Two staging tests not repeated.** T6 (an unverified account is refused) and T8 (a signed-in person not on the list is refused) passed on staging. In production the email was verified and the real user listed in one pass, so neither was exercised.
 
+**Delete protection is on** for the `(default)` database since 2026-10-07 02:25 UTC, on the owner's yes ("Yes, turn it on"): `gcloud firestore databases update --database="(default)" --delete-protection --project diamondecho-prod`; state read back `DELETE_PROTECTION_ENABLED`. It costs nothing. Point-in-time recovery is off; it has a cost and was not asked for. Backups read the same day: one daily schedule kept 7 days, two backups `READY` (2026-10-05T23:57:56Z and 2026-10-07T00:07:16Z).
+
 Rules: `firestore.rules` from commit `f84c9ea`, deny-all. With no sign-in, a list of `inquiries` and a write to `rules_probe` both answer 403.
 
 Sign-in settings read back: email and password on, email link off, authenticator provider on with `adjacentIntervals: 1`, text-message factor off, sign-up off, deletion off, improved email privacy on. Allowed sign-in domains: `localhost`, the two Firebase defaults, and `staff.diamondecho.com`.
@@ -202,7 +204,7 @@ The site's own files did not change: `diamondecho.com` still serves the build of
 
 Not done: no request was sent through a form, and a return to revision 7 was not rehearsed.
 
-Left in the owner's Cloud Shell home, his to remove: `api-before3.json` and `api-after3.json` (they include the environment variable values), `cmp3.py`, `cmp3.out`, `deploy3.log`, `traffic3.log`, beside the items from the two earlier redeploys.
+Left in the owner's Cloud Shell home, his to remove: `api-before3.json` and `api-after3.json` (they include the environment variable values), `cmp3.py`, `cmp3.out`, `deploy3.log`, `traffic3.log`, beside the items from the two earlier redeploys. Also `delprot.log` from switching delete protection on.
 
 ## Proven by the owner
 
@@ -217,13 +219,15 @@ These were done at the `pages.dev` staff address, before the domain move.
 
 ## Not proven, and open
 
-1. Mail to and from `realtor@` after the nameserver change. The records are identical; only the mailbox owner can send and receive.
-2. Staff sign-in at `staff.diamondecho.com`.
-3. A request sent through the form at `diamondecho.com`, its alert and its appearance in the queue. The one stored request was sent from Cloud Shell.
-4. A restore from backup.
-5. The staff page on a real phone browser, Safari and Firefox.
-6. Rollback of a Pages deployment or a Cloud Run revision has not been exercised in production. The three redeploys of 10-06 and 10-07 moved forward only.
-7. Production holds one synthetic record, "Production Alert Test". Removing it is the owner's action.
+State on 2026-10-07, after the owner's decisions of that night (Jira DE-26, DE-15, DE-9).
+
+1. Mail to and from `realtor@` after the nameserver change. The records are identical; only the mailbox owner can send and receive. He has not said separately that an alert email arrived since the move.
+2. Staff sign-in at `staff.diamondecho.com`: done by the owner on 2026-10-06 (DE-31).
+3. Requests through the form at `diamondecho.com`: a buyer request by the owner on 2026-10-06, received, viewed and acknowledged; a seller and a tour request by Claude on 2026-10-07 at the owner's instruction, with made-up details, both answered 201 with the right receipt (references `5b107f29-3e9d-57cc-9f49-01c3cf74f2b6` and `0a2b76dc-70da-59db-bbab-63bbf00aea30`). **Their appearance and acknowledgement in the staff queue is the owner's to confirm.**
+4. A restore from backup: **not done. The owner decided on 2026-10-07 to launch without it** ("Skip for launch"); it moves to the weeks after launch (DE-28). The alert email carries no visitor detail, so the database is the only copy of a request.
+5. Phones, Safari and Firefox: the owner's report of 2026-10-06, "it looks perfect on all phones, safari and firefox". He did not name the pages or the phones; no agent has tested the staff page on a phone.
+6. Rollback of a Pages deployment or a Cloud Run revision: **not rehearsed. Waived for launch by the owner on 2026-10-07.** The three redeploys of 10-06 and 10-07 moved forward only; the commands are under "Undo".
+7. Production holds four test records: "Production Alert Test" (10-05), the owner's own request (10-06) and the two "TEST … (sent by Claude)" requests (10-07). Removing them is the owner's action.
 
 ## Findings to carry forward
 
@@ -240,6 +244,7 @@ These were done at the `pages.dev` staff address, before the domain move.
 
 - **Close the request slot at once:** `gcloud run services update diamondecho-api --region us-east1 --project diamondecho-prod --update-env-vars INQUIRY_STAFF_QUEUE_ENABLED=false`. The form then answers 503 and stores nothing.
 - **Return the API to the earlier code:** `gcloud run services update-traffic diamondecho-api --to-revisions=diamondecho-api-00007-deh=100 --project diamondecho-prod --region us-east1`. Revision 7 (`f8853da`) is kept for this; the only difference is that a plain tour request gets the assistant's opening menu again. Revision 4 (`50705a5`: the assistant's earlier answers, a public route list, formula `1.1.0`) and revision 3 (`f84c9ea`, formula `1.0.0`) are also still there. Either command pins traffic to the named revision, so a later deploy serves nothing until `--to-latest` is run. Not rehearsed.
+- **Allow the database to be deleted again:** `gcloud firestore databases update --database="(default)" --no-delete-protection --project diamondecho-prod`. Only needed before a deliberate removal, which is the owner's to run.
 - **Silence the alert:** disable the policy; do not remove it.
 - **Move DNS back:** at GoDaddy choose "GoDaddy Nameservers". If GoDaddy does not restore its record list, re-enter the nineteen records in the table above. Then set `PUBLIC_ORIGIN`, `STAFF_ORIGIN` and `CORS_ORIGINS` on the API, and `STAFF_ORIGIN` and `PUBLIC_ORIGIN` on the staff Pages project, back to the `pages.dev` addresses and rebuild the staff site.
 - Removing a record, a policy, a schedule, a project or stored requests is a deletion and is the owner's to run.
