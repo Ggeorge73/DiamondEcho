@@ -3,9 +3,10 @@
 useDefault = true
 
 [allowlist]
-description = "Cloud Run revision names in rollback runbooks and the plain base32 alphabet used as a TOTP test fixture; neither is a secret"
+description = "Not secrets: Cloud Run revision names in rollback runbooks, the plain base32 alphabet used as a TOTP test fixture, and empty KEY= placeholders in .env.example files (the generic rule otherwise reads on into the next line)"
 regexTarget = "match"
 regexes = [
   '''--to-revisions=[a-z0-9-]+-\d{5}-[a-z]{3}=\d+''',
   '''ABCDEFGHIJKLMNOPQRSTUVWXYZ234567''',
+  '''^[A-Z0-9_]+=[ \t]*\r?\n''',
 ]
