@@ -24,37 +24,51 @@ const remember = () => {
   try { window.sessionStorage.setItem(HEARD_KEY, '1'); } catch { /* private mode: nothing to keep */ }
 };
 
-// A soft two-note chime before the voice, made in the browser: no file to load.
-const chime = () => {
-  try {
-    const Context = window.AudioContext || window.webkitAudioContext;
-    if (!Context) return;
-    const context = new Context();
-    [[659.25, 0], [880, 0.22]].forEach(([frequency, delay]) => {
-      const oscillator = context.createOscillator();
-      const gain = context.createGain();
-      const start = context.currentTime + delay;
-      oscillator.type = 'sine';
-      oscillator.frequency.value = frequency;
-      gain.gain.setValueAtTime(0.0001, start);
-      gain.gain.exponentialRampToValueAtTime(0.12, start + 0.04);
-      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.9);
-      oscillator.connect(gain).connect(context.destination);
-      oscillator.start(start);
-      oscillator.stop(start + 1);
+// A soft two-note bell before the voice, built here as a short WAV clip and
+// played through the same audio element as the voice. (A Web Audio chime was
+// skipped when the browser allowed autoplay, and an iPhone's silent switch
+// mutes Web Audio but not media playback.)
+const SAMPLE_RATE = 16000;
+let chimeSource = null;
+export const chimeUri = () => {
+  if (chimeSource) return chimeSource;
+  const seconds = 1.6;
+  const count = Math.round(SAMPLE_RATE * seconds);
+  const view = new DataView(new ArrayBuffer(44 + count * 2));
+  const text = (offset, value) => [...value].forEach((ch, i) => view.setUint8(offset + i, ch.charCodeAt(0)));
+  text(0, 'RIFF'); view.setUint32(4, 36 + count * 2, true); text(8, 'WAVE');
+  text(12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+  view.setUint32(24, SAMPLE_RATE, true); view.setUint32(28, SAMPLE_RATE * 2, true);
+  view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+  text(36, 'data'); view.setUint32(40, count * 2, true);
+  const notes = [[659.25, 0], [880, 0.28]]; // E5 then A5
+  for (let i = 0; i < count; i += 1) {
+    const t = i / SAMPLE_RATE;
+    let sample = 0;
+    notes.forEach(([frequency, delay]) => {
+      const local = t - delay;
+      if (local < 0) return;
+      const envelope = Math.min(1, local / 0.012) * Math.exp(-local * 3.2);
+      // A little of the octave above makes it ring like a bell, not a beep.
+      sample += envelope * (Math.sin(2 * Math.PI * frequency * local)
+        + 0.25 * Math.sin(4 * Math.PI * frequency * local));
     });
-    window.setTimeout(() => context.close().catch(() => {}), 1600);
-  } catch { /* no chime is fine */ }
+    view.setInt16(44 + i * 2, Math.max(-1, Math.min(1, sample * 0.32)) * 0x7fff, true);
+  }
+  let binary = '';
+  const bytes = new Uint8Array(view.buffer);
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  chimeSource = `data:audio/wav;base64,${window.btoa(binary)}`;
+  return chimeSource;
 };
 
-const CHIME_MS = 900;
-
+const ORDER = ['chime', 'tour', 'market'];
 const dayLabel = (iso) => {
   const day = new Date(`${iso}T12:00:00`);
   return Number.isNaN(day.getTime()) ? 'Today'
     : day.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 };
-const CHAPTER_NAMES = { tour: 'Welcome and site tour', market: "Today's Georgia market" };
+const CHAPTER_NAMES = { chime: 'Welcome and site tour', tour: 'Welcome and site tour', market: "Today's Georgia market" };
 
 const MarketBrief = () => {
   const [brief, setBrief] = useState(null);
@@ -79,47 +93,35 @@ const MarketBrief = () => {
   }, [base]);
 
   const urlFor = useCallback((name) => {
+    if (name === 'chime') return chimeUri();
     const path = brief?.[name]?.audio_url;
     return path ? `${base}${path}` : null;
   }, [brief, base]);
 
-  const hasAudio = Boolean(urlFor('tour') || urlFor('market'));
+  const hasAudio = Boolean(brief?.tour?.audio_url || brief?.market?.audio_url);
 
+  // Plays `name`, or the next part after it that has audio.
   const playChapter = useCallback((name) => {
     const audio = audioRef.current;
-    const next = name === 'tour' && !urlFor('tour') ? 'market' : name;
-    const source = urlFor(next);
-    if (!audio || !source) {
+    const next = ORDER.slice(ORDER.indexOf(name)).find((part) => urlFor(part));
+    if (!audio || !next || !hasAudio) {
       setStatus('ended');
       remember();
       return Promise.resolve();
     }
     chapterRef.current = next;
     setChapter(next);
-    if (audio.getAttribute('src') !== source) audio.setAttribute('src', source);
+    audio.setAttribute('src', urlFor(next));
     setStatus('playing');
     return Promise.resolve(audio.play());
-  }, [urlFor]);
+  }, [urlFor, hasAudio]);
 
-  // From a click or key press: unlock the audio element inside the gesture
-  // (iPhone Safari needs that), sound the chime, then start the voice.
+  // From a click, tap or key press. play() is called inside the gesture, which
+  // is what iPhone Safari needs to allow sound.
   const startFromGesture = useCallback(() => {
-    if (startedRef.current) return;
     startedRef.current = true;
-    const audio = audioRef.current;
-    const first = urlFor('tour') || urlFor('market');
-    if (!audio || !first) return;
-    audio.setAttribute('src', first);
-    Promise.resolve(audio.play()).then(() => audio.pause()).catch(() => {});
-    chime();
-    setStatus('playing');
-    window.setTimeout(() => {
-      if (chapterRef.current === 'tour' && audioRef.current) {
-        audioRef.current.currentTime = 0;
-        playChapter('tour').catch(() => setStatus('paused'));
-      }
-    }, CHIME_MS);
-  }, [playChapter, urlFor]);
+    playChapter('chime').catch(() => setStatus('paused'));
+  }, [playChapter]);
 
   // Start on load if the browser allows it, otherwise on the first interaction.
   useEffect(() => {
@@ -130,7 +132,7 @@ const MarketBrief = () => {
       waiting = false;
       startFromGesture();
     };
-    playChapter('tour')
+    playChapter('chime')
       .then(() => { waiting = false; startedRef.current = true; })
       .catch(() => { setStatus('waiting'); });
     document.addEventListener('click', onGesture, true);
@@ -146,9 +148,9 @@ const MarketBrief = () => {
   useEffect(() => () => { audioRef.current?.pause(); }, []);
 
   const onEnded = () => {
-    if (chapterRef.current === 'tour' && urlFor('market')) {
-      playChapter('market').catch(() => setStatus('paused'));
-    } else {
+    const after = ORDER[ORDER.indexOf(chapterRef.current) + 1];
+    if (after) playChapter(after).catch(() => setStatus('paused'));
+    else {
       setStatus('ended');
       remember();
     }
@@ -162,8 +164,6 @@ const MarketBrief = () => {
       setStatus('paused');
       remember();
     } else if (!startedRef.current || status === 'ended') {
-      startedRef.current = false;
-      chapterRef.current = 'tour';
       startFromGesture();
     } else {
       setStatus('playing');
@@ -201,7 +201,7 @@ const MarketBrief = () => {
         aria-label={playing ? 'Pause the audio' : 'Play the welcome tour and market brief'}>
         {playing ? <Pause /> : <Play />}
       </button>
-      {urlFor('market') && chapter === 'tour' && (
+      {brief?.market?.audio_url && chapter !== 'market' && (
         <button type="button" className="mf-brief__skip" onClick={skipToMarket}>
           <SkipForward /> Today’s market
         </button>

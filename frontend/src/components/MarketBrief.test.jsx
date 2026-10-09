@@ -1,6 +1,6 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import MarketBrief, { HEARD_KEY } from './MarketBrief';
+import MarketBrief, { HEARD_KEY, chimeUri } from './MarketBrief';
 
 const BRIEF = {
   date: '2026-10-09',
@@ -84,7 +84,7 @@ test('lists each figure with its period and a link to its publisher', async () =
   expect(container.textContent).toContain('Friday, October 9, 2026');
 });
 
-test('tries to start at once, then starts on the first click anywhere, with the welcome first', async () => {
+test('tries to start at once, then starts on the first click anywhere: chime, welcome tour, then market', async () => {
   await render();
   expect(play).toHaveBeenCalledTimes(1);
   expect(barPlay().getAttribute('aria-label')).toBe('Play the welcome tour and market brief');
@@ -92,17 +92,42 @@ test('tries to start at once, then starts on the first click anywhere, with the 
 
   play.mockImplementation(() => Promise.resolve());
   await act(async () => { document.body.click(); });
-  await act(async () => { jest.advanceTimersByTime(1000); });
   await flush();
-  expect(audio().getAttribute('src')).toBe('https://api.example.test/api/v1/market-brief/audio/tour-0123456789abcdef.mp3');
+  // The chime plays through the same audio element as the voice, inside the click.
+  expect(audio().getAttribute('src')).toBe(chimeUri());
+  expect(play).toHaveBeenCalledTimes(2);
   expect(barPlay().getAttribute('aria-label')).toBe('Pause the audio');
   expect(container.textContent).toContain('Welcome and site tour');
+
+  await act(async () => { audio().dispatchEvent(new Event('ended')); });
+  await flush();
+  expect(audio().getAttribute('src')).toBe('https://api.example.test/api/v1/market-brief/audio/tour-0123456789abcdef.mp3');
 
   // The tour leads straight into the day's market brief.
   await act(async () => { audio().dispatchEvent(new Event('ended')); });
   await flush();
   expect(audio().getAttribute('src')).toBe('https://api.example.test/api/v1/market-brief/audio/2026-10-09.mp3');
   expect(container.textContent).toContain('Today’s Georgia market');
+
+  await act(async () => { audio().dispatchEvent(new Event('ended')); });
+  expect(window.sessionStorage.getItem(HEARD_KEY)).toBe('1');
+  expect(container.querySelector('.mf-brief-bar')).toBeNull();
+});
+
+test('when the browser allows sound at once, the chime still comes first', async () => {
+  play.mockImplementation(() => Promise.resolve());
+  await render();
+  expect(audio().getAttribute('src')).toBe(chimeUri());
+  expect(barPlay().getAttribute('aria-label')).toBe('Pause the audio');
+});
+
+test('the chime is a short, valid WAV clip', () => {
+  const uri = chimeUri();
+  expect(uri.startsWith('data:audio/wav;base64,')).toBe(true);
+  const bytes = window.atob(uri.split(',')[1]);
+  expect(bytes.slice(0, 4)).toBe('RIFF');
+  expect(bytes.slice(8, 12)).toBe('WAVE');
+  expect(bytes.length).toBe(44 + 16000 * 1.6 * 2);
 });
 
 test('pause stops the sound and the brief does not start again in the same visit', async () => {
