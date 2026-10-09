@@ -228,7 +228,7 @@ test('a stepped simulation told to stop returns nothing instead of partial figur
 describe('the pause between simulation blocks', () => {
   const realChannel = global.MessageChannel;
   let timers;
-  beforeEach(() => { timers = jest.spyOn(global, 'setTimeout'); });
+  beforeEach(() => { timers = vi.spyOn(global, 'setTimeout'); });
   afterEach(() => {
     timers.mockRestore();
     if (realChannel === undefined) delete global.MessageChannel; else global.MessageChannel = realChannel;

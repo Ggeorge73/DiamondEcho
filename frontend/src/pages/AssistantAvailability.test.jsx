@@ -85,7 +85,7 @@ test('home page shows three numbered tiles with no service and four with one', a
 test('the home concierge tile asks the assistant to open', async () => {
   withService();
   await render(<Home />);
-  const opened = jest.fn();
+  const opened = vi.fn();
   window.addEventListener('open-diamond-assistant', opened);
   const tile = [...container.querySelectorAll('.mf-portal__tile')].find((item) => item.textContent.includes('Ask the concierge'));
   await act(async () => tile.click());
@@ -111,7 +111,7 @@ test('advisory page keeps one primary action either way', async () => {
 test('footer offers the concierge only with a service', async () => {
   withService();
   await render(<Footer />);
-  const opened = jest.fn();
+  const opened = vi.fn();
   window.addEventListener('open-diamond-assistant', opened);
   const link = [...container.querySelectorAll('.mf-footer__col button')].find((button) => button.textContent.includes('Ask the concierge'));
   await act(async () => link.click());

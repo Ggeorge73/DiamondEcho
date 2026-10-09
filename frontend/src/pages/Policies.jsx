@@ -7,7 +7,7 @@ import './Policies.css';
 
 // Plain-language drafts for Gbenga's review (DE-18). They describe what this
 // site does today and claim no legal certification. Keep them in step with
-// frontend/public/index.html: a script added there must be described here.
+// frontend/index.html: a script added there must be described here.
 export const POLICIES_UPDATED = 'October 6, 2026';
 
 const usePageTitle = (title) => {

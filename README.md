@@ -44,7 +44,7 @@ Frontend (run from the repository root with npm 10.9.3):
 ```bash
 npm ci
 npm run start --workspace frontend
-npm run test --workspace frontend -- --watchAll=false --runInBand
+npm run test --workspace frontend
 npm run build
 ```
 

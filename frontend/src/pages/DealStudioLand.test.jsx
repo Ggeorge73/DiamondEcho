@@ -6,15 +6,16 @@ import InvestmentCalculator, { exampleSwap, FLIP_EXAMPLE_SHARED, LAND_EXAMPLE_SH
 
 // DE-25. The real calculation and decision code runs here; only the network
 // and the Excel download are faked.
-jest.mock('react-router-dom', () => ({
+vi.mock('react-router-dom', () => ({
   MemoryRouter: ({ children }) => children,
   // The tool switcher above the form is three links.
   Link: ({ to, children, ...rest }) => require('react').createElement('a', { href: to, ...rest }, children),
   useLocation: () => ({ pathname: '/investment-calculator', search: '' }),
-  useNavigate: () => jest.fn(),
+  useNavigate: () => vi.fn(),
 }));
-jest.mock('axios', () => ({ get: jest.fn(), post: jest.fn() }));
-jest.mock('../lib/dealWorkbook', () => ({ downloadDealWorkbook: jest.fn() }));
+// The page imports axios as a default export.
+vi.mock('axios', () => { const axios = { get: vi.fn(), post: vi.fn() }; return { default: axios, ...axios }; });
+vi.mock('../lib/dealWorkbook', () => ({ downloadDealWorkbook: vi.fn() }));
 
 let container;
 let root;
@@ -67,7 +68,7 @@ afterEach(async () => {
   await act(async () => { root.unmount(); });
   container.remove();
   delete process.env.REACT_APP_BACKEND_URL;
-  jest.useRealTimers();
+  vi.useRealTimers();
 });
 
 describe('land development Go / No-Go', () => {
@@ -281,12 +282,12 @@ describe('flood zone box', () => {
 describe('address lookup', () => {
   const type = async (value) => {
     await setControl('address', value);
-    await act(async () => { jest.advanceTimersByTime(400); });
+    await act(async () => { vi.advanceTimersByTime(400); });
     await act(async () => { await Promise.resolve(); });
   };
 
   test('without an address provider the page says so and shows no suggestions', async () => {
-    jest.useFakeTimers();
+    vi.useFakeTimers();
     expect(text()).toContain("This site does not look up addresses or public records yet. Type the address for your own reference and enter the property's figures yourself.");
     expect(text()).not.toMatch(/Mapbox|RentCast|credentials/);
     // The service answers a typed "Atl" with market names; they are not addresses.
@@ -298,7 +299,7 @@ describe('address lookup', () => {
   });
 
   test('with an address provider, suggestions are offered and the note changes', async () => {
-    jest.useFakeTimers();
+    vi.useFakeTimers();
     axios.get.mockResolvedValue({ data: { provider: 'mapbox', suggestions: [{ id: 'a1', label: '12 Example Rd, Duluth, GA 30097', kind: 'address', provider: 'mapbox' }] } });
     await type('12 Exa');
     const options = [...container.querySelectorAll('.studio-property-search .studio-suggestions button')];
@@ -307,7 +308,7 @@ describe('address lookup', () => {
   });
 
   test('a failed lookup is explained in plain words, without the service\'s setting names', async () => {
-    jest.useFakeTimers();
+    vi.useFakeTimers();
     axios.get.mockResolvedValue({ data: { provider: 'mapbox', suggestions: [{ id: 'a1', label: '12 Example Rd, Duluth, GA 30097', kind: 'address', provider: 'mapbox' }] } });
     await type('12 Exa');
     axios.get.mockRejectedValueOnce({ response: { status: 404, data: { detail: 'Live property lookup requires RENTCAST_API_KEY. Enter property facts manually or configure the provider.' } } });

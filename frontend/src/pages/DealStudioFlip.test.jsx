@@ -8,14 +8,15 @@ import InvestmentCalculator, { EXAMPLE_ASSET_TYPES, exampleSwap, FLIP_EXAMPLE_SH
 // five years, which read as a flip that lost $930,936 before the visitor had
 // typed anything. The real calculation code runs here; only the network and
 // the Excel download are faked.
-jest.mock('react-router-dom', () => ({
+vi.mock('react-router-dom', () => ({
   MemoryRouter: ({ children }) => children,
   Link: ({ to, children, ...rest }) => require('react').createElement('a', { href: to, ...rest }, children),
   useLocation: () => ({ pathname: '/investment-calculator', search: '' }),
-  useNavigate: () => jest.fn(),
+  useNavigate: () => vi.fn(),
 }));
-jest.mock('axios', () => ({ get: jest.fn(), post: jest.fn() }));
-jest.mock('../lib/dealWorkbook', () => ({ downloadDealWorkbook: jest.fn() }));
+// The page imports axios as a default export.
+vi.mock('axios', () => { const axios = { get: vi.fn(), post: vi.fn() }; return { default: axios, ...axios }; });
+vi.mock('../lib/dealWorkbook', () => ({ downloadDealWorkbook: vi.fn() }));
 
 let container;
 let root;
@@ -60,7 +61,7 @@ beforeEach(async () => {
 afterEach(async () => {
   await act(async () => { root.unmount(); });
   container.remove();
-  jest.clearAllMocks();
+  vi.clearAllMocks();
 });
 
 describe('the fix and flip tab has its own example', () => {
