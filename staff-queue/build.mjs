@@ -30,7 +30,7 @@ const csp = "default-src 'none'; script-src 'self'; style-src 'self'; connect-sr
   " https://storage.googleapis.com" +
   (enabled ? " " + config.apiBase : "") + "; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'none'; upgrade-insecure-requests";
 await writeFile(new URL("dist/_headers", import.meta.url), "/*\n  Content-Security-Policy: " + csp +
-  "\n  Cache-Control: no-store\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: no-referrer\n  X-Frame-Options: DENY\n  Permissions-Policy: camera=(), microphone=(), geolocation=()" +
+  "\n  Cache-Control: no-store\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: no-referrer\n  X-Frame-Options: DENY\n  Cross-Origin-Opener-Policy: same-origin\n  Permissions-Policy: camera=(), microphone=(), geolocation=()" +
   // DE-25: https only for this host for 180 days (no subdomains, no preload), and the staff page is never to be listed by a search engine.
   "\n  Strict-Transport-Security: max-age=15552000\n  X-Robots-Tag: noindex, nofollow\n");
 console.log(enabled ? "Configured isolated staff build complete" : "Disabled staff build complete (no live identity configured)");

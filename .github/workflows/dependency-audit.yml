@@ -2,6 +2,8 @@ name: Production dependency audit
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '41 6 * * 1' # every Monday, 06:41 UTC; failures open a security-alert issue
   pull_request:
     paths:
       - package.json

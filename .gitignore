@@ -78,7 +78,12 @@ agenthub/agents/youtube/db
 .cache/
 
 # Mobile development
-android-sdk/ -e 
-# Environment files
+android-sdk/
+
+# Environment files and credentials
+.env
 *.env
 *.env.*
+*.key
+*service-account*.json
+*-sa-key*.json

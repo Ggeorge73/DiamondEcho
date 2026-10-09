@@ -127,3 +127,20 @@ class SubmissionLimiter:
 
 
 limiter = SubmissionLimiter()
+
+
+def throttle(limiter, per_address, per_hour, message):
+    """A route dependency that refuses a sender over these limits with a 429.
+
+    For public routes that cost CPU time or paid provider quota rather than
+    queue space. Each route family passes its own limiter so one cannot use up
+    another's allowance.
+    """
+    from fastapi import HTTPException, Request
+
+    def dependency(request: Request):
+        reason, wait = limiter.check(client_address(request), per_address, per_hour)
+        if reason:
+            raise HTTPException(status_code=429, detail=message, headers={"Retry-After": str(wait)})
+
+    return dependency
