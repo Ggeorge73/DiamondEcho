@@ -19,7 +19,11 @@ Chrome, Safari and Firefox do not let a page play sound before the visitor has c
 - tries to start at once, which some browsers allow for sites a visitor uses often;
 - otherwise shows "Tap anywhere to hear your welcome to DiamondEcho" and starts on the visitor's first click, tap or key press anywhere on the page.
 
-Pause, play, "Today's market" (skip the tour) and close are always on screen. A visitor who pauses, closes or finishes the brief is not played it again during that visit. Session storage keeps that note until the tab is closed. Leaving the home page stops the sound.
+Pause, play, "Today's market" (skip the tour) and close are always on screen. A visitor who pauses, closes or finishes the brief is not played it again during that visit. Session storage keeps that note until the tab is closed.
+
+### It follows the visitor around the site
+
+The player sits above the pages (`BriefAudioProvider` in `App.js`), so the sound keeps playing while the visitor moves between pages, and the audio bar stays on screen with its pause and close buttons. Only pause, close or the end of the brief stops it. A visitor who arrives on another page first is offered the welcome there too. The home page section (`MarketBrief.jsx`) shows the figures and the same controls.
 
 ## Where the figures come from
 
