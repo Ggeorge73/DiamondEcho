@@ -149,6 +149,11 @@ export const Privacy = () => {
             The voice is made by Google Cloud Text-to-Speech from the brief's written script.
             No information about you is sent to it.
           </p>
+          <p>
+            Podcast episodes on the home page and the Podcast page are played from Google Cloud
+            Storage. When you press play, your browser fetches the audio file from Google, so
+            Google receives your IP address. Nothing else about you is sent.
+          </p>
         </section>
       )}
 

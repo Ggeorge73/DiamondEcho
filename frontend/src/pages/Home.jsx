@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import GamlsSearch from '../components/GamlsSearch';
 import MarketBrief from '../components/MarketBrief';
+import LatestEpisode from '../components/LatestEpisode';
 import { assistantAvailable, openAssistant } from '../lib/assistant';
 
 /* ------------------------------------------------------------------ */
@@ -266,6 +267,7 @@ const Home = () => {
 
       {/* Daily welcome, site tour and Georgia market brief, read aloud */}
       <MarketBrief />
+      <LatestEpisode />
 
       {/* Overview / statement */}
       <section className="mf-statement" id="overview">
