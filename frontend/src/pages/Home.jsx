@@ -5,6 +5,7 @@ import {
   LineChart, MessageCircle, Plus, Search, Users,
 } from 'lucide-react';
 import GamlsSearch from '../components/GamlsSearch';
+import MarketBrief from '../components/MarketBrief';
 import { assistantAvailable, openAssistant } from '../lib/assistant';
 
 /* ------------------------------------------------------------------ */
@@ -262,6 +263,9 @@ const Home = () => {
           <span>0{divisions.length}</span>
         </div>
       </section>
+
+      {/* Daily welcome, site tour and Georgia market brief, read aloud */}
+      <MarketBrief />
 
       {/* Overview / statement */}
       <section className="mf-statement" id="overview">
