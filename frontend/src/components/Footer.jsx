@@ -36,6 +36,7 @@ const Footer = () => (
           <Link to="/investment-calculator?tool=net-proceeds">Seller net sheet</Link>
           <Link to="/inquire?type=buyer">Buyer inquiry</Link>
           <Link to="/inquire?type=seller">Seller consultation</Link>
+          <Link to="/podcast">Podcast</Link>
           {assistantAvailable() && (
             <button onClick={openAssistant}>
               Ask the concierge

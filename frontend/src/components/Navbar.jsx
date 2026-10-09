@@ -11,6 +11,7 @@ const navItems = [
   { label: 'Intelligence', to: '/investment-calculator' },
   { label: 'Advisory', to: '/agents' },
   { label: 'The Firm', to: '/about' },
+  { label: 'Podcast', to: '/podcast' },
 ];
 
 // Same words and order as the desktop links above, so the phone menu and the
@@ -21,6 +22,7 @@ const menuItems = [
   { index: '03', label: 'Intelligence', to: '/investment-calculator' },
   { index: '04', label: 'Advisory', to: '/agents' },
   { index: '05', label: 'The Firm', to: '/about' },
+  { index: '06', label: 'Podcast', to: '/podcast' },
 ];
 
 const Navbar = () => {
