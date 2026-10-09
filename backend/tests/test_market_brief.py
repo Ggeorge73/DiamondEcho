@@ -5,7 +5,7 @@ import pytest
 
 from market_brief import script, service as brief_service, sources
 from market_brief.sources import FRED_CSV, PMMS_URL, Figure, collect, parse_fred_csv, parse_pmms_csv
-from market_brief.tts import chunks, voice_settings
+from market_brief.tts import audio_config, chunks, voice_settings
 
 PMMS = """date,pmms30,pmms30p,pmms15,pmms15p
 09/24/2026,6.30,0.7,5.50,0.6
@@ -132,11 +132,27 @@ def test_long_text_is_split_at_sentence_ends():
     assert " ".join(parts) == text
 
 
-def test_voice_defaults_to_a_female_neural_voice(monkeypatch):
+def test_voice_defaults_to_a_natural_female_voice(monkeypatch):
     monkeypatch.delenv("MARKET_BRIEF_VOICE", raising=False)
-    assert voice_settings() == {"languageCode": "en-US", "name": "en-US-Neural2-F"}
+    assert voice_settings() == {"languageCode": "en-US", "name": "en-US-Chirp3-HD-Aoede"}
+    # Chirp 3 HD voices keep their own natural pace.
+    assert audio_config() == {"audioEncoding": "MP3"}
     monkeypatch.setenv("MARKET_BRIEF_VOICE", "not a voice; drop table")
-    assert voice_settings()["name"] == "en-US-Neural2-F"
+    assert voice_settings()["name"] == "en-US-Chirp3-HD-Aoede"
+    monkeypatch.setenv("MARKET_BRIEF_VOICE", "en-US-Neural2-F")
+    assert audio_config() == {"audioEncoding": "MP3", "speakingRate": 0.95}
+
+
+def test_a_new_voice_records_the_day_again(monkeypatch):
+    store = brief_service.MemoryStore()
+    monkeypatch.setenv("MARKET_BRIEF_VOICE", "en-US-Neural2-F")
+    old, _ = make_service(store)
+    old_url = old.brief()["market"]["audio_url"]
+    monkeypatch.setenv("MARKET_BRIEF_VOICE", "en-US-Chirp3-HD-Aoede")
+    new, calls = make_service(store)
+    body = new.brief()
+    assert body["market"]["audio_url"] != old_url
+    assert calls == {"collect": 1, "speak": 2}  # the tour and the day's brief, in the new voice
 
 
 class Clock:
@@ -167,7 +183,9 @@ def test_brief_is_built_once_a_day_and_reused():
     service, calls = make_service(store)
     first = service.brief()
     assert first["date"] == "2026-10-09"
-    assert first["market"]["audio_url"] == "/api/v1/market-brief/audio/2026-10-09.mp3"
+    mk = brief_service.market_key(TODAY)
+    assert mk.startswith("2026-10-09-")
+    assert first["market"]["audio_url"] == f"/api/v1/market-brief/audio/{mk}.mp3"
     assert first["tour"]["audio_url"].startswith("/api/v1/market-brief/audio/tour-")
     assert service.brief() == first
     assert calls == {"collect": 1, "speak": 2}
@@ -175,7 +193,7 @@ def test_brief_is_built_once_a_day_and_reused():
     other, other_calls = make_service(store)
     assert other.brief()["market"]["items"] == first["market"]["items"]
     assert other_calls == {"collect": 0, "speak": 0}
-    assert other.audio("2026-10-09").startswith(b"ID3")
+    assert other.audio(mk).startswith(b"ID3")
 
 
 def test_a_brief_without_audio_is_retried_later_and_never_stored():
@@ -201,16 +219,17 @@ def test_audio_over_a_firestore_document_is_stored_in_parts_and_joined_again():
     store = brief_service.MemoryStore()
     service, _ = make_service(store, speak=lambda text: big)
     body = service.brief()
-    assert body["market"]["audio_url"] == "/api/v1/market-brief/audio/2026-10-09.mp3"
-    assert store.rows["2026-10-09"]["audio"] is None
-    assert store.rows["2026-10-09"]["audio_parts"] == 3
+    mk = brief_service.market_key(TODAY)
+    assert body["market"]["audio_url"] == f"/api/v1/market-brief/audio/{mk}.mp3"
+    assert store.rows[mk]["audio"] is None
+    assert store.rows[mk]["audio_parts"] == 3
     assert all(len(row.get("data") or b"") <= brief_service.PART_BYTES for row in store.rows.values())
     other, calls = make_service(store)
-    assert other.audio("2026-10-09") == big
+    assert other.audio(mk) == big
     assert calls == {"collect": 0, "speak": 0}
     # A brief whose parts are incomplete is built again rather than served short.
-    build = store.rows["2026-10-09"]["audio_build"]
-    del store.rows[f"2026-10-09-part-{build}1"]
+    build = store.rows[mk]["audio_build"]
+    del store.rows[f"{mk}-part-{build}1"]
     third, calls = make_service(store)
     third.brief()
     assert calls["collect"] == 1
