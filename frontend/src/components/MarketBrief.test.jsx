@@ -1,6 +1,7 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import MarketBrief, { HEARD_KEY, chimeUri } from './MarketBrief';
+import MarketBrief from './MarketBrief';
+import { BriefAudioProvider, HEARD_KEY, chimeUri } from './BriefAudio';
 
 const BRIEF = {
   date: '2026-10-09',
@@ -26,8 +27,9 @@ let play;
 let pause;
 
 const flush = () => act(async () => { await Promise.resolve(); await Promise.resolve(); });
-const render = async () => {
-  await act(async () => root.render(<MarketBrief />));
+// The player sits above the pages (App.js); `page` is what the route shows.
+const render = async (page = <MarketBrief />) => {
+  await act(async () => root.render(<BriefAudioProvider>{page}</BriefAudioProvider>));
   await flush();
 };
 const audio = () => container.querySelector('audio');
@@ -172,4 +174,39 @@ test('without audio the figures still show and no player is offered', async () =
   expect(container.querySelector('.mf-brief__figures li')).not.toBeNull();
   expect(container.querySelector('.mf-brief__play')).toBeNull();
   expect(container.querySelector('.mf-brief-bar')).toBeNull();
+});
+
+test('the sound carries on when the visitor leaves the home page, until paused', async () => {
+  play.mockImplementation(() => Promise.resolve());
+  await render();
+  await act(async () => { audio().dispatchEvent(new Event('ended')); });
+  await flush();
+  expect(audio().getAttribute('src')).toContain('tour-0123456789abcdef.mp3');
+
+  // Another page: the section is gone, the bar and the sound stay.
+  pause.mockClear();
+  await render(<main>Search</main>);
+  expect(container.querySelector('#market-brief')).toBeNull();
+  expect(pause).not.toHaveBeenCalled();
+  expect(audio().getAttribute('src')).toContain('tour-0123456789abcdef.mp3');
+  expect(barPlay().getAttribute('aria-label')).toBe('Pause the audio');
+
+  // The tour still leads into the market brief on the other page.
+  await act(async () => { audio().dispatchEvent(new Event('ended')); });
+  await flush();
+  expect(audio().getAttribute('src')).toContain('2026-10-09.mp3');
+
+  // Pause in the bar stops it there.
+  await act(async () => { barPlay().click(); });
+  expect(pause).toHaveBeenCalled();
+  expect(barPlay().getAttribute('aria-label')).toBe('Play the welcome tour and market brief');
+});
+
+test('a visitor who arrives on another page is welcomed there too', async () => {
+  await render(<main>About</main>);
+  expect(container.querySelector('.mf-brief-bar').textContent).toContain('Tap anywhere to hear your welcome to DiamondEcho');
+  play.mockImplementation(() => Promise.resolve());
+  await act(async () => { document.body.click(); });
+  await flush();
+  expect(audio().getAttribute('src')).toBe(chimeUri());
 });
