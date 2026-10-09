@@ -93,7 +93,9 @@ class MarketBriefService:
         try:
             audio = self.synthesize(text)
         except Exception as exc:
-            log.warning("Market brief voice failed: %s", type(exc).__name__)
+            # The status and the API's own message say why (quota, voice name, size...).
+            status = getattr(getattr(exc, "response", None), "status_code", None)
+            log.warning("Market brief voice failed: %s %s %s", type(exc).__name__, status or "", str(exc)[:300])
             return None
         if not audio or len(audio) > MAX_AUDIO_BYTES:
             log.warning("Market brief audio missing or too large (%s bytes)", len(audio or b""))
