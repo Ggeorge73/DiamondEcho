@@ -69,7 +69,7 @@ describe('rendered pages', () => {
   test('the phone menu uses the same words, in the same order, as the desktop header', async () => {
     await act(async () => root.render(<MemoryRouter><Navbar /></MemoryRouter>));
     const desktop = [...container.querySelectorAll('.mf-nav__links a')].map((link) => link.textContent.trim());
-    expect(desktop).toEqual(['Search homes', 'Rentals', 'Intelligence', 'Advisory', 'The Firm']);
+    expect(desktop).toEqual(['Search homes', 'Rentals', 'Intelligence', 'Advisory', 'The Firm', 'Podcast']);
     await act(async () => container.querySelector('.mf-nav__burger').click());
     const menu = [...container.querySelectorAll('.mf-menu__primary a, .mf-menu__primary button')]
       .map((item) => item.textContent.replace(/^\s*\d+\s*/, '').trim())

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Pause, Play, SkipForward, Volume2, X } from 'lucide-react';
+import { claimAudio, onAudioClaimed } from '../lib/audioFocus';
 import './MarketBrief.css';
 
 // The daily welcome, site tour and Georgia market brief, read aloud.
@@ -113,6 +114,7 @@ const MarketBrief = () => {
     setChapter(next);
     audio.setAttribute('src', urlFor(next));
     setStatus('playing');
+    claimAudio('brief');
     return Promise.resolve(audio.play());
   }, [urlFor, hasAudio]);
 
@@ -143,6 +145,12 @@ const MarketBrief = () => {
       document.removeEventListener('keydown', onGesture, true);
     };
   }, [brief, hasAudio, playChapter, startFromGesture]);
+
+  // A podcast episode that starts playing pauses the brief.
+  useEffect(() => onAudioClaimed('brief', () => {
+    audioRef.current?.pause();
+    setStatus((current) => (current === 'playing' ? 'paused' : current));
+  }), []);
 
   // Stop the sound when the visitor leaves the page.
   useEffect(() => () => { audioRef.current?.pause(); }, []);

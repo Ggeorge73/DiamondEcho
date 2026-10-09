@@ -35,5 +35,20 @@
 <div class="controls"><p id="count" role="status"></p><div class="actions">
 <button id="refresh-button" type="button">Refresh</button><button id="signout-button" type="button">Sign out</button>
 </div></div><ul id="inquiries" class="inquiries"></ul>
+<section id="podcast" class="podcast" aria-labelledby="podcast-heading">
+<h2 id="podcast-heading">Podcast episodes</h2>
+<p class="hint">Upload an MP3 or M4A episode you have recorded. It appears on the public home page and the Podcast page as soon as it is published.</p>
+<button id="podcast-open" type="button" aria-expanded="false" aria-controls="podcast-panel">Show podcast episodes</button>
+<div id="podcast-panel" hidden>
+<form id="podcast-form" class="card">
+<label for="podcast-title">Episode title</label><input id="podcast-title" maxlength="120" required>
+<label for="podcast-description">Short description (optional)</label><textarea id="podcast-description" maxlength="600" rows="3"></textarea>
+<label for="podcast-file">Audio file (MP3 or M4A, up to 300 MB)</label><input id="podcast-file" type="file" accept="audio/mpeg,audio/mp4,audio/x-m4a,.mp3,.m4a" required>
+<progress id="podcast-progress" max="100" value="0" hidden></progress>
+<button id="podcast-upload" type="submit">Upload and publish</button>
+</form>
+<ul id="episodes" class="inquiries"></ul>
+</div>
+</section>
 </section>
 </main></body></html>

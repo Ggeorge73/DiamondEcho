@@ -17,7 +17,7 @@ const rules = redirects.map((line) => line.split(/\s+/));
 const served = (address) => rules.some(([from]) => (from.endsWith('/*') ? address.startsWith(from.slice(0, -1)) : from === address));
 
 test('the app has the routes this test was written for', () => {
-  expect(routes).toEqual(['/', '/search', '/property/:id', '/investment-calculator', '/agents', '/about', '/inquire', '/privacy', '/terms', '*']);
+  expect(routes).toEqual(['/', '/search', '/property/:id', '/investment-calculator', '/agents', '/about', '/inquire', '/podcast', '/privacy', '/terms', '*']);
 });
 
 test('every rule serves the app shell with a 200 and none sends the browser elsewhere', () => {
