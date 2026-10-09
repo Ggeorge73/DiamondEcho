@@ -11,10 +11,10 @@ import os
 import re
 
 ENDPOINT = "https://texttospeech.googleapis.com/v1/text:synthesize"
-# Google's Chirp 3 HD voices sound like a person talking, not a reader; Aoede
-# is a warm, natural US English female voice. MARKET_BRIEF_VOICE overrides it
-# with any Google voice name (for example en-US-Chirp3-HD-Achernar, softer).
-DEFAULT_VOICE = "en-US-Chirp3-HD-Aoede"
+# Google's Chirp 3 HD voices sound like a person talking, not a reader.
+# Sulafat is a warm, natural US English female voice, Gbenga's choice.
+# MARKET_BRIEF_VOICE overrides it with any Google voice name.
+DEFAULT_VOICE = "en-US-Chirp3-HD-Sulafat"
 MAX_REQUEST_BYTES = 4500  # the API accepts 5000 bytes of text per request
 
 

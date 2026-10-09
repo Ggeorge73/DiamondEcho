@@ -134,11 +134,11 @@ def test_long_text_is_split_at_sentence_ends():
 
 def test_voice_defaults_to_a_natural_female_voice(monkeypatch):
     monkeypatch.delenv("MARKET_BRIEF_VOICE", raising=False)
-    assert voice_settings() == {"languageCode": "en-US", "name": "en-US-Chirp3-HD-Aoede"}
+    assert voice_settings() == {"languageCode": "en-US", "name": "en-US-Chirp3-HD-Sulafat"}
     # Chirp 3 HD voices keep their own natural pace.
     assert audio_config() == {"audioEncoding": "MP3"}
     monkeypatch.setenv("MARKET_BRIEF_VOICE", "not a voice; drop table")
-    assert voice_settings()["name"] == "en-US-Chirp3-HD-Aoede"
+    assert voice_settings()["name"] == "en-US-Chirp3-HD-Sulafat"
     monkeypatch.setenv("MARKET_BRIEF_VOICE", "en-US-Neural2-F")
     assert audio_config() == {"audioEncoding": "MP3", "speakingRate": 0.95}
 
@@ -148,7 +148,7 @@ def test_a_new_voice_records_the_day_again(monkeypatch):
     monkeypatch.setenv("MARKET_BRIEF_VOICE", "en-US-Neural2-F")
     old, _ = make_service(store)
     old_url = old.brief()["market"]["audio_url"]
-    monkeypatch.setenv("MARKET_BRIEF_VOICE", "en-US-Chirp3-HD-Aoede")
+    monkeypatch.setenv("MARKET_BRIEF_VOICE", "en-US-Chirp3-HD-Sulafat")
     new, calls = make_service(store)
     body = new.brief()
     assert body["market"]["audio_url"] != old_url
