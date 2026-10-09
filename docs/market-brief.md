@@ -48,9 +48,9 @@ The player sits above the pages (`BriefAudioProvider` in `App.js`), so the sound
 
 ## The voice
 
-Google Cloud Text-to-Speech, voice `en-US-Neural2-F` at 0.95 speed. Set `MARKET_BRIEF_VOICE` to use another Google voice name. The API service calls it with its own Cloud Run identity, so there is no key to store. Only the script is sent to Google, nothing about the visitor.
+Google Cloud Text-to-Speech, voice `en-US-Chirp3-HD-Aoede`: one of Google's Chirp 3 HD voices, which sound like a person talking rather than a reader. It replaced `en-US-Neural2-F` on 2026-10-09, after Gbenga found that voice robotic. Chirp 3 HD voices keep their own natural pace; older voices are read at 0.95 speed. Set `MARKET_BRIEF_VOICE` to use another Google voice name, for example `en-US-Chirp3-HD-Achernar` (softer) or `en-US-Chirp3-HD-Sulafat` (warmer). Each day's brief is stored under the date and the voice, so a new voice records the day's brief again at once instead of the next day. The API service calls it with its own Cloud Run identity, so there is no key to store. Only the script is sent to Google, nothing about the visitor.
 
-Cost: about 2,000 characters for the tour, made once and made again only if its wording or the voice changes, plus about 1,500 characters a day for the market part. That is about 50,000 characters a month, inside the 1 million characters a month Google gives free for this voice type.
+Cost: about 2,000 characters for the tour, made once and made again only if its wording or the voice changes, plus about 1,500 characters a day for the market part. That is about 50,000 characters a month. Chirp 3 HD voices are priced higher than the older voices: Google's list price is about $30 per million characters, so about $1.50 a month at most, before any free monthly allowance.
 
 ## How it is served
 

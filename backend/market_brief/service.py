@@ -34,7 +34,7 @@ RETRY_SECONDS = 15 * 60
 PART_BYTES = 700_000
 MAX_AUDIO_BYTES = 6_000_000  # a sanity limit, several times the longest script
 AUDIO_PATH = "/api/v1/market-brief/audio/{key}.mp3"
-KEY_PATTERN = re.compile(r"(\d{4}-\d{2}-\d{2}|tour-[0-9a-f]{16})")
+KEY_PATTERN = re.compile(r"(\d{4}-\d{2}-\d{2}(-[0-9a-f]{8})?|tour-[0-9a-f]{16})")
 
 
 class BriefUnavailable(Exception):
@@ -85,6 +85,13 @@ class FirestoreBriefStore:
 def tour_key() -> str:
     digest = hashlib.sha256((brief_script.TOUR_SCRIPT + repr(voice_settings())).encode()).hexdigest()
     return f"tour-{digest[:16]}"
+
+
+def market_key(day: date) -> str:
+    """The day, plus the voice: a new voice records the day's brief again
+    instead of serving the one already stored in the old voice."""
+    digest = hashlib.sha256(repr(voice_settings()).encode()).hexdigest()
+    return f"{day.isoformat()}-{digest[:8]}"
 
 
 class MarketBriefService:
@@ -152,7 +159,7 @@ class MarketBriefService:
         return key, data
 
     def _market(self, day):
-        key = day.isoformat()
+        key = market_key(day)
         data = self._cached(key)
         if data is None:
             figures, problems = self.collect()
@@ -160,7 +167,7 @@ class MarketBriefService:
             text = brief_script.market_script(figures, day)
             audio = self._speak(text)
             data = {
-                "date": key,
+                "date": day.isoformat(),
                 "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                 "script": text,
                 "items": items,
@@ -174,7 +181,7 @@ class MarketBriefService:
         day = self.today()
         with self._lock:
             # Drop earlier days held in memory; the tour stays.
-            self._memory = {k: v for k, v in self._memory.items() if k.startswith("tour-") or k == day.isoformat()}
+            self._memory = {k: v for k, v in self._memory.items() if k.startswith(("tour-", day.isoformat()))}
             tour_id, tour = self._tour()
             market_id, market = self._market(day)
         return {

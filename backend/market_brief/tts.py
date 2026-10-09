@@ -11,8 +11,10 @@ import os
 import re
 
 ENDPOINT = "https://texttospeech.googleapis.com/v1/text:synthesize"
-# A soft, natural US English female voice; MARKET_BRIEF_VOICE overrides it.
-DEFAULT_VOICE = "en-US-Neural2-F"
+# Google's Chirp 3 HD voices sound like a person talking, not a reader; Aoede
+# is a warm, natural US English female voice. MARKET_BRIEF_VOICE overrides it
+# with any Google voice name (for example en-US-Chirp3-HD-Achernar, softer).
+DEFAULT_VOICE = "en-US-Chirp3-HD-Aoede"
 MAX_REQUEST_BYTES = 4500  # the API accepts 5000 bytes of text per request
 
 
@@ -22,6 +24,15 @@ def voice_settings():
         name = DEFAULT_VOICE
     language = "-".join(name.split("-")[:2])
     return {"languageCode": language, "name": name}
+
+
+def audio_config():
+    # Chirp 3 HD voices set their own natural pace; older voices read a
+    # little slower than their default for a calmer delivery.
+    config = {"audioEncoding": "MP3"}
+    if "-Chirp3-" not in voice_settings()["name"]:
+        config["speakingRate"] = 0.95
+    return config
 
 
 def chunks(text: str, limit: int = MAX_REQUEST_BYTES) -> list[str]:
@@ -57,7 +68,7 @@ def synthesize(text: str, session=None) -> bytes:
         response = session.post(ENDPOINT, json={
             "input": {"text": part},
             "voice": voice_settings(),
-            "audioConfig": {"audioEncoding": "MP3", "speakingRate": 0.95},
+            "audioConfig": audio_config(),
         }, timeout=20)
         response.raise_for_status()
         audio += base64.b64decode(response.json()["audioContent"])
