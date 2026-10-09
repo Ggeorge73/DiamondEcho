@@ -1,0 +1,11 @@
+# Secret scanning config for the scheduled security scan.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Cloud Run revision names in rollback runbooks and the plain base32 alphabet used as a TOTP test fixture; neither is a secret"
+regexTarget = "match"
+regexes = [
+  '''--to-revisions=[a-z0-9-]+-\d{5}-[a-z]{3}=\d+''',
+  '''ABCDEFGHIJKLMNOPQRSTUVWXYZ234567''',
+]

@@ -98,6 +98,10 @@ async def protect_staff_surface(request, call_next):
             from fastapi.responses import JSONResponse
             return JSONResponse({"detail": "Staff access unavailable."}, status_code=503, headers={"Cache-Control": "no-store"})
     response = await call_next(request)
+    # The API returns data, never pages: browsers must not guess another type
+    # from a body, and must not pass the API's address on to other sites.
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
     if path.startswith("/api/v1/inquiries") or path == "/api/status":
         response.headers["Cache-Control"] = "no-store"
     return response
