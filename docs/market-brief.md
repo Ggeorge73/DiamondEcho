@@ -57,7 +57,7 @@ Cost: about 2,000 characters for the tour, made once and made again only if its 
 
 The first request of each Eastern-time day reads the sources and has the voice read the script. Visitors hear the tour first, so this happens while the tour is still playing.
 
-A complete brief, with figures and audio, is kept in Firestore in the collection `market_briefs`: one document per date, plus one for the tour. Later visitors and other instances reuse it. An incomplete brief (no figures, or the voice failed) is kept in memory only, and built again after 15 minutes.
+A complete brief, with figures and audio, is kept in Firestore in the collection `market_briefs`: one document per date, plus one for the tour. Google's MP3 for a two-minute script is about 1 MB, more than one Firestore document can hold (found on staging, 2026-10-09: 1,008,192 bytes). Each recording is therefore stored in parts of up to 700,000 bytes, each its own document named after its build, and joined again when played. Later visitors and other instances reuse it. An incomplete brief (no figures, or the voice failed) is kept in memory only, and built again after 15 minutes.
 
 Firestore rules already deny all browser access, and the service uses the Admin SDK.
 

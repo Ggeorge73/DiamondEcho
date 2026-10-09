@@ -17,6 +17,7 @@ import logging
 import os
 import re
 import time
+import uuid
 from datetime import date, datetime, timedelta, timezone
 from threading import Lock
 
@@ -27,7 +28,11 @@ from .tts import synthesize, voice_settings
 log = logging.getLogger(__name__)
 
 RETRY_SECONDS = 15 * 60
-MAX_AUDIO_BYTES = 900_000  # a Firestore document holds at most 1 MiB
+# A Firestore document holds at most 1 MiB, and Google's MP3 for a two-minute
+# script is about 1 MB. Audio is therefore stored in parts of PART_BYTES, each
+# its own document, and joined again when read.
+PART_BYTES = 700_000
+MAX_AUDIO_BYTES = 6_000_000  # a sanity limit, several times the longest script
 AUDIO_PATH = "/api/v1/market-brief/audio/{key}.mp3"
 KEY_PATTERN = re.compile(r"(\d{4}-\d{2}-\d{2}|tour-[0-9a-f]{16})")
 
@@ -102,18 +107,37 @@ class MarketBriefService:
             return None
         return audio
 
+    def _load(self, key):
+        stored = self.store.get(key)
+        if not stored or not stored.get("audio_parts"):
+            return stored  # absent, or audio kept inline by an earlier version
+        build = stored.get("audio_build", "")
+        parts = [self.store.get(f"{key}-part-{build}{i}") for i in range(stored["audio_parts"])]
+        if not all(part and part.get("data") for part in parts):
+            log.warning("Market brief %s is missing audio parts; building it again", key)
+            return None
+        return {**stored, "audio": b"".join(bytes(part["data"]) for part in parts)}
+
     def _cached(self, key):
         kept = self._memory.get(key)
         if kept and (kept[0] is None or kept[0] > self.clock()):
             return kept[1]
-        stored = self.store.get(key)
+        stored = self._load(key)
         if stored:
             self._memory[key] = (None, stored)
         return stored
 
     def _keep(self, key, data, complete):
         if complete:
-            self.store.put(key, data)
+            audio = bytes(data["audio"])
+            parts = [audio[i:i + PART_BYTES] for i in range(0, len(audio), PART_BYTES)]
+            # Parts first, so a reader never finds the brief without its audio.
+            # Each build names its own parts: if two instances build the same day
+            # at once, the brief that is stored first points only at its own.
+            build = f"{uuid.uuid4().hex[:8]}-"
+            for i, part in enumerate(parts):
+                self.store.put(f"{key}-part-{build}{i}", {"data": part})
+            self.store.put(key, {**data, "audio": None, "audio_parts": len(parts), "audio_build": build})
             self._memory[key] = (None, data)
         else:
             self._memory[key] = (self.clock() + RETRY_SECONDS, data)

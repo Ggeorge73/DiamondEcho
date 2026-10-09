@@ -186,6 +186,26 @@ def test_a_brief_without_audio_is_retried_later_and_never_stored():
     assert calls["collect"] == 2
 
 
+def test_audio_over_a_firestore_document_is_stored_in_parts_and_joined_again():
+    big = bytes(range(256)) * 8000  # 2,048,000 bytes, like a long brief
+    store = brief_service.MemoryStore()
+    service, _ = make_service(store, speak=lambda text: big)
+    body = service.brief()
+    assert body["market"]["audio_url"] == "/api/v1/market-brief/audio/2026-10-09.mp3"
+    assert store.rows["2026-10-09"]["audio"] is None
+    assert store.rows["2026-10-09"]["audio_parts"] == 3
+    assert all(len(row.get("data") or b"") <= brief_service.PART_BYTES for row in store.rows.values())
+    other, calls = make_service(store)
+    assert other.audio("2026-10-09") == big
+    assert calls == {"collect": 0, "speak": 0}
+    # A brief whose parts are incomplete is built again rather than served short.
+    build = store.rows["2026-10-09"]["audio_build"]
+    del store.rows[f"2026-10-09-part-{build}1"]
+    third, calls = make_service(store)
+    third.brief()
+    assert calls["collect"] == 1
+
+
 def test_audio_keys_are_checked():
     service, _ = make_service()
     service.brief()

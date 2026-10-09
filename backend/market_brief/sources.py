@@ -18,10 +18,13 @@ from __future__ import annotations
 
 import csv
 import io
+import logging
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import date, datetime
+
+log = logging.getLogger(__name__)
 
 USER_AGENT = "DiamondEcho-market-brief/1.0 (+https://diamondecho.com)"
 TIMEOUT_SECONDS = 8
@@ -150,7 +153,9 @@ def mortgage_rates(fetch=fetch_text) -> list[Figure]:
     """Freddie Mac's own file first; the same survey through FRED if that fails."""
     try:
         return _mortgage_from_pmms(fetch)
-    except Exception:
+    except Exception as exc:
+        log.warning("Freddie Mac file not used (%s: %s); reading the survey from FRED",
+                    type(exc).__name__, str(exc)[:200])
         return _mortgage_from_fred(fetch)
 
 
