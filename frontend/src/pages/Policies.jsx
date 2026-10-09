@@ -8,7 +8,7 @@ import './Policies.css';
 // Plain-language drafts for Gbenga's review (DE-18). They describe what this
 // site does today and claim no legal certification. Keep them in step with
 // frontend/public/index.html: a script added there must be described here.
-export const POLICIES_UPDATED = 'October 6, 2026';
+export const POLICIES_UPDATED = 'October 9, 2026';
 
 const usePageTitle = (title) => {
   useEffect(() => {
@@ -135,6 +135,22 @@ export const Privacy = () => {
           home, not of you.
         </p>
       </section>
+
+      {assistantAvailable() && (
+        <section>
+          <h2>Daily audio brief</h2>
+          <p>
+            The welcome tour and Georgia market brief on the home page are loaded from
+            DiamondEcho's service. Nothing you say or type is recorded. For the rest of your
+            visit, your browser's session storage remembers only that you have heard, paused
+            or closed the brief, so it does not start again; it is cleared when you close the tab.
+          </p>
+          <p>
+            The voice is made by Google Cloud Text-to-Speech from the brief's written script.
+            No information about you is sent to it.
+          </p>
+        </section>
+      )}
 
       {assistantAvailable() && (
         <section>

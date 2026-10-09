@@ -10,6 +10,7 @@ from starlette.middleware.cors import CORSMiddleware
 from deal_intelligence.router import router as deal_router
 from routes.assistant import router as assistant_router
 from property_data.router import router as property_router
+from market_brief.router import router as market_brief_router
 from inquiries.router import router as inquiries_router, require_staff, require_store
 from inquiries.firebase import queue_settings
 
@@ -69,7 +70,7 @@ def get_status_checks(account=Depends(require_staff), store=Depends(require_stor
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Status storage unavailable.") from exc
 
-for router in (deal_router, assistant_router, property_router, inquiries_router):
+for router in (deal_router, assistant_router, property_router, inquiries_router, market_brief_router):
     api.include_router(router)
 app.include_router(api)
 
