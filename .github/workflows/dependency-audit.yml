@@ -23,13 +23,13 @@ jobs:
     name: Capture production dependency findings
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache: npm
           cache-dependency-path: package-lock.json
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - name: Use the repository's pinned npm version
@@ -85,7 +85,7 @@ jobs:
           cat dependency-audit/summary.md >> "$GITHUB_STEP_SUMMARY"
       - name: Upload audit evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: production-dependency-audit-${{ github.sha }}
           path: dependency-audit/
