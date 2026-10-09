@@ -1,6 +1,7 @@
 /* Daily brief: the section below the hero and the audio bar (MarketBrief.jsx). */
 .mf-brief { padding: clamp(120px, 16vh, 190px) max(6vw, 46px); background: var(--abyss); border-bottom: 1px solid var(--line); }
 .mf-brief__inner { width: min(100%, 1480px); margin: auto; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: clamp(72px, 8vw, 140px); row-gap: clamp(64px, 8vh, 96px); align-items: start; }
+
 .mf-brief__head { max-width: 560px; }
 .mf-brief__head .eyebrow { margin-bottom: 14px; }
 .mf-brief__date { margin: 0 0 40px 52px; color: var(--mist); font-size: 12px; letter-spacing: .08em; }
@@ -49,4 +50,12 @@
 }
 @media (max-width: 460px) {
   .mf-brief__figures { grid-template-columns: 1fr; }
+}
+/* Side by side, the text sits in the middle of the figures' height, so no
+   empty band is left under it. */
+@media (min-width: 1181px) {
+  .mf-brief__head { align-self: center; padding: 24px 0; }
+  .mf-brief__head h2 { margin-bottom: 36px; }
+  .mf-brief__lede { font-size: 16px; }
+  .mf-brief__controls { margin-top: 52px; }
 }
