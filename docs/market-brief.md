@@ -27,7 +27,7 @@ Pause, play, "Today's market" (skip the tour) and close are always on screen. A 
 
 | Figure | Publisher | Read from | How often it changes |
 | --- | --- | --- | --- |
-| 30-year and 15-year fixed mortgage rates, national average, change from the week before | Freddie Mac Primary Mortgage Market Survey | `freddiemac.com/pmms/docs/PMMS_history.csv`. If that fails, FRED `MORTGAGE30US` and `MORTGAGE15US` | Weekly (Thursdays) |
+| 30-year and 15-year fixed mortgage rates, national average, change from the week before | Freddie Mac Primary Mortgage Market Survey | FRED `MORTGAGE30US` and `MORTGAGE15US`. If that fails, `freddiemac.com/pmms/docs/PMMS_history.csv` (which refuses Google Cloud: HTTP 403 on staging) | Weekly (Thursdays) |
 | Georgia median listing price, change from a year earlier | Realtor.com | FRED `MEDLISPRIGA` | Monthly |
 | Georgia number of active listings, change from a year earlier | Realtor.com | FRED `ACTLISCOUGA` | Monthly |
 | Georgia median days on market | Realtor.com | FRED `MEDDAYONMARGA` | Monthly |

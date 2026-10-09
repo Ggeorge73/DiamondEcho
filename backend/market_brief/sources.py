@@ -6,7 +6,8 @@ no recent value, is left out and reported as a problem, never filled in.
 
 Sources in use, all published for free reuse with attribution:
 
-- Freddie Mac Primary Mortgage Market Survey (weekly, national averages).
+- Freddie Mac Primary Mortgage Market Survey (weekly, national averages),
+  read from FRED, with Freddie Mac's own file as the fallback.
 - FRED, the Federal Reserve Bank of St. Louis data service, for series first
   published by Realtor.com (listings), FHFA (house prices), the Census Bureau
   (building permits) and the Bureau of Labor Statistics (unemployment).
@@ -150,13 +151,15 @@ def _mortgage_from_fred(fetch) -> list[Figure]:
 
 
 def mortgage_rates(fetch=fetch_text) -> list[Figure]:
-    """Freddie Mac's own file first; the same survey through FRED if that fails."""
+    """Freddie Mac's survey as published on FRED first: freddiemac.com refuses
+    requests from Google Cloud (HTTP 403, seen on staging 2026-10-09). Freddie
+    Mac's own file is the fallback."""
     try:
-        return _mortgage_from_pmms(fetch)
-    except Exception as exc:
-        log.warning("Freddie Mac file not used (%s: %s); reading the survey from FRED",
-                    type(exc).__name__, str(exc)[:200])
         return _mortgage_from_fred(fetch)
+    except Exception as exc:
+        log.warning("FRED mortgage series not used (%s: %s); reading Freddie Mac's file",
+                    type(exc).__name__, str(exc)[:200])
+        return _mortgage_from_pmms(fetch)
 
 
 @dataclass(frozen=True)

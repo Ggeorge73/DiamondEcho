@@ -57,6 +57,16 @@ def test_collect_keeps_going_when_a_source_fails_and_says_which():
     assert [p["source"] for p in problems] == ["Realtor.com median listing price (MEDLISPRI12060)"]
 
 
+def test_mortgage_rates_come_from_fred_first():
+    def fetch(url):
+        assert url != PMMS_URL, "Freddie Mac's site is only the fallback"
+        series = "MORTGAGE30US" if "MORTGAGE30US" in url else "MORTGAGE15US"
+        return fred(series, [("2026-10-01", "6.30"), ("2026-10-08", "6.12")])
+    rates = sources.mortgage_rates(fetch)
+    assert [r.id for r in rates] == ["mortgage_30", "mortgage_15"]
+    assert rates[0].spoken_source == "Freddie Mac's weekly survey"
+
+
 def test_mortgage_rates_fall_back_to_the_same_survey_on_fred():
     def fetch(url):
         if url == PMMS_URL:
