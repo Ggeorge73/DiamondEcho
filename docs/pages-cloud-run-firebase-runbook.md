@@ -131,14 +131,19 @@ directories directly.
 Public project: command `npm run build`, output `build`.
 Set REACT_APP_BACKEND_URL to the approved Cloud Run/API HTTPS origin WITHOUT
 `/api` or trailing slash. React configuration is baked into each build.
-`_redirects` lists the addresses the app really has; each is answered with the
-app and a 200. The build also writes `404.html` (a copy of `index.html`), so
-any other address gets the app's "Page not found" screen with a 404 status
-(DE-25 finding F6). A new route in `frontend/src/App.js` needs a line in
-`frontend/public/_redirects`, or a visitor who opens or refreshes that address
-gets the right page with a 404 status; `frontend/src/PublicRoutes.test.js`
-fails until the line is there. Do not use `/index.html` as a rewrite target:
-Pages redirects it to `/`. `robots.txt` and `sitemap.xml` name
+After the build, `frontend/scripts/prerender.mjs` saves every public page as
+an HTML file of its own (`about.html` answers `/about`), with the page's words,
+title, summary and business details in it; see `docs/search-ready-pages.md`.
+It reads `REACT_APP_BACKEND_URL` too, and stops the build if the value differs
+from the one the script was built with. The same step writes `404.html` (the
+empty shell, marked not to be listed), so any other address gets the app's
+"Page not found" screen with a 404 status (DE-25 finding F6). A new route in
+`frontend/src/App.js` needs a page in `frontend/src/lib/pageMeta.js`, or a
+visitor who opens or refreshes that address gets a 404;
+`frontend/src/PublicRoutes.test.js` fails until it has one. `_redirects` holds
+one line, which sends an old `/property/…` link to the search page. Do not add
+a line for a page that has a file, and do not use `/index.html` as a rewrite
+target: Pages redirects it to `/`. `robots.txt` and `sitemap.xml` name
 `diamondecho.com`; `_headers` asks search engines not to list the `pages.dev`
 copies. Test routes and the not-found screen on Pages after any change here.
 Initial unconfigured builds do not prove live intake.

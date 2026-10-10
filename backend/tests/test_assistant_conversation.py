@@ -34,7 +34,7 @@ def test_the_buyer_quick_prompt_gets_buyer_guidance():
     assert response.topic == "buy"
     assert "disciplined purchase flow" in response.answer
     assert response.citations[0].publisher == "Consumer Financial Protection Bureau"
-    assert [link.path for link in response.links] == ["/investment-calculator?tool=mortgage", "/search"]
+    assert [link.path for link in response.links] == ["/mortgage-calculator", "/search"]
 
 
 def test_the_rental_analysis_prompt_gets_deal_analysis_not_tenant_advice():
@@ -47,7 +47,7 @@ def test_the_rental_analysis_prompt_gets_deal_analysis_not_tenant_advice():
 def test_the_mortgage_prompt_gets_loan_comparison():
     response = ask("What should I compare in a mortgage?")
     assert response.topic == "mortgage"
-    assert [link.path for link in response.links] == ["/investment-calculator?tool=mortgage"]
+    assert [link.path for link in response.links] == ["/mortgage-calculator"]
 
 
 # --- Whole words, not letters anywhere --------------------------------------
@@ -93,7 +93,7 @@ def test_a_sellers_reply_with_a_location_continues_the_selling_conversation():
     assert response.answer.startswith("Thanks. For a primary home in Georgia")
     assert "I can help you plan a purchase or sale" not in response.answer   # not the opening menu again
     assert "Seller Net Sheet" in response.answer
-    assert [link.path for link in response.links] == ["/investment-calculator?tool=net-proceeds"]
+    assert [link.path for link in response.links] == ["/seller-net-sheet"]
     assert response.handoff.kind == "seller" and response.handoff_recommended is True
     assert response.follow_up_questions == []      # the state was given; it is not asked for again
 
@@ -320,7 +320,7 @@ def test_links_only_ever_point_inside_this_site():
     for message, earlier in _PROMPTS:
         for link in ask(message, earlier).links:
             assert link.path.startswith("/") and not link.path.startswith("//")
-            assert link.path.split("?")[0] in ("/investment-calculator", "/search")
+            assert link.path.split("?")[0] in ("/investment-calculator", "/mortgage-calculator", "/seller-net-sheet", "/search")
 
 
 def test_a_blocked_earlier_message_is_not_used_as_the_topic():

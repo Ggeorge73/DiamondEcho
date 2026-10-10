@@ -21,7 +21,7 @@ import {
 } from '../lib/dealValidation';
 import { buildMonteCarloScenarios, MONTE_CARLO_CASES } from '../lib/monteCarloCases';
 import { resolveListingContext } from '../lib/listingContext';
-import { toolFromSearch } from '../lib/intelligenceTools';
+import { TOOL_PATHS, currentToolAddress, toolFromLocation } from '../lib/intelligenceTools';
 import { applyPropertyAutofill, prepareAddressEdit, preparePropertyChange } from '../lib/propertyAutofill';
 
 // Monte Carlo runs in the visitor's browser, a block at a time (DE-25). The
@@ -41,9 +41,9 @@ export const landServiceFormulaIsCurrent = (version) => {
 };
 
 const INTELLIGENCE_TOOLS = [
-  { key: 'deal', to: '/investment-calculator', label: 'Deal Studio', audience: 'For investors', icon: BarChart3 },
-  { key: 'mortgage', to: '/investment-calculator?tool=mortgage', label: 'Mortgage simulator', audience: 'For buyers', icon: KeyRound },
-  { key: 'net-proceeds', to: '/investment-calculator?tool=net-proceeds', label: 'Seller net sheet', audience: 'For sellers', icon: Wallet },
+  { key: 'deal', to: TOOL_PATHS.deal, label: 'Deal Studio', audience: 'For investors', icon: BarChart3 },
+  { key: 'mortgage', to: TOOL_PATHS.mortgage, label: 'Mortgage simulator', audience: 'For buyers', icon: KeyRound },
+  { key: 'net-proceeds', to: TOOL_PATHS['net-proceeds'], label: 'Seller net sheet', audience: 'For sellers', icon: Wallet },
 ];
 const TOOL_HERO = {
   deal: {
@@ -215,7 +215,14 @@ const InvestmentCalculator = () => {
     return params.has('listing') ? `?listing=${encodeURIComponent(params.get('listing'))}` : '';
   }, [location.search]);
   const listingContext = useMemo(() => resolveListingContext(listingParam), [listingParam]);
-  const tool = toolFromSearch(location.search);
+  const tool = toolFromLocation(location.pathname, location.search);
+  // An older link chose the tool with "?tool=". The right tool is already on
+  // screen; this puts the tool's own address in the address bar, in place of
+  // the old one, so the address a visitor copies is the one search engines list.
+  const ownAddress = currentToolAddress(location.pathname, location.search);
+  useEffect(() => {
+    if (ownAddress) navigate(ownAddress, { replace: true });
+  }, [ownAddress, navigate]);
   // A buyer or seller tool is built the first time it is opened and then kept,
   // so what the visitor typed is still there when they come back to it.
   const [openedTools, setOpenedTools] = useState(() => new Set([tool]));
@@ -303,7 +310,7 @@ const InvestmentCalculator = () => {
   const clearListingRoute = () => {
     if (listingContext.kind !== 'manual') {
       skipNextContextReset.current = true;
-      navigate('/investment-calculator', { replace: true });
+      navigate(TOOL_PATHS.deal, { replace: true });
     }
   };
 

@@ -53,7 +53,7 @@
   "scripts": {
     "start": "craco start",
     "build": "craco build",
-    "postbuild": "node scripts/make-404.mjs",
+    "postbuild": "node scripts/prerender.mjs",
     "test": "craco test"
   },
   "browserslist": {
@@ -75,6 +75,7 @@
     "ajv": "^8.17.1",
     "ajv-keywords": "^5.1.0",
     "autoprefixer": "^10.4.20",
+    "esbuild": "0.28.2",
     "eslint": "^8.57.1",
     "eslint-plugin-import": "2.31.0",
     "eslint-plugin-jsx-a11y": "6.10.2",

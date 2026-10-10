@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   ArrowRight, ArrowUpRight, BarChart3, Building2,
   LineChart, MessageCircle, Plus, Search, Users,
@@ -8,6 +8,7 @@ import GamlsSearch from '../components/GamlsSearch';
 import MarketBrief from '../components/MarketBrief';
 import LatestEpisode from '../components/LatestEpisode';
 import { assistantAvailable, openAssistant } from '../lib/assistant';
+import { SERVICE_AREAS, serviceAreaList } from '../lib/pageMeta';
 
 /* ------------------------------------------------------------------ */
 /* Content                                                             */
@@ -282,6 +283,30 @@ const Home = () => {
             purchases with DiamondEcho. Start with a location, compare available properties,
             and contact us to discuss your next step.
           </p>
+        </div>
+      </section>
+
+      {/* Where DiamondEcho works. The cities are the ones Gbenga named on
+          2026-10-10 (lib/pageMeta.js); a city is added there, not here. */}
+      <section className="mf-statement mf-statement--areas" aria-labelledby="home-areas-heading">
+        <div className="mf-statement__inner">
+          <p className="eyebrow" data-reveal>Where we work</p>
+          <h2 id="home-areas-heading" data-reveal>
+            Homes and investments<br />
+            <em>across metro Atlanta.</em>
+          </h2>
+          <p data-reveal style={{ '--reveal-delay': '.12s' }}>
+            DiamondEcho works with home buyers, sellers and real estate investors
+            in {serviceAreaList()}, from the brokerage office in Duluth, Georgia.
+          </p>
+          <ul className="mf-areas" data-reveal style={{ '--reveal-delay': '.18s' }}>
+            {SERVICE_AREAS.map(({ city, county }) => (
+              <li key={city}><strong>{city}</strong><small>{county}</small></li>
+            ))}
+            <li className="mf-areas__more">
+              <Link to="/search">Search anywhere in Georgia <ArrowUpRight /></Link>
+            </li>
+          </ul>
         </div>
       </section>
 

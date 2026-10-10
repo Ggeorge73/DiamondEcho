@@ -38,6 +38,7 @@ legal advice".
 | The paragraphs on the mortgage simulator and seller net sheet | Privacy, Terms | 2026-10-06, the same answer |
 | No commission rate is pre-filled; the visitor types their own | Seller net sheet | 2026-10-06: "allow for users to insert commission rate" |
 | A "Get pre-approved" button | Mortgage simulator | 2026-10-06: "add it". No lender was named, so the button asks an agent for an introduction and the page says "DiamondEcho is not a lender" |
+| Where DiamondEcho works: Alpharetta, Roswell, Duluth, Atlanta, Suwanee, Cumming, Lawrenceville | Home ("Where we work"), the search page's summary, the business details read by search engines | Supplied 2026-10-10 as the cities he wants buyers, sellers and investors to find him in. He wrote "Cummings"; the city is Cumming |
 
 ## 2. Describes what the site does; checked against the code
 
@@ -94,6 +95,30 @@ Not changed. These are his to keep or reword.
 | Integrity: "the numbers we present are the numbers we would act on ourselves." | About | Sits beside Terms that say Deal Studio's numbers are estimates from the visitor's own figures, and not advice |
 | Excellence: "From market analysis to closing logistics, we hold a single standard: work we would put our own name on, because we do." | About | Names two services: market analysis and closing logistics |
 | "Requests can be sent at any hour. We reply during business hours: Monday to Saturday, 9:00 AM to 5:00 PM Eastern."; out of hours, "Your request arrived outside our business hours. We reply Monday to Saturday, 9:00 AM to 5:00 PM Eastern, and will be in touch once we reopen." | Request form and its receipt, shown only when online requests are open | Added 2026-10-05 (DE-31). The hours and the instruction to say so are his; the sentences are the agent's. A promise of a reply, not of a time. See `docs/de31-inquiry-routing.md` |
+
+## 4a. Added 2026-10-10 with the search-ready pages: for Gbenga to read
+
+Each page now has a title and a summary of its own, shown in search results
+(`frontend/src/lib/pageMeta.js`; the full list is in
+`docs/search-ready-pages.md`). They describe what the page does, and they use
+these words about the business, which are his to keep or change:
+
+| Words | Where | Note |
+| --- | --- | --- |
+| "DiamondEcho works with home buyers, sellers and real estate investors in Alpharetta, … and Lawrenceville, from the brokerage office in Duluth, Georgia." | Home | The cities are his list. "Works with" is the agent's wording |
+| "Homes and investments across metro Atlanta."; "Metro Atlanta" in three titles and the link-preview picture | Home, titles of `/` and `/search`, summaries, picture | All seven cities are in metro Atlanta. He has not used the phrase himself |
+| The county under each city (Fulton, Gwinnett, Forsyth) | Home | Geography, not a claim about the business. Atlanta and Suwanee each reach into a second county; the main one is shown |
+| "Free" | Summaries of Deal Studio and the mortgage simulator | The tools ask for no payment or sign-in |
+| "Buy, Sell or Invest With a Georgia Agent" | Title of the Advisory page | He is a Georgia licensee; the page itself still publishes no advisor profile |
+
+No title or summary carries the brokerage's name except About's. The firm's
+name and telephone number are in the HTML of every page, in the business
+details and on the link-preview picture. Whether titles must carry it too is
+the broker question in section 5.
+
+A test (`frontend/src/lib/pageMeta.test.js`) fails if a title or summary says
+"best", "#1", "top-rated", "award", "guarantee", "luxury", "trusted",
+"leading", "expert", "national", "lowest" or "pre-approv".
 
 ## 5. Still open on DE-17
 

@@ -1,23 +1,13 @@
-# Cloudflare Pages. The addresses the app really has, each answered with the
-# app shell and a 200. Anything else gets 404.html (the same shell, written by
-# scripts/make-404.mjs) and a 404 status, so the app's "Page not found" screen
-# is no longer reported to browsers and search engines as a working page.
-# A new <Route> in src/App.js needs a line here; src/PublicRoutes.test.js fails
-# until it has one.
-/search / 200
-/search/ / 200
-/property/* / 200
-/investment-calculator / 200
-/investment-calculator/ / 200
-/agents / 200
-/agents/ / 200
-/about / 200
-/about/ / 200
-/inquire / 200
-/inquire/ / 200
-/podcast / 200
-/podcast/ / 200
-/privacy / 200
-/privacy/ / 200
-/terms / 200
-/terms/ / 200
+# Cloudflare Pages. Every public page is a file of its own in the build
+# (about.html answers /about, and so on: scripts/prerender.mjs), so the pages
+# need no line here. Anything that is neither a file nor listed below gets
+# 404.html and a 404 status, so the app's "Page not found" screen is not
+# reported to browsers and search engines as a working page.
+#
+# The one address with no file is an old listing link. The app has no listing
+# pages of its own (listings open inside the Georgia MLS search), so the link
+# is sent on to the search page. 302, not 301: browsers keep a 301 for good,
+# and a listing page may exist one day.
+# A new <Route> in src/App.js needs a page in src/lib/pageMeta.js or a line
+# here; src/PublicRoutes.test.js fails until it has one.
+/property/* /search 302
