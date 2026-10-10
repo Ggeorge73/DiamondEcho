@@ -56,3 +56,15 @@ with TestClient(server.app) as c:
     assert c.get('/docs').status_code == 200
     assert c.get('/health').json() == {'status': 'ok'}
 """, API_DOCS_ENABLED="true")
+
+
+def test_api_responses_carry_basic_security_headers():
+    run("""
+import sys
+sys.path.insert(0, sys.argv[1])
+from fastapi.testclient import TestClient
+import server
+response = TestClient(server.app).get('/health')
+assert response.headers['x-content-type-options'] == 'nosniff'
+assert response.headers['referrer-policy'] == 'no-referrer'
+""")

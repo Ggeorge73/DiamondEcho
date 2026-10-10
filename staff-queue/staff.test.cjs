@@ -203,8 +203,94 @@ test("a failed enrolment code keeps the same QR code and key on screen for anoth
 });
 test("the built staff site keeps its security headers, uses https only, and is not listed by search engines",()=>{
   const build = fs.readFileSync(__dirname + "/build.mjs", "utf8");
-  for (const header of ["Cache-Control: no-store","X-Content-Type-Options: nosniff","Referrer-Policy: no-referrer","X-Frame-Options: DENY",
+  for (const header of ["Cache-Control: no-store","X-Content-Type-Options: nosniff","Referrer-Policy: no-referrer","X-Frame-Options: DENY","Cross-Origin-Opener-Policy: same-origin",
     "Strict-Transport-Security: max-age=15552000","X-Robots-Tag: noindex, nofollow"]) assert.ok(build.includes(header), header);
   // Nothing follows the age: no includeSubDomains (it would reach the mail hosts) and no preload.
   assert.ok(build.includes("Strict-Transport-Security: max-age=15552000\\n"));
+});
+
+// Podcast episodes ------------------------------------------------------------
+function podcastSetup({fail409=false, putStatus=200}={}) {
+  const calls=[]; const puts=[];
+  const episodes=[];
+  const fetch=async(url,init={})=>{
+    calls.push({url,method:init.method||"GET",body:init.body&&JSON.parse(init.body),init});
+    if (url.endsWith("/api/v1/podcast/staff/episodes") && (init.method||"GET")==="GET") return {ok:true,status:200,json:async()=>({items:episodes})};
+    if (url.endsWith("/api/v1/podcast/staff/episodes")) return {ok:true,status:201,json:async()=>({id:"a".repeat(32),upload_url:"https://storage.googleapis.com/upload/session/1"})};
+    if (url.includes("/publish")) {
+      if (fail409) return {ok:false,status:409,json:async()=>({})};
+      episodes.push({id:"a".repeat(32),title:"Atlanta in October",status:"published",published_at:"2026-10-09T16:00:00+00:00"});
+      return {ok:true,status:200,json:async()=>({status:"published"})};
+    }
+    return {ok:true,status:200,json:async()=>({items:[]})};
+  };
+  const ui=setup({fetch});
+  ui.w.XMLHttpRequest=class { constructor(){this.upload={};this.headers={};}
+    open(method,url){this.method=method;this.url=url;} setRequestHeader(k,v){this.headers[k]=v;}
+    send(file){puts.push({method:this.method,url:this.url,headers:this.headers,file});
+      this.upload.onprogress?.({lengthComputable:true,loaded:5,total:10}); this.status=putStatus; setTimeout(()=>this.onload(),0);} };
+  return {ui,calls,puts};
+}
+function chooseFile(ui,name,type,size=10){
+  const file=new ui.w.File(["x".repeat(size)],name,{type});
+  Object.defineProperty(ui.el("podcast-file"),"files",{value:[file],configurable:true});
+  return file;
+}
+test("the podcast list is loaded only when staff open it, so the queue sign-in makes no extra request",async()=>{
+  const {ui,calls}=podcastSetup();
+  await login(ui);
+  assert.equal(calls.filter(c=>c.url.includes("/podcast/")).length,0);
+  ui.el("podcast-open").click(); await pause();
+  assert.equal(ui.el("podcast-panel").hidden,false);
+  assert.equal(ui.el("podcast-open").getAttribute("aria-expanded"),"true");
+  assert.match(ui.el("episodes").textContent,/No episodes yet/);
+});
+test("an episode is uploaded straight to storage, then published, and shown in the list",async()=>{
+  const {ui,calls,puts}=podcastSetup();
+  await login(ui); ui.el("podcast-open").click(); await pause();
+  ui.el("podcast-title").value="  Atlanta in October ";
+  ui.el("podcast-description").value="Rates and listings.";
+  const file=chooseFile(ui,"episode-12.MP3","");
+  ui.submit("podcast-form"); await pause(); await pause();
+  const start=calls.find(c=>c.method==="POST"&&c.url.endsWith("/api/v1/podcast/staff/episodes"));
+  assert.deepEqual(start.body,{title:"Atlanta in October",description:"Rates and listings.",content_type:"audio/mpeg",size_bytes:10});
+  assert.equal(start.init.headers.Authorization,"Bearer named-id-token");
+  assert.equal(start.init.credentials,"omit");
+  assert.equal(puts.length,1);
+  assert.equal(puts[0].method,"PUT"); assert.equal(puts[0].url,"https://storage.googleapis.com/upload/session/1");
+  assert.equal(puts[0].headers["Content-Type"],"audio/mpeg"); assert.equal(puts[0].file,file);
+  assert.ok(calls.some(c=>c.url.endsWith("/"+"a".repeat(32)+"/publish")&&c.method==="POST"));
+  assert.match(ui.el("notice").textContent,/uploaded and published/);
+  assert.match(ui.el("episodes").textContent,/Atlanta in October/);
+  assert.equal(ui.el("podcast-title").value,"");
+});
+test("a file that is not MP3 or M4A is refused before anything is sent",async()=>{
+  const {ui,calls,puts}=podcastSetup();
+  await login(ui); ui.el("podcast-open").click(); await pause();
+  ui.el("podcast-title").value="Episode";
+  chooseFile(ui,"episode.wav","audio/wav");
+  ui.submit("podcast-form"); await pause();
+  assert.match(ui.el("alert").textContent,/MP3 or M4A/);
+  assert.equal(calls.filter(c=>c.method==="POST").length,0); assert.equal(puts.length,0);
+});
+test("a failed upload says nothing was published",async()=>{
+  const {ui,calls}=podcastSetup({putStatus:500});
+  await login(ui); ui.el("podcast-open").click(); await pause();
+  ui.el("podcast-title").value="Episode";
+  chooseFile(ui,"episode.m4a","audio/mp4");
+  ui.submit("podcast-form"); await pause(); await pause();
+  assert.match(ui.el("alert").textContent,/nothing was published/);
+  assert.equal(calls.some(c=>c.url.includes("/publish")),false);
+});
+test("signing out clears and closes the podcast list",async()=>{
+  const {ui}=podcastSetup();
+  await login(ui); ui.el("podcast-open").click(); await pause();
+  ui.el("signout-button").click(); await pause();
+  assert.equal(ui.el("podcast-panel").hidden,true);
+  assert.equal(ui.el("episodes").textContent,"");
+});
+test("the staff site may send uploads to Cloud Storage and nowhere new besides",()=>{
+  const build=fs.readFileSync(__dirname+"/build.mjs","utf8");
+  assert.match(build,/connect-src 'self' https:\/\/identitytoolkit\.googleapis\.com https:\/\/securetoken\.googleapis\.com"/);
+  assert.match(build,/" https:\/\/storage\.googleapis\.com"/);
 });

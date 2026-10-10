@@ -1,0 +1,33 @@
+# Dependabot opens pull requests; nothing merges without Gbenga's review.
+version: 2
+updates:
+  # npm: security fixes only. Routine version bumps of the 1,500-package
+  # workspace would bury them (limit 0 keeps security PRs, drops the rest).
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+    labels: [dependencies]
+
+  - package-ecosystem: pip
+    directory: /backend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels: [dependencies]
+
+  - package-ecosystem: docker
+    directory: /backend
+    schedule:
+      interval: weekly
+    labels: [dependencies]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ['*']
+    labels: [dependencies]

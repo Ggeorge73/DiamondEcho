@@ -26,9 +26,11 @@ await build({ entryPoints: [fileURLToPath(new URL("entry.js", import.meta.url))]
 for (const name of ["index.html", "staff.css"]) await copyFile(new URL(name, import.meta.url), new URL("dist/" + name, import.meta.url));
 await writeFile(new URL("dist/config.js", import.meta.url), "window.DIAMOND_ECHO_STAFF_CONFIG = Object.freeze(" + JSON.stringify(config).replaceAll("<", "\\u003c") + ");\n");
 const csp = "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com" +
+  // Podcast uploads go straight to Cloud Storage through a session the API opens.
+  " https://storage.googleapis.com" +
   (enabled ? " " + config.apiBase : "") + "; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'none'; upgrade-insecure-requests";
 await writeFile(new URL("dist/_headers", import.meta.url), "/*\n  Content-Security-Policy: " + csp +
-  "\n  Cache-Control: no-store\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: no-referrer\n  X-Frame-Options: DENY\n  Permissions-Policy: camera=(), microphone=(), geolocation=()" +
+  "\n  Cache-Control: no-store\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: no-referrer\n  X-Frame-Options: DENY\n  Cross-Origin-Opener-Policy: same-origin\n  Permissions-Policy: camera=(), microphone=(), geolocation=()" +
   // DE-25: https only for this host for 180 days (no subdomains, no preload), and the staff page is never to be listed by a search engine.
   "\n  Strict-Transport-Security: max-age=15552000\n  X-Robots-Tag: noindex, nofollow\n");
 console.log(enabled ? "Configured isolated staff build complete" : "Disabled staff build complete (no live identity configured)");

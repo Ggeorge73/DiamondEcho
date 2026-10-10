@@ -24,6 +24,12 @@ For a DiamondEcho task that spans engineering, verification, and operations, giv
 - May inspect configuration and prepare runbooks or synthetic test plans. It records what was verified and what still needs a real project, identity, responder, or owner decision.
 - Never grants itself staff access, chooses billing or DNS, exposes visitor data, asserts human Lara approval, or turns on live inquiries without Gbenga's approval and tested controls.
 
+## Security team (`security-lead`, `appsec-engineer`, `cloud-security-engineer`, `detection-response-engineer`)
+
+- Four AI security roles are defined in `.claude/agents/`. Start security work with `security-lead`, which hands bounded assignments to the other three and returns one risk-ranked summary.
+- They own the scheduled defences (`.github/workflows/security-scan.yml`, `security-alert.yml`, `dependency-audit.yml`, `.github/dependabot.yml`) and the playbook in `docs/security-operations.md`.
+- Same limits as every role here: they prepare fixes, tests, runbooks and draft PRs; they never merge, change production, IAM, DNS, billing or Cloudflare settings, suppress an alert without a written reason, or put a secret value anywhere. A leaked secret is reported by file and commit, and rotated by Gbenga.
+
 ## Shared release rules
 
 - Preserve the accepted Georgia MLS IDX experience. No fictional listed properties, search results, advisors, offices, testimonials, or business metrics. Illustrative deal scenarios must be clearly labeled and never presented as live listings.

@@ -1,0 +1,16 @@
+/* Podcast: the latest-episode strip on the home page and the /podcast page. */
+.mf-latest-episode { padding: clamp(56px, 8vh, 90px) max(6vw, 46px); background: var(--abyss); border-bottom: 1px solid var(--line); }
+.mf-latest-episode__inner { width: min(100%, 1480px); margin: auto; display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 1.4fr); gap: clamp(32px, 6vw, 100px); align-items: start; }
+.mf-latest-episode h2 { margin: 0 0 20px; font-size: clamp(26px, 2.6vw, 40px); font-weight: 300; }
+.mf-episode { padding: 24px 22px; display: flex; flex-direction: column; gap: 10px; border: 1px solid var(--line); background: var(--panel); }
+.mf-episode small { color: var(--mist); font-size: 10px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; }
+.mf-episode :is(h2, h3) { margin: 0; font-size: clamp(20px, 1.8vw, 26px); font-weight: 400; color: var(--ice); }
+.mf-episode p { margin: 0; color: var(--mist); font-size: 14px; line-height: 1.75; }
+.mf-episode audio { width: 100%; margin-top: 6px; }
+.mf-podcast-page { min-height: 70vh; padding: clamp(130px, 18vh, 190px) max(6vw, 46px) clamp(80px, 12vh, 140px); background: var(--navy); }
+.mf-podcast-page__inner { width: min(100%, 980px); margin: auto; }
+.mf-podcast-page h1 { margin: 0 0 22px; font-size: clamp(34px, 4.4vw, 64px); font-weight: 300; letter-spacing: -.02em; line-height: 1.12; }
+.mf-podcast-page__lede, .mf-podcast-page__empty { max-width: 640px; color: var(--mist); font-size: 15px; line-height: 1.85; }
+.mf-podcast-page__list { margin: 40px 0 0; padding: 0; list-style: none; display: grid; gap: 18px; }
+@media (max-width: 1180px) { .mf-latest-episode__inner { grid-template-columns: 1fr; } }
+@media (max-width: 720px) { .mf-latest-episode, .mf-podcast-page { padding-left: 22px; padding-right: 22px; } }

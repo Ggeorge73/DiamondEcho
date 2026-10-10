@@ -10,6 +10,8 @@ from starlette.middleware.cors import CORSMiddleware
 from deal_intelligence.router import router as deal_router
 from routes.assistant import router as assistant_router
 from property_data.router import router as property_router
+from market_brief.router import router as market_brief_router
+from podcast.router import router as podcast_router
 from inquiries.router import router as inquiries_router, require_staff, require_store
 from inquiries.firebase import queue_settings
 
@@ -69,7 +71,7 @@ def get_status_checks(account=Depends(require_staff), store=Depends(require_stor
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Status storage unavailable.") from exc
 
-for router in (deal_router, assistant_router, property_router, inquiries_router):
+for router in (deal_router, assistant_router, property_router, inquiries_router, market_brief_router, podcast_router):
     api.include_router(router)
 app.include_router(api)
 
@@ -84,7 +86,8 @@ app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=Fals
 @app.middleware("http")
 async def protect_staff_surface(request, call_next):
     path = request.url.path
-    protected = path.startswith("/api/v1/inquiries/staff") or path == "/api/status"
+    protected = (path.startswith("/api/v1/inquiries/staff") or path.startswith("/api/v1/podcast/staff")
+                 or path == "/api/status")
     if protected and request.headers.get("origin"):
         try:
             _, _, _, staff_origin = queue_settings()
@@ -95,6 +98,10 @@ async def protect_staff_surface(request, call_next):
             from fastapi.responses import JSONResponse
             return JSONResponse({"detail": "Staff access unavailable."}, status_code=503, headers={"Cache-Control": "no-store"})
     response = await call_next(request)
+    # The API returns data, never pages: browsers must not guess another type
+    # from a body, and must not pass the API's address on to other sites.
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
     if path.startswith("/api/v1/inquiries") or path == "/api/status":
         response.headers["Cache-Control"] = "no-store"
     return response
