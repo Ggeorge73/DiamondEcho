@@ -119,7 +119,14 @@ const { code: guardCode } = await transform(
 if (guardCode.includes('</')) throw new Error('The page guard cannot be written inside a script element.');
 const guard = `<script>${guardCode.trim()}</script>`;
 
-const text = (html) => html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/g, ' ').replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
+// The pages now carry the office email address in their HTML. Cloudflare's
+// "Email Address Obfuscation" (on by default for a domain) would rewrite it in
+// transit and add a script of Cloudflare's to put it back: the app would then
+// find a page that is not the one it drew and redraw it, a reader of the HTML
+// alone would not see the address, and the Privacy page's "no other scripts"
+// would stop being true. These two comments are Cloudflare's own way to say
+// "leave this part as written". They sit outside the part the app takes over.
+const EMAIL_AS_WRITTEN = ['<!--email_off-->', '<!--/email_off-->'];
 
 const seen = { title: new Map(), description: new Map() };
 const written = [];
@@ -131,28 +138,28 @@ for (const page of PAGES) {
   });
 
   // Fields and buttons do nothing until the script has loaded, and what a
-  // visitor typed into one before then would be lost when the app took the
-  // page over. They are marked inert here and released by src/index.js the
-  // moment the app starts. Links are left alone: they work without the script.
-  const body = renderPage(page.path).replace(/<(input|select|textarea|button)(?=[\s>])/g, '<$1 inert=""');
+  // visitor typed or ticked before then would be lost when the app took the
+  // page over. They are marked inert here, with their labels (a click on a
+  // label ticks its box), and released by src/index.js the moment the app
+  // starts. Links are left alone: they work without the script.
+  const body = renderPage(page.path).replace(/<(input|select|textarea|button|label)(?=[\s>])/g, '<$1 inert=""');
   const headings = body.match(/<h1[\s>]/g) || [];
   if (headings.length !== 1) throw new Error(`${page.path} was drawn with ${headings.length} main headings; a page has exactly one`);
-  const words = text(body);
   // Georgia Real Estate Commission Rule 520-1-.09: the firm's name and telephone number on every page.
   [BROKERAGE.name, BROKERAGE.phone].forEach((needed) => {
-    if (!words.includes(needed)) throw new Error(`${page.path} was drawn without "${needed}"`);
+    if (!body.includes(escapeHtml(needed))) throw new Error(`${page.path} was drawn without "${needed}"`);
   });
 
   let html = shell;
   html = replaceOnce(html, TITLE, `<title>${escapeHtml(head.title)}</title>`, 'title');
   html = replaceOnce(html, DESCRIPTION, `<meta name="description" content="${escapeHtml(head.description)}"/>`, 'description');
   html = replaceOnce(html, /<\/head>/, `${headTags(head)}</head>`, 'closing head tag');
-  html = replaceOnce(html, ROOT, `<div id="root" data-prerendered="${escapeHtml(page.path)}">${body}</div>${guard}`, 'empty root element');
+  html = replaceOnce(html, ROOT, `${EMAIL_AS_WRITTEN[0]}<div id="root" data-prerendered="${escapeHtml(page.path)}">${body}</div>${EMAIL_AS_WRITTEN[1]}${guard}`, 'empty root element');
 
   const file = page.path === '/' ? 'index.html' : `${page.path.slice(1)}.html`;
   if (file.includes('/')) throw new Error(`${page.path}: pages inside folders are not handled yet`);
   writeFileSync(join(out, file), html);
-  written.push(`${file} (${words.split(' ').length} words)`);
+  written.push(`${file} (${Math.round(Buffer.byteLength(html) / 1024)} kB)`);
 }
 
 // The page for an address the site does not have: the empty shell.

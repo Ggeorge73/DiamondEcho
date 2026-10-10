@@ -34,7 +34,12 @@ export const serviceAreaList = (areas = SERVICE_AREAS) => {
   return names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names.join('');
 };
 
-const page = (path, name, title, description, extra = {}) => Object.freeze({ path, name, title, description, ...extra });
+const page = (path, name, title, description) => Object.freeze({ path, name, title, description });
+
+// The request forms are offered only by a build that has a service to send
+// them to (pages/Inquire.jsx). The summary of that page must not promise a
+// form the page does not show.
+const requestsOpen = Boolean((process.env.REACT_APP_BACKEND_URL || '').trim());
 
 export const PAGES = Object.freeze([
   page('/', 'Home',
@@ -45,25 +50,24 @@ export const PAGES = Object.freeze([
     `Search Georgia MLS listings for homes, land, multifamily and rentals in ${serviceAreaList()}.`),
   page(TOOL_PATHS.deal, 'Deal Studio',
     'Real Estate Investment Calculator: Deal Studio | DiamondEcho',
-    'Free real estate deal calculator for rentals, fix and flips and land development. See IRR, cash-on-cash, DSCR and Monte Carlo ranges from the figures you enter.',
-    { tool: 'Deal Studio' }),
+    'Free real estate deal calculator for rentals, fix and flips and land development. See IRR, cash-on-cash, DSCR and Monte Carlo ranges from the figures you enter.'),
   page(TOOL_PATHS.mortgage, 'Mortgage simulator',
     'Mortgage Calculator for Georgia Home Buyers | DiamondEcho',
-    'Estimate a monthly house payment: principal and interest, property taxes, insurance, HOA fees and mortgage insurance. Free, and nothing you type is sent or saved.',
-    { tool: 'Mortgage simulator' }),
+    'Estimate a monthly house payment: principal and interest, property taxes, insurance, HOA fees and mortgage insurance. Free; nothing you type is sent or saved.'),
   page(TOOL_PATHS['net-proceeds'], 'Seller net sheet',
-    'Georgia Seller Net Sheet: Estimate Sale Proceeds | DiamondEcho',
-    'Estimate what you keep when you sell a home in Georgia: mortgage payoff, the commission you enter, closing costs, Georgia transfer tax, concessions and prorations.',
-    { tool: 'Seller net sheet' }),
+    'Georgia Seller Net Sheet & Proceeds Calculator | DiamondEcho',
+    'Estimate what you keep when you sell a home in Georgia: mortgage payoff, the commission you enter, closing costs, transfer tax, concessions and prorations.'),
   page('/agents', 'Advisory',
     'Buy, Sell or Invest With a Georgia Agent | DiamondEcho',
     'Search Georgia MLS, work through the numbers, then tell DiamondEcho what you need. Working with buyers, sellers and investors across metro Atlanta, Georgia.'),
   page('/about', 'The firm',
     'About DiamondEcho | Real Estate in Duluth, Georgia',
-    `Georgia MLS property search, deal analysis and a way to start a buying or selling conversation, in one place. Brokerage: ${BROKERAGE.name}, Duluth, GA.`),
+    `Georgia MLS property search, deal analysis and a way to start a buying or selling conversation. Brokerage: ${BROKERAGE.name}, Duluth, GA.`),
   page('/inquire', 'Contact',
     'Contact DiamondEcho | Buy or Sell a Home in Georgia',
-    `Ask about buying, request a seller consultation or a property tour. Replies ${HOURS.label}. Direct ${OFFICE.phone}.`),
+    requestsOpen
+      ? `Ask about buying, request a seller consultation or a property tour. Replies ${HOURS.label}. Direct ${OFFICE.phone}.`
+      : `Reach DiamondEcho about buying or selling a home in Georgia. Brokerage: ${BROKERAGE.name}, office ${BROKERAGE.phone}. Direct ${OFFICE.phone}.`),
   page('/podcast', 'Podcast',
     'Georgia Real Estate Podcast | DiamondEcho',
     'Episodes recorded by DiamondEcho on buying, selling and investing in Georgia real estate. General information, not advice about any property or loan.'),
@@ -99,7 +103,10 @@ const WEBSITE_ID = `${SITE_ORIGIN}/#website`;
 
 // The business as schema.org describes it. Every value is read from
 // lib/contact.js or the list above: nothing here is typed a second time, and
-// nothing is stated that the pages themselves do not show.
+// nothing is stated that the site does not say in words (the cities are in the
+// footer of every page). The hours are given as the hours DiamondEcho can be
+// reached, which is what the site says of them, not as the hours the
+// brokerage's office is open, which nobody has stated.
 export const businessData = () => {
   const { city, state, zip } = officeLocality();
   return {
@@ -125,15 +132,23 @@ export const businessData = () => {
       name: area.city,
       containedInPlace: { '@type': 'AdministrativeArea', name: `${area.county}, Georgia` },
     })),
-    openingHoursSpecification: [{
-      '@type': 'OpeningHoursSpecification',
-      dayOfWeek: HOURS.days.map((day) => DAY_NAMES[day]),
-      opens: clock(HOURS.open),
-      closes: clock(HOURS.close),
+    contactPoint: [{
+      '@type': 'ContactPoint',
+      contactType: 'customer service',
+      telephone: dialable(OFFICE.phoneHref),
+      email: OFFICE.email,
+      areaServed: 'US-GA',
+      availableLanguage: 'en',
+      hoursAvailable: [{
+        '@type': 'OpeningHoursSpecification',
+        dayOfWeek: HOURS.days.map((day) => DAY_NAMES[day]),
+        opens: clock(HOURS.open),
+        closes: clock(HOURS.close),
+      }],
     }],
     // The firm DiamondEcho operates under (Georgia Real Estate Commission Rule 520-1-.09).
     parentOrganization: {
-      '@type': 'RealEstateAgent',
+      '@type': 'Organization',
       name: BROKERAGE.name,
       telephone: dialable(BROKERAGE.phoneHref),
     },
@@ -165,20 +180,8 @@ export const structuredDataFor = (item) => {
       ],
     });
   }
-  if (item.tool) {
-    graph.push({
-      '@type': 'WebApplication',
-      name: `${SITE_NAME} ${item.tool}`,
-      url,
-      description: item.description,
-      applicationCategory: 'FinanceApplication',
-      operatingSystem: 'Any',
-      browserRequirements: 'Requires JavaScript',
-      isAccessibleForFree: true,
-      offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
-      provider: { '@id': BUSINESS_ID },
-    });
-  }
+  // The three tools are not described as software: search engines accept that
+  // description only with ratings or reviews, and the site has none to state.
   return { '@context': 'https://schema.org', '@graph': graph };
 };
 
@@ -230,14 +233,19 @@ const element = (doc, tag, attributes) => {
 };
 
 // Brings the open page's <head> in step with the page now on screen. On an
-// address the site does not have, the previous page's listing address and
-// business details are taken away; the "Page not found" screen sets its own
-// title and asks not to be listed.
+// address the site does not have, everything the previous page said about
+// itself is taken away; the "Page not found" screen sets its own title and
+// asks not to be listed. On a real page that request is taken away again: a
+// visitor may have arrived on 404.html, which carries it from the start.
 export const applyPageMeta = (doc, item) => {
   if (!item) {
-    doc.head.querySelectorAll(`link[rel="canonical"], script#${STRUCTURED_DATA_ID}`).forEach((node) => node.remove());
+    doc.head.querySelectorAll([
+      'link[rel="canonical"]', `script#${STRUCTURED_DATA_ID}`, 'meta[name="description"]',
+      'meta[property^="og:"]', 'meta[name^="twitter:"]',
+    ].join(', ')).forEach((node) => node.remove());
     return;
   }
+  doc.head.querySelectorAll('meta[name="robots"]').forEach((node) => node.remove());
   const head = headFor(item);
   doc.title = head.title;
   upsert(doc, 'meta[name="description"]', () => element(doc, 'meta', { name: 'description' })).setAttribute('content', head.description);

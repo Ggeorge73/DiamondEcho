@@ -134,8 +134,9 @@ Set REACT_APP_BACKEND_URL to the approved Cloud Run/API HTTPS origin WITHOUT
 After the build, `frontend/scripts/prerender.mjs` saves every public page as
 an HTML file of its own (`about.html` answers `/about`), with the page's words,
 title, summary and business details in it; see `docs/search-ready-pages.md`.
-It reads `REACT_APP_BACKEND_URL` too, and stops the build if the value differs
-from the one the script was built with. The same step writes `404.html` (the
+It reads `REACT_APP_BACKEND_URL` too, and stops the build if the value is set
+for that step but is not the one the script was built with. Cloudflare's Email
+Address Obfuscation must not rewrite these pages; see that document. The same step writes `404.html` (the
 empty shell, marked not to be listed), so any other address gets the app's
 "Page not found" screen with a 404 status (DE-25 finding F6). A new route in
 `frontend/src/App.js` needs a page in `frontend/src/lib/pageMeta.js`, or a

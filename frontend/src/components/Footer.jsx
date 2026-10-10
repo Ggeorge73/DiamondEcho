@@ -4,6 +4,7 @@ import { Diamond } from 'lucide-react';
 import { BROKERAGE, OFFICE } from '../lib/contact';
 import { assistantAvailable, openAssistant } from '../lib/assistant';
 import { TOOL_PATHS } from '../lib/intelligenceTools';
+import { serviceAreaList } from '../lib/pageMeta';
 
 // The saved HTML of each page (scripts/prerender.mjs) carries the year it was
 // built in. On the first of January that is last year's until the next build:
@@ -28,6 +29,10 @@ const Footer = () => (
         <p>
           Georgia MLS property search, deal analysis, and ways to begin
           a buying or selling conversation.
+        </p>
+        {/* The cities Gbenga named (lib/pageMeta.js), on every page. */}
+        <p className="mf-footer__areas">
+          Working with buyers, sellers and investors in {serviceAreaList()}, Georgia.
         </p>
       </div>
 

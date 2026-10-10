@@ -14,10 +14,10 @@ describe('what each page tells a search engine', () => {
   // Search results cut a title at about 60 characters and a summary at about 160.
   test.each(PAGES.map((page) => [page.path, page]))('%s: the title and summary fit a search result and name the site', (_, page) => {
     expect(page.title.length).toBeGreaterThanOrEqual(15);
-    expect(page.title.length).toBeLessThanOrEqual(62);
+    expect(page.title.length).toBeLessThanOrEqual(60);
     expect(page.title).toMatch(/DiamondEcho/);
     expect(page.description.length).toBeGreaterThanOrEqual(70);
-    expect(page.description.length).toBeLessThanOrEqual(165);
+    expect(page.description.length).toBeLessThanOrEqual(160);
     expect(page.description).toMatch(/[.!?]$/);
   });
 
@@ -56,8 +56,36 @@ describe('what each page tells a search engine', () => {
 
   test('contact details in a summary are the published ones', () => {
     expect(pageForPath('/inquire').description).toContain(`Direct ${OFFICE.phone}`);
-    expect(pageForPath('/inquire').description).toContain(HOURS.label);
     expect(pageForPath('/about').description).toContain(`Brokerage: ${BROKERAGE.name}`);
+  });
+
+  // The request forms exist only in a build with a service to send them to (pages/Inquire.jsx).
+  describe('the request page\u2019s summary says what that build\u2019s page offers', () => {
+    const saved = process.env.REACT_APP_BACKEND_URL;
+    afterEach(() => {
+      if (saved === undefined) delete process.env.REACT_APP_BACKEND_URL;
+      else process.env.REACT_APP_BACKEND_URL = saved;
+    });
+    const summary = (backend) => {
+      if (backend) process.env.REACT_APP_BACKEND_URL = backend;
+      else delete process.env.REACT_APP_BACKEND_URL;
+      let description;
+      jest.isolateModules(() => { description = require('./pageMeta').pageForPath('/inquire').description; });
+      return description;
+    };
+
+    test('with the service: the three requests and when replies are sent', () => {
+      const description = summary('https://api.example.com');
+      expect(description).toBe(`Ask about buying, request a seller consultation or a property tour. Replies ${HOURS.label}. Direct ${OFFICE.phone}.`);
+      expect(description.length).toBeLessThanOrEqual(160);
+    });
+
+    test('without it: how to reach the brokerage and DiamondEcho, and no promise of a form', () => {
+      const description = summary('');
+      expect(description).toBe(`Reach DiamondEcho about buying or selling a home in Georgia. Brokerage: ${BROKERAGE.name}, office ${BROKERAGE.phone}. Direct ${OFFICE.phone}.`);
+      expect(description).not.toMatch(/request|Replies|tour/);
+      expect(description.length).toBeLessThanOrEqual(160);
+    });
   });
 });
 
@@ -91,15 +119,22 @@ describe('the business details search engines read', () => {
   });
 
   test('name the brokerage and its telephone number (Rule 520-1-.09)', () => {
-    expect(business.parentOrganization).toEqual({ '@type': 'RealEstateAgent', name: BROKERAGE.name, telephone: '+17704955050' });
+    expect(business.parentOrganization).toEqual({ '@type': 'Organization', name: BROKERAGE.name, telephone: '+17704955050' });
   });
 
-  test('give the business hours as set', () => {
-    expect(business.openingHoursSpecification).toEqual([{
-      '@type': 'OpeningHoursSpecification',
-      dayOfWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
-      opens: '09:00', closes: '17:00',
+  test('give the hours as the hours DiamondEcho can be reached, not as the hours an office is open', () => {
+    expect(business.contactPoint).toEqual([{
+      '@type': 'ContactPoint', contactType: 'customer service',
+      telephone: '+16785169717', email: OFFICE.email, areaServed: 'US-GA', availableLanguage: 'en',
+      hoursAvailable: [{
+        '@type': 'OpeningHoursSpecification',
+        dayOfWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+        opens: '09:00', closes: '17:00',
+      }],
     }]);
+    // Nobody has said when the brokerage's office is open to callers in person.
+    expect(business).not.toHaveProperty('openingHoursSpecification');
+    expect(business).not.toHaveProperty('openingHours');
   });
 
   test('list the seven cities, and nothing that is not on the pages', () => {
@@ -129,11 +164,12 @@ describe('the business details search engines read', () => {
     ]);
   });
 
-  test('the three tools are described as free web tools, and only they are', () => {
-    const tools = PAGES.filter((page) => structuredDataFor(page)['@graph'].some((node) => node['@type'] === 'WebApplication'));
-    expect(tools.map((page) => page.path)).toEqual(['/investment-calculator', '/mortgage-calculator', '/seller-net-sheet']);
-    const tool = structuredDataFor(pageForPath('/seller-net-sheet'))['@graph'].find((node) => node['@type'] === 'WebApplication');
-    expect(tool).toMatchObject({ name: 'DiamondEcho Seller net sheet', url: 'https://diamondecho.com/seller-net-sheet', isAccessibleForFree: true, offers: { price: '0', priceCurrency: 'USD' } });
+  test('no page is described as software, a product or an offer', () => {
+    // Search engines accept those descriptions only with ratings or reviews, and the site has none.
+    PAGES.forEach((page) => {
+      const text = JSON.stringify(structuredDataFor(page));
+      expect(text).not.toMatch(/"(WebApplication|SoftwareApplication|Product|Offer|AggregateRating|Review)"/);
+    });
   });
 });
 
@@ -196,11 +232,27 @@ describe('keeping the open page in step', () => {
     expect(document.head.querySelectorAll('meta[name="twitter:card"]')).toHaveLength(1);
   });
 
-  test('an address the site does not have keeps no listing address and no business details', () => {
+  test('an address the site does not have keeps nothing the page before it said about itself', () => {
     applyPageMeta(document, pageForPath('/about'));
     applyPageMeta(document, null);
     const now = head();
     expect(now.canonical).toEqual([]);
     expect(now.data).toEqual([]);
+    expect(now.description).toEqual([]);
+    expect(now.ogUrl).toEqual([]);
+    expect(document.head.querySelectorAll('meta[property^="og:"], meta[name^="twitter:"]')).toHaveLength(0);
+    // And the next real page puts all of it back.
+    applyPageMeta(document, pageForPath('/search'));
+    expect(head().description).toEqual([pageForPath('/search').description]);
+    expect(document.head.querySelectorAll('meta[property^="og:"]')).toHaveLength(10);
+  });
+
+  test('a real page is never left marked "not to be listed"', () => {
+    // 404.html carries the mark from the start; a visitor who lands there and clicks Home is on a real page.
+    document.head.insertAdjacentHTML('beforeend', '<meta name="robots" content="noindex">');
+    applyPageMeta(document, null);
+    expect(document.head.querySelectorAll('meta[name="robots"]')).toHaveLength(1);
+    applyPageMeta(document, pageForPath('/'));
+    expect(document.head.querySelectorAll('meta[name="robots"]')).toHaveLength(0);
   });
 });

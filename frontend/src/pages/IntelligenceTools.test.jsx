@@ -147,7 +147,7 @@ describe('through the site\u2019s own routes', () => {
     await type('price', '610000');
     await open('Seller net sheet');
     expect(where).toBe('/seller-net-sheet');
-    expect(document.title).toBe('Georgia Seller Net Sheet: Estimate Sale Proceeds | DiamondEcho');
+    expect(document.title).toBe('Georgia Seller Net Sheet & Proceeds Calculator | DiamondEcho');
     await type('salePrice', '500000');
     await open('Deal Studio');
     expect(where).toBe('/investment-calculator');

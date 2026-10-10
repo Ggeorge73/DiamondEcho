@@ -101,3 +101,9 @@ test('the footer shows this year, and corrects a saved page that was built last 
   await act(async () => taken.unmount());
   saved.remove();
 });
+
+test('the footer of every page says where DiamondEcho works, in the cities Gbenga named', async () => {
+  await act(async () => { root.render(<MemoryRouter><Footer /></MemoryRouter>); });
+  expect(container.querySelector('.mf-footer__areas').textContent.replace(/\s+/g, ' ').trim())
+    .toBe('Working with buyers, sellers and investors in Alpharetta, Roswell, Duluth, Atlanta, Suwanee, Cumming and Lawrenceville, Georgia.');
+});

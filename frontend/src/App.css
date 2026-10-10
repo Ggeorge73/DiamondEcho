@@ -330,6 +330,7 @@ h1, h2, h3, .display { font-family: 'Sora', 'Inter', sans-serif; }
 .mf-footer__brand strong { display: block; font-family: 'Sora', sans-serif; font-size: 16px; font-weight: 500; letter-spacing: .3em; }
 .mf-footer__brand small { margin-top: 6px; display: block; color: var(--mist); font-size: 8px; font-weight: 600; letter-spacing: .32em; }
 .mf-footer__brand p { max-width: 350px; margin: 26px 0 0; color: var(--mist); font-size: 12.5px; line-height: 1.9; }
+.mf-footer__brand p.mf-footer__areas { margin-top: 12px; }
 .mf-footer__mark { width: 40px; height: 40px; margin-bottom: 20px; display: grid; place-items: center; border: 1px solid var(--steel-bright); transform: rotate(45deg); }
 .mf-footer__mark svg { width: 17px; color: var(--steel-bright); transform: rotate(-45deg); }
 .mf-footer__col h4 { margin: 0 0 20px; color: var(--steel-bright); font-size: 9px; font-weight: 600; letter-spacing: .3em; text-transform: uppercase; }
