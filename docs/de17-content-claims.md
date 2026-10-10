@@ -108,7 +108,7 @@ these words about the business, which are his to keep or change:
 | "DiamondEcho works with home buyers, sellers and real estate investors in Alpharetta, … and Lawrenceville, from the brokerage office in Duluth, Georgia." | Home | The cities are his list. "Works with" is the agent's wording |
 | "Working with buyers, sellers and investors in Alpharetta, … and Lawrenceville, Georgia." | Footer of every page | The same claim, so that every page says in words what its business details say |
 | Reachable Monday to Saturday, 9:00 to 5:00 Eastern | Business details read by search engines (as contact hours) | The hours he set on 2026-10-05 for replies. Not stated as the hours the brokerage's office is open |
-| "Homes and investments across metro Atlanta."; "Metro Atlanta" in three titles and the link-preview picture | Home, titles of `/` and `/search`, summaries, picture | All seven cities are in metro Atlanta. He has not used the phrase himself |
+| "Homes and investments across metro Atlanta."; "Metro Atlanta" in two titles and the link-preview picture | Home, titles of `/` and `/search`, summaries, picture | All seven cities are in metro Atlanta. He has not used the phrase himself |
 | The county under each city (Fulton, Gwinnett, Forsyth) | Home | Geography, not a claim about the business. Atlanta and Suwanee each reach into a second county; the main one is shown |
 | "Free" | Summaries of Deal Studio and the mortgage simulator | The tools ask for no payment or sign-in |
 | "Buy, Sell or Invest With a Georgia Agent" | Title of the Advisory page | He is a Georgia licensee; the page itself still publishes no advisor profile |
