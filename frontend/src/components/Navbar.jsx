@@ -4,6 +4,7 @@ import { ArrowUpRight, Diamond, LayoutGrid, Menu, X } from 'lucide-react';
 import { BROKERAGE, OFFICE } from '../lib/contact';
 import { assistantAvailable, openAssistant } from '../lib/assistant';
 import { readSearchCriteria } from '../lib/searchCriteria';
+import { TOOL_PATHS, isToolPath } from '../lib/intelligenceTools';
 
 const navItems = [
   { label: 'Search homes', to: '/search' },
@@ -27,7 +28,6 @@ const menuItems = [
 
 const Navbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isScrolled, setIsScrolled] = useState(false);
   const openerRef = useRef(null);
   const menuRef = useRef(null);
   const closeRef = useRef(null);
@@ -35,12 +35,19 @@ const Navbar = () => {
   const { pathname, search } = useLocation();
   const navigate = useNavigate();
   const isHomePage = pathname === '/';
+  // Only the home page has a picture behind the header. Every other page
+  // starts with the solid header, in its saved HTML too, so it does not change
+  // once the script has loaded.
+  const [isScrolled, setIsScrolled] = useState(!isHomePage);
   const { rentalIntent } = readSearchCriteria(new URLSearchParams(search));
   // "Search homes" and "Rentals" share the /search path; the status in the
   // address decides which of the two is the page the visitor is on.
-  const isCurrentItem = (item) => (item.to.startsWith('/search')
-    ? pathname === '/search' && item.to.includes('status=rent') === rentalIntent
-    : pathname === item.to);
+  // "Intelligence" is three addresses: Deal Studio and the two calculators.
+  const isCurrentItem = (item) => {
+    if (item.to.startsWith('/search')) return pathname === '/search' && item.to.includes('status=rent') === rentalIntent;
+    if (item.to === TOOL_PATHS.deal) return isToolPath(pathname);
+    return pathname === item.to;
+  };
 
   useEffect(() => {
     if (!isHomePage) {
@@ -114,8 +121,9 @@ const Navbar = () => {
           <nav className="mf-nav__links" aria-label="Primary navigation">
             {navItems.map((item) => {
               // NavLink compares the path only, so it marked both "Search homes"
-              // and "Rentals" as the current page on /search (DE-21).
-              if (!item.to.startsWith('/search')) {
+              // and "Rentals" as the current page on /search (DE-21), and would
+              // not mark "Intelligence" on the two calculators' own addresses.
+              if (!item.to.startsWith('/search') && item.to !== TOOL_PATHS.deal) {
                 return <NavLink key={item.label} to={item.to}>{item.label}</NavLink>;
               }
               const isCurrent = isCurrentItem(item);

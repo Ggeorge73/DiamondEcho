@@ -11,14 +11,18 @@ nothing; a test reads their source for any network or storage call.
 
 ## Where they are
 
-The Intelligence page (`/investment-calculator`) now holds three tools, chosen
-by a row of three links under the page heading:
+The Intelligence page holds three tools, chosen by a row of three links under
+the page heading. Since 2026-10-10 each tool has an address of its own, so a
+search engine can list the two calculators as pages in their own right
+(`docs/search-ready-pages.md`). The older form, `/investment-calculator?tool=mortgage`
+and `?tool=net-proceeds`, still opens the right tool and the address bar is
+then corrected to the new one:
 
 | Tool | Address | Code |
 | --- | --- | --- |
 | Deal Studio (unchanged) | `/investment-calculator` | `frontend/src/pages/InvestmentCalculator.jsx` |
-| Mortgage simulator | `/investment-calculator?tool=mortgage` | `frontend/src/components/calculators/MortgageSimulator.jsx`, `frontend/src/lib/mortgage.js` |
-| Seller net sheet | `/investment-calculator?tool=net-proceeds` | `frontend/src/components/calculators/SellerNetSheet.jsx`, `frontend/src/lib/netProceeds.js` |
+| Mortgage simulator | `/mortgage-calculator` | `frontend/src/components/calculators/MortgageSimulator.jsx`, `frontend/src/lib/mortgage.js` |
+| Seller net sheet | `/seller-net-sheet` | `frontend/src/components/calculators/SellerNetSheet.jsx`, `frontend/src/lib/netProceeds.js` |
 
 A buyer or seller tool is built the first time it is opened and then kept, so
 moving between the tools keeps what was typed in each. Changing only the tool
@@ -83,7 +87,7 @@ site cannot read (`docs/de17-content-claims.md`, section 2).
 
 What is built instead is the receiving end: a link can carry the three figures,
 
-`/investment-calculator?tool=mortgage&price=525000&taxes=6100&hoa=140`
+`/mortgage-calculator?price=525000&taxes=6100&hoa=140`
 
 and the simulator opens with them, says they "came from the link you followed"
 and asks the visitor to check them against the listing. Only plain positive

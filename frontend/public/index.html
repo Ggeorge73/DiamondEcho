@@ -18,7 +18,21 @@
       work correctly both with client-side routing and a non-root public URL.
       Learn how to configure a non-root public URL by running `npm run build`.
     -->
+        <!--
+        The description above and the title below are fallbacks for the
+        development server. The build gives every public page its own, with
+        its address for search engines, link-preview tags and business
+        details (scripts/prerender.mjs, src/lib/pageMeta.js).
+        -->
         <title>DiamondEcho | Private Real Estate</title>
+        <link rel="icon" href="%PUBLIC_URL%/favicon.ico" sizes="48x48" />
+        <link rel="icon" href="%PUBLIC_URL%/favicon.svg" type="image/svg+xml" />
+        <link rel="apple-touch-icon" href="%PUBLIC_URL%/apple-touch-icon.png" />
+        <!-- The two type families come from Google Fonts (src/index.css); opening the connections early shortens the wait for them. -->
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <!-- Sections fade in as they are scrolled to, which needs the script. Without it they are simply shown. -->
+        <noscript><style>[data-reveal] { opacity: 1 !important; transform: none !important; }</style></noscript>
         <!--
         DE-18: no analytics, session-recording, advertising or builder script loads
         here. Do not add one without Gbenga's approval and a matching update to
@@ -49,8 +63,8 @@
         </script>
     </head>
     <body>
-        <noscript>You need to enable JavaScript to run this app.</noscript>
         <div id="root"></div>
+        <noscript data-shell-note style="display: block; padding: 14px 22px; color: #8ba0b3; font-size: 13px">The property search, the calculators and the request forms on this site need JavaScript switched on.</noscript>
         <!--
       This HTML file is a template.
       If you open it directly in the browser, you will see an empty page.

@@ -1,8 +1,23 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Diamond } from 'lucide-react';
 import { BROKERAGE, OFFICE } from '../lib/contact';
 import { assistantAvailable, openAssistant } from '../lib/assistant';
+import { TOOL_PATHS } from '../lib/intelligenceTools';
+import { serviceAreaList } from '../lib/pageMeta';
+
+// The saved HTML of each page (scripts/prerender.mjs) carries the year it was
+// built in. On the first of January that is last year's until the next build:
+// React is told the difference is expected, and the year is then set from the
+// visitor's own clock.
+const YearNow = () => {
+  const ref = useRef(null);
+  const year = String(new Date().getFullYear());
+  useEffect(() => {
+    if (ref.current && ref.current.textContent !== year) ref.current.textContent = year;
+  }, [year]);
+  return <span ref={ref} suppressHydrationWarning>{year}</span>;
+};
 
 const Footer = () => (
   <footer className="mf-footer">
@@ -14,6 +29,10 @@ const Footer = () => (
         <p>
           Georgia MLS property search, deal analysis, and ways to begin
           a buying or selling conversation.
+        </p>
+        {/* The cities Gbenga named (lib/pageMeta.js), on every page. */}
+        <p className="mf-footer__areas">
+          Working with buyers, sellers and investors in {serviceAreaList()}, Georgia.
         </p>
       </div>
 
@@ -32,8 +51,8 @@ const Footer = () => (
         <nav>
           <Link to="/search">Search Georgia MLS</Link>
           <Link to="/investment-calculator">Deal studio</Link>
-          <Link to="/investment-calculator?tool=mortgage">Mortgage simulator</Link>
-          <Link to="/investment-calculator?tool=net-proceeds">Seller net sheet</Link>
+          <Link to={TOOL_PATHS.mortgage}>Mortgage simulator</Link>
+          <Link to={TOOL_PATHS['net-proceeds']}>Seller net sheet</Link>
           <Link to="/inquire?type=buyer">Buyer inquiry</Link>
           <Link to="/inquire?type=seller">Seller consultation</Link>
           <Link to="/podcast">Podcast</Link>
@@ -62,7 +81,7 @@ const Footer = () => (
     </div>
 
     <div className="mf-footer__legal">
-      <span>© {new Date().getFullYear()} DiamondEcho Private Real Estate · Brokerage: {BROKERAGE.name} — All rights reserved</span>
+      <span>© <YearNow /> DiamondEcho Private Real Estate · Brokerage: {BROKERAGE.name} — All rights reserved</span>
       <span>
         Equal Housing Opportunity · <Link to="/privacy">Privacy</Link> · <Link to="/terms">Terms of use</Link>
       </span>
