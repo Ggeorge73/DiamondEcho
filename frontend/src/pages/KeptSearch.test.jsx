@@ -40,7 +40,7 @@ const go = async (to) => { await act(async () => navigate(to)); };
 
 beforeEach(() => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
-  window.scrollTo = jest.fn();
+  window.scrollTo = vi.fn();
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
@@ -48,7 +48,7 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
-  jest.restoreAllMocks();
+  vi.restoreAllMocks();
 });
 
 test('nothing is loaded from Georgia MLS until the visitor opens the search', async () => {

@@ -26,7 +26,7 @@ beforeEach(() => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
   savedBackend = process.env.REACT_APP_BACKEND_URL;
   process.env.REACT_APP_BACKEND_URL = 'https://api.example.test';
-  global.fetch = jest.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({ items: EPISODES }) }));
+  global.fetch = vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({ items: EPISODES }) }));
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
@@ -56,7 +56,7 @@ test('the home page shows only the newest episode, with a link to all episodes',
 });
 
 test('the home page shows nothing before the first episode, or without the service', async () => {
-  global.fetch = jest.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({ items: [] }) }));
+  global.fetch = vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({ items: [] }) }));
   await render(<LatestEpisode />);
   expect(container.innerHTML).toBe('');
   delete process.env.REACT_APP_BACKEND_URL;
@@ -75,7 +75,7 @@ test('the podcast page lists every episode, newest first, each with its own play
 });
 
 test('the podcast page says the first episode is coming when there are none', async () => {
-  global.fetch = jest.fn(() => Promise.resolve({ ok: false, json: () => Promise.resolve({}) }));
+  global.fetch = vi.fn(() => Promise.resolve({ ok: false, json: () => Promise.resolve({}) }));
   await render(<Podcast />);
   expect(container.textContent).toContain('The first episode is on its way.');
 });
@@ -83,7 +83,7 @@ test('the podcast page says the first episode is coming when there are none', as
 test('starting one episode pauses the others and the daily brief', async () => {
   await render(<Podcast />);
   const audios = [...container.querySelectorAll('audio')];
-  const pauses = audios.map((audio) => jest.spyOn(audio, 'pause').mockImplementation(() => {}));
+  const pauses = audios.map((audio) => vi.spyOn(audio, 'pause').mockImplementation(() => {}));
   await act(async () => { audios[0].dispatchEvent(new Event('play')); });
   expect(pauses[0]).not.toHaveBeenCalled();
   expect(pauses[1]).toHaveBeenCalled();

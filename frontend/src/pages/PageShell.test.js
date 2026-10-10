@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
-const shell = fs.readFileSync(path.resolve(__dirname, '../../public/index.html'), 'utf8');
+const shell = fs.readFileSync(path.resolve(__dirname, '../../index.html'), 'utf8');
 
 test('page shell carries no builder badge', () => {
   expect(shell).not.toContain('emergent-badge');
@@ -20,6 +20,9 @@ test('page shell loads no analytics, session recording or builder script', () =>
     expect(lower).not.toContain(marker);
   });
   // Every script that loads from another site without a build flag is listed here.
-  const external = [...shell.matchAll(/<script[^>]*\ssrc=["']([^"']+)["']/g)].map((match) => match[1]);
+  // A path on this site, such as the app's own entry module, is not external.
+  const external = [...shell.matchAll(/<script[^>]*\ssrc=["']([^"']+)["']/g)]
+    .map((match) => match[1])
+    .filter((src) => !src.startsWith('/') || src.startsWith('//'));
   expect(external).toEqual([]);
 });

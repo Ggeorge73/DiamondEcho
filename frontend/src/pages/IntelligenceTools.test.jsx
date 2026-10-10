@@ -7,8 +7,9 @@ import { helpers } from '../components/calculators/testHelpers';
 
 // DE-39. The Intelligence page with the real router: three tools, one open at a
 // time, chosen by the address.
-jest.mock('axios', () => ({ get: jest.fn(), post: jest.fn() }));
-jest.mock('../lib/dealWorkbook', () => ({ downloadDealWorkbook: jest.fn() }));
+// The page imports axios as a default export.
+vi.mock('axios', () => { const axios = { get: vi.fn(), post: vi.fn() }; return { default: axios, ...axios }; });
+vi.mock('../lib/dealWorkbook', () => ({ downloadDealWorkbook: vi.fn() }));
 
 let container;
 let root;

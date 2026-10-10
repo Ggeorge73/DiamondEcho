@@ -37,14 +37,14 @@ const barPlay = () => container.querySelector('.mf-brief-bar .mf-brief__play');
 
 beforeEach(() => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
-  jest.useFakeTimers();
+  vi.useFakeTimers();
   savedBackend = process.env.REACT_APP_BACKEND_URL;
   process.env.REACT_APP_BACKEND_URL = 'https://api.example.test/';
   window.sessionStorage.clear();
-  global.fetch = jest.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve(BRIEF) }));
+  global.fetch = vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve(BRIEF) }));
   // Like a browser that blocks sound until the visitor interacts.
-  play = jest.spyOn(window.HTMLMediaElement.prototype, 'play').mockImplementation(() => Promise.reject(new Error('NotAllowedError')));
-  pause = jest.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+  play = vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockImplementation(() => Promise.reject(new Error('NotAllowedError')));
+  pause = vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
@@ -53,7 +53,7 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
-  jest.useRealTimers();
+  vi.useRealTimers();
   play.mockRestore();
   pause.mockRestore();
   delete global.fetch;
@@ -69,7 +69,7 @@ test('shows nothing without a service to read the brief from', async () => {
 });
 
 test('shows nothing when the service has no brief', async () => {
-  global.fetch = jest.fn(() => Promise.resolve({ ok: false, json: () => Promise.resolve({}) }));
+  global.fetch = vi.fn(() => Promise.resolve({ ok: false, json: () => Promise.resolve({}) }));
   await render();
   expect(container.innerHTML).toBe('');
 });
@@ -167,7 +167,7 @@ test('the transcript gives the same words as text', async () => {
 });
 
 test('without audio the figures still show and no player is offered', async () => {
-  global.fetch = jest.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({
+  global.fetch = vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({
     ...BRIEF, tour: { ...BRIEF.tour, audio_url: null }, market: { ...BRIEF.market, audio_url: null },
   }) }));
   await render();

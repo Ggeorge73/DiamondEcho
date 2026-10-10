@@ -6,26 +6,27 @@ import InvestmentCalculator from './InvestmentCalculator';
 import { analyzeDealLocally, runMonteCarloInBrowser, runMonteCarloLocally } from '../lib/dealAnalysis';
 import { downloadDealWorkbook } from '../lib/dealWorkbook';
 
-jest.mock('react-router-dom', () => ({
+vi.mock('react-router-dom', () => ({
   MemoryRouter: ({ children }) => children,
   // The tool switcher above the form is three links.
   Link: ({ to, children, ...rest }) => require('react').createElement('a', { href: to, ...rest }, children),
   useLocation: () => ({ pathname: '/investment-calculator', search: '' }),
-  useNavigate: () => jest.fn(),
+  useNavigate: () => vi.fn(),
 }));
-jest.mock('axios', () => ({ get: jest.fn(), post: jest.fn() }));
-jest.mock('../lib/dealDecision', () => ({
+// The page imports axios as a default export.
+vi.mock('axios', () => { const axios = { get: vi.fn(), post: vi.fn() }; return { default: axios, ...axios }; });
+vi.mock('../lib/dealDecision', () => ({
   RENTAL_EVIDENCE_ITEMS: [],
   LAND_CHECKLIST_ITEMS: [],
-  buildDecision: jest.fn(() => null),
+  buildDecision: vi.fn(() => null),
 }));
-jest.mock('../lib/dealWorkbook', () => ({ downloadDealWorkbook: jest.fn() }));
-jest.mock('../lib/dealAnalysis', () => ({
+vi.mock('../lib/dealWorkbook', () => ({ downloadDealWorkbook: vi.fn() }));
+vi.mock('../lib/dealAnalysis', async () => ({
   // The cap is a real constant the page reads; only the calculations are faked.
-  BROWSER_MONTE_CARLO_ITERATION_CAP: jest.requireActual('../lib/dealAnalysis').BROWSER_MONTE_CARLO_ITERATION_CAP,
-  analyzeDealLocally: jest.fn(),
-  runMonteCarloLocally: jest.fn(),
-  runMonteCarloInBrowser: jest.fn(),
+  BROWSER_MONTE_CARLO_ITERATION_CAP: (await vi.importActual('../lib/dealAnalysis')).BROWSER_MONTE_CARLO_ITERATION_CAP,
+  analyzeDealLocally: vi.fn(),
+  runMonteCarloLocally: vi.fn(),
+  runMonteCarloInBrowser: vi.fn(),
 }));
 
 let container;
@@ -100,7 +101,7 @@ beforeEach(async () => {
 afterEach(async () => {
   await act(async () => { root.unmount(); });
   container.remove();
-  jest.clearAllMocks();
+  vi.clearAllMocks();
   delete process.env.REACT_APP_BACKEND_URL;
 });
 

@@ -2,76 +2,36 @@
 
 Install dependencies from the repository root with `npm ci`. The canonical
 lockfile is `../package-lock.json`; do not generate a separate lockfile in
-this directory. Run `npm run test --workspace frontend -- --watchAll=false
---runInBand` and `npm run build` from the repository root to reproduce CI.
+this directory. Run `npm run test --workspace frontend` and `npm run build`
+from the repository root to reproduce CI.
 
-## Create React App reference
+## Tooling (DE-36)
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+The site is built by [Vite](https://vite.dev) and tested with
+[Vitest](https://vitest.dev) in jsdom. Create React App (`react-scripts`) and
+CRACO were removed under DE-36. Settings live in `vite.config.mjs`.
 
-## Available Scripts
+| Command (from the repository root) | What it does |
+| --- | --- |
+| `npm run start --workspace frontend` | Development server on `127.0.0.1:3000` (`HOST` and `PORT` override it) |
+| `npm run test --workspace frontend` | All tests, once |
+| `npm run build` | Production build in `frontend/build`, copied to `build/` |
 
-In the project directory, you can run:
+What stayed the same, so hosting settings do not change:
 
-### `npm start`
+- Output folder `build`, with `404.html` written after the build by `scripts/make-404.mjs`.
+- Settings are still read as `process.env.REACT_APP_*` (for example
+  `REACT_APP_BACKEND_URL`), from the environment or a `.env` file, and fixed
+  into the build.
+- `public/` is copied as is (`_headers`, `_redirects`, `robots.txt`, `sitemap.xml`).
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+What changed:
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
-
-### `npm test`
-
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
-
-### `npm run build`
-
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
-
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
-
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
-
-### `npm run eject`
-
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
-
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
-
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
-
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+- The page shell is `index.html` in this folder, not `public/index.html`.
+- Built files are in `build/assets/` instead of `build/static/`.
+- Tests use `vi.fn`, `vi.mock` and so on instead of `jest.*`. A mocked module
+  that the code imports as a default export (for example `axios`) must return
+  `default` from its factory.
+- The Emergent visual-edits and health-check dev-server plugins were removed.
+  They only worked inside the old webpack dev server, and never reached the
+  built site.
