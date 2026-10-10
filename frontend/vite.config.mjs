@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, loadEnv } from 'vite';
@@ -14,9 +14,12 @@ const src = resolve(root, 'src');
 // value from the environment or a .env file, or with undefined when unset, so
 // Cloudflare Pages keeps its REACT_APP_* variable names. Tests (VITEST) read
 // the real process.env instead, because they change it between cases.
-const usedNames = (dir) => readdirSync(dir).flatMap((name) => {
+// The directory listing says which entries are folders, so no file is checked
+// and then read in two steps.
+const usedNames = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+  const { name } = entry;
   const path = join(dir, name);
-  if (statSync(path).isDirectory()) return usedNames(path);
+  if (entry.isDirectory()) return usedNames(path);
   if (!/\.jsx?$/.test(name) || /\.test\.jsx?$/.test(name)) return [];
   return [...readFileSync(path, 'utf8').matchAll(/process\.env\.(REACT_APP_\w+)/g)].map((match) => match[1]);
 });
