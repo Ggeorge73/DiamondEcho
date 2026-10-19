@@ -14,6 +14,13 @@ const dayLabel = (iso) => {
     : day.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 };
 
+// When the service last read the sources, in Eastern time like the brief's date.
+const checkedLabel = (iso) => {
+  const time = new Date(iso || '');
+  return Number.isNaN(time.getTime()) ? null
+    : `Figures checked ${time.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })} ET`;
+};
+
 const MarketBrief = () => {
   const audio = useBriefAudio();
   const [showTranscript, setShowTranscript] = useState(false);
@@ -34,7 +41,10 @@ const MarketBrief = () => {
       <div className="mf-brief__inner">
         <div className="mf-brief__head">
           <p className="eyebrow">DiamondEcho daily brief</p>
-          <p className="mf-brief__date">{dayLabel(brief.date)}</p>
+          <p className="mf-brief__date">
+            {dayLabel(brief.date)}
+            {checkedLabel(brief.checked_at) && <span> · {checkedLabel(brief.checked_at)}</span>}
+          </p>
           <h2 id="market-brief-heading">Today’s Georgia market. <em>Read aloud.</em></h2>
           <p className="mf-brief__lede">
             A short welcome and guide to this site, followed by the latest Georgia housing and
