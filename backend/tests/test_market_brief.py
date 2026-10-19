@@ -178,13 +178,13 @@ def make_service(store=None, speak=lambda text: b"ID3" + text[:10].encode(), fet
     return service, calls
 
 
-def test_brief_is_built_once_a_day_and_reused():
+def test_brief_is_built_once_and_reused_until_the_sources_are_due_again():
     store = brief_service.MemoryStore()
     service, calls = make_service(store)
     first = service.brief()
     assert first["date"] == "2026-10-09"
-    mk = brief_service.market_key(TODAY)
-    assert mk.startswith("2026-10-09-")
+    mk = first["market"]["audio_url"].rsplit("/", 1)[1][:-4]
+    assert re.fullmatch(r"2026-10-09-[0-9a-f]{8}", mk)
     assert first["market"]["audio_url"] == f"/api/v1/market-brief/audio/{mk}.mp3"
     assert first["tour"]["audio_url"].startswith("/api/v1/market-brief/audio/tour-")
     assert service.brief() == first
@@ -219,7 +219,7 @@ def test_audio_over_a_firestore_document_is_stored_in_parts_and_joined_again():
     store = brief_service.MemoryStore()
     service, _ = make_service(store, speak=lambda text: big)
     body = service.brief()
-    mk = brief_service.market_key(TODAY)
+    mk = body["market"]["audio_url"].rsplit("/", 1)[1][:-4]
     assert body["market"]["audio_url"] == f"/api/v1/market-brief/audio/{mk}.mp3"
     assert store.rows[mk]["audio"] is None
     assert store.rows[mk]["audio_parts"] == 3
@@ -233,6 +233,114 @@ def test_audio_over_a_firestore_document_is_stored_in_parts_and_joined_again():
     third, calls = make_service(store)
     third.brief()
     assert calls["collect"] == 1
+
+
+def fetch_with(**changes):
+    """fake_fetch, with some FRED series replaced (None: the series fails)."""
+    def fetch(url):
+        for series, text in changes.items():
+            if url == FRED_CSV.format(series=series):
+                if text is None:
+                    raise OSError("down")
+                return text
+        return fake_fetch(url)
+    return fetch
+
+
+# Freddie Mac's weekly release, published during the day of the first brief.
+NEW_RATES = {"MORTGAGE30US": fred("MORTGAGE30US", [("2026-10-01", "6.25"), ("2026-10-08", "6.05")]),
+             "MORTGAGE15US": fred("MORTGAGE15US", [("2026-10-01", "5.45"), ("2026-10-08", "5.38")])}
+
+
+def test_a_figure_released_during_the_day_is_on_the_page_within_the_hour():
+    clock = Clock()
+    store = brief_service.MemoryStore()
+    current = {"fetch": fake_fetch}
+    service, calls = make_service(store, fetch=lambda url: current["fetch"](url), clock=clock)
+    first = service.brief()
+
+    # Within the hour the sources are not read again.
+    clock.now += brief_service.REFRESH_SECONDS - 1
+    current["fetch"] = fetch_with(**NEW_RATES)
+    assert service.brief() == first
+    assert calls == {"collect": 1, "speak": 2}
+
+    # Then they are, and the new rate is read aloud and shown.
+    clock.now += 2
+    second = service.brief()
+    assert calls == {"collect": 2, "speak": 3}
+    assert second["market"]["audio_url"] != first["market"]["audio_url"]
+    assert second["market"]["items"][0]["value"] == "6.05%"
+    assert "6.05 percent" in second["market"]["script"]
+    # Another instance serves the newer brief without reading the sources itself.
+    other, other_calls = make_service(store, clock=clock)
+    assert other.brief()["market"]["audio_url"] == second["market"]["audio_url"]
+    assert other_calls == {"collect": 0, "speak": 0}
+    # The earlier recording still plays for a visitor who loaded it before.
+    assert service.audio(first["market"]["audio_url"].rsplit("/", 1)[1][:-4]).startswith(b"ID3")
+
+
+def test_unchanged_figures_are_not_recorded_again():
+    clock = Clock()
+    service, calls = make_service(clock=clock)
+    first = service.brief()
+    clock.now += brief_service.REFRESH_SECONDS + 1
+    again = service.brief()
+    assert calls == {"collect": 2, "speak": 2}
+    assert again["market"]["audio_url"] == first["market"]["audio_url"]
+    assert again["checked_at"] >= first["checked_at"]
+
+
+def test_a_source_failing_later_in_the_day_does_not_drop_its_figure():
+    clock = Clock()
+    current = {"fetch": fake_fetch}
+    service, calls = make_service(fetch=lambda url: current["fetch"](url), clock=clock)
+    first = service.brief()
+    clock.now += brief_service.REFRESH_SECONDS + 1
+    current["fetch"] = fetch_with(GAUR=None, **NEW_RATES)
+    kept = service.brief()
+    assert kept["market"] == first["market"]
+    assert calls["speak"] == 2
+    # Read again after RETRY_SECONDS, not an hour later.
+    clock.now += brief_service.RETRY_SECONDS - 1
+    service.brief()
+    assert calls["collect"] == 2
+    clock.now += 2
+    current["fetch"] = fetch_with(**NEW_RATES)
+    assert service.brief()["market"]["items"][0]["value"] == "6.05%"
+    assert calls["collect"] == 3
+
+
+def test_the_voice_failing_later_in_the_day_keeps_the_brief_already_recorded():
+    clock = Clock()
+    voice = {"up": True}
+
+    def speak(text):
+        if not voice["up"]:
+            raise RuntimeError("voice down")
+        return b"ID3" + text[:10].encode()
+    current = {"fetch": fake_fetch}
+    service, calls = make_service(speak=speak, fetch=lambda url: current["fetch"](url), clock=clock)
+    first = service.brief()
+    clock.now += brief_service.REFRESH_SECONDS + 1
+    voice["up"] = False
+    current["fetch"] = fetch_with(**NEW_RATES)
+    assert service.brief()["market"]["audio_url"] == first["market"]["audio_url"]
+    clock.now += brief_service.RETRY_SECONDS + 1
+    voice["up"] = True
+    assert service.brief()["market"]["items"][0]["value"] == "6.05%"
+
+
+def test_a_new_day_reads_the_sources_again():
+    clock = Clock()
+    day = {"today": TODAY}
+    service = brief_service.MarketBriefService(brief_service.MemoryStore(), lambda: collect(fake_fetch),
+                                               lambda text: b"ID3", today=lambda: day["today"], clock=clock)
+    assert service.brief()["date"] == "2026-10-09"
+    day["today"] = date(2026, 10, 10)
+    body = service.brief()
+    assert body["date"] == "2026-10-10"
+    assert "Saturday, October 10, 2026" in body["market"]["script"]
 
 
 def test_audio_keys_are_checked():

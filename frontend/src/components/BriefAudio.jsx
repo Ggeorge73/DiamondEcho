@@ -19,6 +19,7 @@ import './MarketBrief.css';
 // and link (backend/market_brief). Without a service address nothing is shown.
 
 export const HEARD_KEY = 'de-market-brief-heard';
+export const REFRESH_MS = 15 * 60 * 1000;
 const backendUrl = () => (process.env.REACT_APP_BACKEND_URL || '').trim().replace(/\/$/, '');
 
 const remembered = () => {
@@ -84,14 +85,29 @@ export const BriefAudioProvider = ({ children }) => {
 
   const base = backendUrl();
 
+  // Read on load, again every REFRESH_MS, and when the visitor comes back to
+  // the tab, so a page left open shows new figures and the new day's brief.
+  // A new brief changes what is shown and what plays next; it never restarts
+  // or interrupts the sound already playing.
   useEffect(() => {
     if (!base) return undefined;
     let cancelled = false;
-    fetch(`${base}/api/v1/market-brief`)
+    const load = () => fetch(`${base}/api/v1/market-brief`)
       .then((response) => (response.ok ? response.json() : null))
-      .then((body) => { if (!cancelled && body) setBrief(body); })
+      .then((body) => {
+        if (cancelled || !body) return;
+        setBrief((current) => (JSON.stringify(current) === JSON.stringify(body) ? current : body));
+      })
       .catch(() => {});
-    return () => { cancelled = true; };
+    const onVisible = () => { if (document.visibilityState === 'visible') load(); };
+    load();
+    const timer = window.setInterval(load, REFRESH_MS);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [base]);
 
   const urlFor = useCallback((name) => {
@@ -127,15 +143,21 @@ export const BriefAudioProvider = ({ children }) => {
   }, [playChapter]);
 
   // Start on load if the browser allows it, otherwise on the first interaction.
+  // Offered once a visit: a brief read again later must not start it over.
+  const ready = Boolean(brief) && hasAudio;
+  const playChapterRef = useRef(playChapter);
+  const startFromGestureRef = useRef(startFromGesture);
+  playChapterRef.current = playChapter;
+  startFromGestureRef.current = startFromGesture;
   useEffect(() => {
-    if (!brief || !hasAudio || remembered()) return undefined;
+    if (!ready || remembered()) return undefined;
     let waiting = true;
     const onGesture = (event) => {
       if (!waiting || event.target?.closest?.('[data-market-brief]')) return;
       waiting = false;
-      startFromGesture();
+      startFromGestureRef.current();
     };
-    playChapter('chime')
+    playChapterRef.current('chime')
       .then(() => { waiting = false; startedRef.current = true; })
       .catch(() => { setStatus('waiting'); });
     document.addEventListener('click', onGesture, true);
@@ -145,7 +167,7 @@ export const BriefAudioProvider = ({ children }) => {
       document.removeEventListener('click', onGesture, true);
       document.removeEventListener('keydown', onGesture, true);
     };
-  }, [brief, hasAudio, playChapter, startFromGesture]);
+  }, [ready]);
 
   // A podcast episode that starts playing pauses the brief.
   useEffect(() => onAudioClaimed('brief', () => {

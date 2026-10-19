@@ -40,7 +40,9 @@ The player sits above the pages (`BriefAudioProvider` in `App.js`), so the sound
 | Georgia new housing units authorized by building permits | U.S. Census Bureau | FRED `GABPPRIVSA` | Monthly |
 | Georgia unemployment rate | U.S. Bureau of Labor Statistics | FRED `GAUR` | Monthly |
 
-**Daily, but not all new each day.** The brief is rebuilt every day, Eastern time, and says the day's date. Mortgage rates change weekly. Most Georgia housing figures change monthly, so on most days some figures repeat until the publisher releases new ones.
+**Checked every hour, but not all new each day.** The service reads the sources again every hour (`REFRESH_SECONDS`), and the page shows "Figures checked <time> ET". Mortgage rates change weekly. Most Georgia housing figures change monthly, so on most days the figures are the publishers' latest, not that day's. A figure is never older than the publisher's latest release by more than about an hour.
+
+Until 2026-10-19 the brief was built once, on the first visit of each Eastern-time day, and then kept unchanged all day. Freddie Mac publishes on Thursday at noon Eastern, so its new rate reached the site only on Friday; a monthly FRED update the same way; and a source that failed at that first build stayed missing until midnight. An open browser tab also never asked again.
 
 **Not used yet:** Georgia Realtors monthly market reports and FMLS market statistics. Gbenga asked for them. Their terms of use for republishing on this site were not confirmed, and some FMLS reports need a member sign-in. They are listed in `DISABLED_SOURCES`, so the decision stays visible. Turning one on needs Gbenga's confirmation that the terms allow it, plus a reader for its format.
 
@@ -50,7 +52,7 @@ The player sits above the pages (`BriefAudioProvider` in `App.js`), so the sound
 
 Google Cloud Text-to-Speech, voice `en-US-Chirp3-HD-Sulafat`: one of Google's Chirp 3 HD voices, which sound like a person talking rather than a reader. Gbenga chose it on 2026-10-09, after finding `en-US-Neural2-F` robotic. Chirp 3 HD voices keep their own natural pace; older voices are read at 0.95 speed. Set `MARKET_BRIEF_VOICE` to use another Google voice name, for example `en-US-Chirp3-HD-Aoede` or `en-US-Chirp3-HD-Achernar` (softer). Each day's brief is stored under the date and the voice, so a new voice records the day's brief again at once instead of the next day. The API service calls it with its own Cloud Run identity, so there is no key to store. Only the script is sent to Google, nothing about the visitor.
 
-Cost: about 2,000 characters for the tour, made once and made again only if its wording or the voice changes, plus about 1,500 characters a day for the market part. That is about 50,000 characters a month. Chirp 3 HD voices are priced higher than the older voices: Google's list price is about $30 per million characters, so about $1.50 a month at most, before any free monthly allowance.
+Cost: about 2,000 characters for the tour, made once and made again only if its wording or the voice changes, plus about 1,500 characters a day for the market part, and again for each new release during a day (a few a month). That is about 55,000 characters a month. Chirp 3 HD voices are priced higher than the older voices: Google's list price is about $30 per million characters, so about $1.50 a month at most, before any free monthly allowance.
 
 ## How it is served
 
@@ -59,9 +61,11 @@ Cost: about 2,000 characters for the tour, made once and made again only if its 
 | `GET /api/v1/market-brief` | The day's brief as JSON: tour script and audio address, market script, figures, unavailable sources, sources not used. Cached for 10 minutes |
 | `GET /api/v1/market-brief/audio/<date or tour-key>.mp3` | The MP3. Tour audio is cached for a day and a dated brief for an hour |
 
-The first request of each Eastern-time day reads the sources and has the voice read the script. Visitors hear the tour first, so this happens while the tour is still playing.
+A request reads the sources when the last read is an hour old (or on the first request of the day). The voice records the market part again only when the figures have changed, so most hourly reads cost nothing but eight small downloads. If a read gives fewer figures than the brief already on the page (a source failing for a moment), or the voice fails, the page keeps the day's last complete brief and the sources are read again after 15 minutes. Visitors hear the tour first, so a new recording is made while the tour is still playing.
 
-A complete brief, with figures and audio, is kept in Firestore in the collection `market_briefs`: one document per date, plus one for the tour. Google's MP3 for a two-minute script is about 1 MB, more than one Firestore document can hold (found on staging, 2026-10-09: 1,008,192 bytes). Each recording is therefore stored in parts of up to 700,000 bytes, each its own document named after its build, and joined again when played. Later visitors and other instances reuse it. An incomplete brief (no figures, or the voice failed) is kept in memory only, and built again after 15 minutes.
+The page reads the brief again every 15 minutes and whenever the visitor returns to the tab. New figures appear at once; the sound already playing is not restarted, and the market part that follows is the new recording.
+
+A complete brief, with figures and audio, is kept in Firestore in the collection `market_briefs`: one document per date and set of figures (`<date>-<hash>`), one for the tour, and `current-<voice>`, which names the latest brief and when the sources were last read. Other instances use it so that each hourly read happens once, not once per instance. Google's MP3 for a two-minute script is about 1 MB, more than one Firestore document can hold (found on staging, 2026-10-09: 1,008,192 bytes). Each recording is therefore stored in parts of up to 700,000 bytes, each its own document named after its build, and joined again when played. Later visitors and other instances reuse it. An incomplete brief (no figures, or the voice failed) is kept in memory only, and built again after 15 minutes.
 
 Firestore rules already deny all browser access, and the service uses the Admin SDK.
 
