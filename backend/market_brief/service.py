@@ -1,8 +1,9 @@
 """Builds the day's brief, keeps it current, and serves it to every visitor.
 
-The sources are read again every REFRESH_SECONDS, so a figure the publisher
-releases during the day (Freddie Mac's rates on Thursdays, FRED's monthly
-updates) reaches the page within the hour, not the next day. The voice reads
+The sources are read again at REFRESH_HOURS, Eastern time (12am, 6am, 12pm
+and 6pm), on the first request after each, so a figure the publisher releases
+during the day (Freddie Mac's rates on Thursdays, FRED's monthly updates)
+reaches the page by the next of those times, not the next day. The voice reads
 the script again only when the figures have changed. A complete brief
 (figures and audio) is kept in Firestore under market_briefs/<date>-<hash of
 its contents>, and market_briefs/current-<voice> names the latest one and when
@@ -33,7 +34,7 @@ from .tts import synthesize, voice_settings
 
 log = logging.getLogger(__name__)
 
-REFRESH_SECONDS = 60 * 60
+REFRESH_HOURS = (0, 6, 12, 18)  # Eastern time
 RETRY_SECONDS = 15 * 60
 # A Firestore document holds at most 1 MiB, and Google's MP3 for a two-minute
 # script is about 1 MB. Audio is therefore stored in parts of PART_BYTES, each
@@ -52,12 +53,26 @@ def enabled() -> bool:
     return os.getenv("MARKET_BRIEF_ENABLED", "").strip().lower() == "true"
 
 
-def eastern_today() -> date:
+def _eastern():
     try:
         from zoneinfo import ZoneInfo
-        return datetime.now(ZoneInfo("America/New_York")).date()
-    except Exception:  # no time zone data in the image: standard time is close enough for a date
-        return datetime.now(timezone(timedelta(hours=-5))).date()
+        return ZoneInfo("America/New_York")
+    except Exception:  # no time zone data in the image: standard time is close enough
+        return timezone(timedelta(hours=-5))
+
+
+def eastern_today() -> date:
+    return datetime.now(_eastern()).date()
+
+
+def next_refresh(now: float) -> float:
+    """The first of REFRESH_HOURS after `now`, as a Unix time."""
+    local = datetime.fromtimestamp(now, _eastern())
+    later = [h for h in REFRESH_HOURS if h > local.hour]
+    start = local.replace(minute=0, second=0, microsecond=0)
+    if later:
+        return start.replace(hour=later[0]).timestamp()
+    return (start.replace(hour=REFRESH_HOURS[0]) + timedelta(days=1)).timestamp()
 
 
 class MemoryStore:
@@ -121,7 +136,7 @@ class MarketBriefService:
         self.today, self.clock = today, clock
         self._lock = Lock()
         self._memory = {}  # key -> (kept until, data)
-        self._current = None  # {"date", "key", "checked_at", "read_at"}: the brief being served
+        self._current = None  # {"date", "key", "next_read", "read_at"}: the brief being served
 
     def _speak(self, text):
         try:
@@ -185,20 +200,20 @@ class MarketBriefService:
         one stored by whichever instance read the sources last."""
         today = day.isoformat()
         best = self._current if self._current and self._current["date"] == today else None
-        if best is None or self.clock() >= best["checked_at"] + REFRESH_SECONDS:
+        if best is None or self.clock() >= best["next_read"]:
             try:
                 stored = self.store.get(current_key())
             except Exception as exc:
                 log.warning("Market brief pointer not read: %s", type(exc).__name__)
                 stored = None
-            if stored and stored.get("date") == today and (best is None or stored["checked_at"] > best["checked_at"]):
+            if stored and stored.get("date") == today and (best is None or stored["next_read"] > best["next_read"]):
                 best = stored
         return best
 
     def _market(self, day):
         pointer = self._pointer(day)
         data = self._cached(pointer["key"]) if pointer else None
-        if data is not None and self.clock() < pointer["checked_at"] + REFRESH_SECONDS:
+        if data is not None and self.clock() < pointer["next_read"]:
             self._current = pointer
             return pointer["key"], data
 
@@ -206,14 +221,14 @@ class MarketBriefService:
         items = brief_script.display_items(figures, day)
         text = brief_script.market_script(figures, day)
         key = market_key(day, text, items)
-        # checked_at sets when the sources are next read; read_at, shown on the
+        # next_read is when the sources are read again; read_at, shown on the
         # page, is when the figures being served were read.
-        retry = self.clock() - REFRESH_SECONDS + RETRY_SECONDS
+        retry = self.clock() + RETRY_SECONDS
         read_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
         if data is not None and len(items) < len(data["items"]):
             # A source failing for a moment is no reason to drop a figure
             # already on the page. Keep the day's brief and read again soon.
-            self._current = {**pointer, "checked_at": retry}
+            self._current = {**pointer, "next_read": retry}
             return pointer["key"], data
         new = self._cached(key)  # the same figures as a brief already recorded
         if new is None:
@@ -229,11 +244,11 @@ class MarketBriefService:
             self._keep(key, new, bool(items) and audio is not None)
         if not (new["items"] and new.get("audio")):
             if data is not None:
-                self._current = {**pointer, "checked_at": retry}
+                self._current = {**pointer, "next_read": retry}
                 return pointer["key"], data
-            self._current = {"date": day.isoformat(), "key": key, "checked_at": retry, "read_at": read_at}
+            self._current = {"date": day.isoformat(), "key": key, "next_read": retry, "read_at": read_at}
             return key, new
-        self._current = {"date": day.isoformat(), "key": key, "checked_at": self.clock(), "read_at": read_at}
+        self._current = {"date": day.isoformat(), "key": key, "next_read": next_refresh(self.clock()), "read_at": read_at}
         try:
             self.store.set(current_key(), self._current)
         except Exception as exc:

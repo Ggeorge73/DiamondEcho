@@ -1,5 +1,6 @@
 import re
-from datetime import date
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -14,6 +15,9 @@ PMMS = """date,pmms30,pmms30p,pmms15,pmms15p
 """
 
 TODAY = date(2026, 10, 9)
+EASTERN = ZoneInfo("America/New_York")
+MORNING = datetime(2026, 10, 9, 7, 0, tzinfo=EASTERN).timestamp()
+NOON = datetime(2026, 10, 9, 12, 0, tzinfo=EASTERN).timestamp()
 
 
 def fred(series, rows):
@@ -156,7 +160,7 @@ def test_a_new_voice_records_the_day_again(monkeypatch):
 
 
 class Clock:
-    now = 0.0
+    now = MORNING
 
     def __call__(self):
         return self.now
@@ -252,15 +256,30 @@ NEW_RATES = {"MORTGAGE30US": fred("MORTGAGE30US", [("2026-10-01", "6.25"), ("202
              "MORTGAGE15US": fred("MORTGAGE15US", [("2026-10-01", "5.45"), ("2026-10-08", "5.38")])}
 
 
-def test_a_figure_released_during_the_day_is_on_the_page_within_the_hour():
+def test_the_sources_are_read_at_12am_6am_12pm_and_6pm_eastern():
+    def at(*when):
+        return datetime(*when, tzinfo=EASTERN).timestamp()
+
+    def local(ts):
+        return datetime.fromtimestamp(ts, EASTERN).strftime("%Y-%m-%d %H:%M")
+    assert local(brief_service.next_refresh(at(2026, 10, 9, 7, 0))) == "2026-10-09 12:00"
+    assert local(brief_service.next_refresh(at(2026, 10, 9, 0, 0))) == "2026-10-09 06:00"
+    assert local(brief_service.next_refresh(at(2026, 10, 9, 17, 59))) == "2026-10-09 18:00"
+    assert local(brief_service.next_refresh(at(2026, 10, 9, 18, 0))) == "2026-10-10 00:00"
+    assert local(brief_service.next_refresh(at(2026, 10, 9, 23, 59))) == "2026-10-10 00:00"
+    # The day the clocks go back: still 6am on the wall clock.
+    assert local(brief_service.next_refresh(at(2026, 11, 1, 0, 30))) == "2026-11-01 06:00"
+
+
+def test_a_figure_released_during_the_day_is_on_the_page_at_the_next_check():
     clock = Clock()
     store = brief_service.MemoryStore()
     current = {"fetch": fake_fetch}
     service, calls = make_service(store, fetch=lambda url: current["fetch"](url), clock=clock)
     first = service.brief()
 
-    # Within the hour the sources are not read again.
-    clock.now += brief_service.REFRESH_SECONDS - 1
+    # Before noon the sources are not read again.
+    clock.now = NOON - 1
     current["fetch"] = fetch_with(**NEW_RATES)
     assert service.brief() == first
     assert calls == {"collect": 1, "speak": 2}
@@ -284,7 +303,7 @@ def test_unchanged_figures_are_not_recorded_again():
     clock = Clock()
     service, calls = make_service(clock=clock)
     first = service.brief()
-    clock.now += brief_service.REFRESH_SECONDS + 1
+    clock.now = NOON + 1
     again = service.brief()
     assert calls == {"collect": 2, "speak": 2}
     assert again["market"]["audio_url"] == first["market"]["audio_url"]
@@ -296,12 +315,12 @@ def test_a_source_failing_later_in_the_day_does_not_drop_its_figure():
     current = {"fetch": fake_fetch}
     service, calls = make_service(fetch=lambda url: current["fetch"](url), clock=clock)
     first = service.brief()
-    clock.now += brief_service.REFRESH_SECONDS + 1
+    clock.now = NOON + 1
     current["fetch"] = fetch_with(GAUR=None, **NEW_RATES)
     kept = service.brief()
     assert kept["market"] == first["market"]
     assert calls["speak"] == 2
-    # Read again after RETRY_SECONDS, not an hour later.
+    # Read again after RETRY_SECONDS, not at 6pm.
     clock.now += brief_service.RETRY_SECONDS - 1
     service.brief()
     assert calls["collect"] == 2
@@ -322,7 +341,7 @@ def test_the_voice_failing_later_in_the_day_keeps_the_brief_already_recorded():
     current = {"fetch": fake_fetch}
     service, calls = make_service(speak=speak, fetch=lambda url: current["fetch"](url), clock=clock)
     first = service.brief()
-    clock.now += brief_service.REFRESH_SECONDS + 1
+    clock.now = NOON + 1
     voice["up"] = False
     current["fetch"] = fetch_with(**NEW_RATES)
     assert service.brief()["market"]["audio_url"] == first["market"]["audio_url"]
