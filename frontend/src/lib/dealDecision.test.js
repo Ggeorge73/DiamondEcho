@@ -1,4 +1,4 @@
-import { buildDecision, buildFlipDecision, buildLandDecision, buildRentalDecision, FLIP_EVIDENCE_ITEMS, LAND_CHECKLIST_ITEMS, LAND_EVIDENCE_ITEMS } from './dealDecision';
+import { buildDecision, buildFlipDecision, buildLandDecision, buildRentalDecision, DECISION_VERSION, FLIP_EVIDENCE_ITEMS, LAND_CHECKLIST_ITEMS, LAND_EVIDENCE_ITEMS } from './dealDecision';
 import { analyzeDealLocally } from './dealAnalysis';
 import { buildDealRequest } from './dealRequest';
 
@@ -218,7 +218,7 @@ test('the stressed land cases replace the contingency instead of adding to it', 
   const compounded = buildLandDecision({ form: { ...landForm, ...downside.assumptions, landContingency: '10' }, evidence: {} }).scenarios[1].metrics.profit;
   expect(downside.metrics.profit).toBeGreaterThan(compounded + (275000 + 1540000) * 0.1 - 1);
   expect(decision.scenarioNote).toContain('the rise replaces the contingency');
-  expect(decision.version).toBe('diamond-decision-1.3.0');
+  expect(decision.version).toBe(DECISION_VERSION);
 });
 
 test('the IRR target is optional, and a comparable land value caps the price', () => {
@@ -407,4 +407,42 @@ test('the untouched page example is a conditional Go with the default targets', 
   expect(example.summary).toBe('At $180,000 the deal is modeled to earn $48,149 (27.79% on cash), which meets your targets. The highest price that still meets them is $192,034.');
   expect(example.recommendedMaximum).toBe(192000);
   expect(example.walkAwaySignals).toEqual([]);
+});
+
+test('the flip decision reads the listing history and seller posture, and checks the figures', () => {
+  const now = new Date(2026, 9, 22);
+  const listed = buildFlipDecision({ form: {
+    ...ruralFixerForm, purchasePrice: '77000', lastSalePrice: '135000', lastSaleDate: '2025-04', originalListPrice: '141900',
+    daysOnMarket: '270', ownerType: 'agent', disclosureStatus: 'none', saleTerms: 'as_is', compSoldPerSf: '120',
+    flipAnnualTaxes: '1220', flipAnnualInsurance: '1241', flipMonthlyUtilities: '166',
+  }, evidence: allFlipEvidence, today: now });
+  // The targets are met and every item is ticked, so these facts alone turn a Go into a conditional Go.
+  expect(listed.hurdleResults.every((item) => item.pass)).toBe(true);
+  expect(listed.verdict).toBe('CONDITIONAL GO — RESOLVE EXCEPTIONS');
+  expect(listed.walkAwaySignals).toEqual([
+    'Monthly holding costs are entered as $450, but taxes, insurance and utilities add up to $371 a month.',
+    'The seller paid $135,000 18 months ago and is asking $58,000 (43%) less. Selling below their own basis after a short hold usually means a failed project or a problem found; find out which before relying on the budget.',
+    'Listed at $141,900 and cut 46% to $77,000 over 270 days on market. The market has already passed at higher prices: verify the after-repair value against sold prices, not asking prices.',
+    '270 days on market at this price points to a thin buyer pool. The resale may take longer too: stress the hold period.',
+    'The seller is a licensed agent selling their own property and gives no disclosure: assume they know something you do not. Order the inspections, and septic and well tests where they apply, before the diligence period ends.',
+    'The after-repair value is $151/sf, 26% above the $120/sf of the renovated comparable sales entered, which imply $198,600. Use sold prices of the same kind of house, size, age and setting; a different kind of property does not price this one.',
+  ]);
+  expect(listed.intelligence.facts.map((fact) => fact.label)).toEqual([
+    'Last sale', 'Original list price', 'Days on market', 'Seller',
+    'After-repair value per square foot', 'Purchase price per square foot', 'Renovated comparable sales', 'Holding costs from their parts',
+  ]);
+  expect(listed.intelligence.facts.at(-1).detail).toBe('taxes $102, insurance $103, utilities $166 a month; $450 entered');
+  expect(listed.intelligence.notes).toEqual(['Sold as-is: the 15% contingency is the only repair credit you will get.']);
+  expect(listed.version).toBe(DECISION_VERSION);
+  expect(DECISION_VERSION).toBe('diamond-decision-1.4.0');
+});
+
+test('with nothing typed about the listing, the flip decision only reminds, and never stacks exceptions', () => {
+  const plain = flipAt({ purchasePrice: '77000' });
+  expect(plain.walkAwaySignals).toEqual([]);
+  expect(plain.intelligence.facts.map((fact) => fact.label)).toEqual(['After-repair value per square foot', 'Purchase price per square foot']);
+  expect(plain.intelligence.notes).toEqual(['Enter the sold price per square foot of renovated houses of the same kind to check the after-repair value. A cabin, acreage or new-build sale does not price an older frame house.']);
+  // Holding costs that match their parts within 10% are not an exception.
+  expect(flipAt({ purchasePrice: '77000', flipAnnualTaxes: '1220', flipAnnualInsurance: '1241', flipMonthlyUtilities: '245' }).walkAwaySignals).toEqual([]);
+  expect(flipAt({ purchasePrice: '77000', monthlyHolding: '0' }).walkAwaySignals).toEqual(['No monthly holding costs are entered; taxes, insurance and utilities run for every month of the hold.']);
 });

@@ -12,6 +12,7 @@ import '../components/calculators/calculators.css';
 import { analyzeDealLocally, BROWSER_MONTE_CARLO_ITERATION_CAP, runMonteCarloInBrowser } from '../lib/dealAnalysis';
 import { scenarioDisclosure, splitWarnings } from '../lib/monteCarloDisclosure';
 import { buildDecision, FLIP_EVIDENCE_ITEMS, LAND_CHECKLIST_ITEMS, RENTAL_EVIDENCE_ITEMS } from '../lib/dealDecision';
+import { DISCLOSURE_STATUSES, estimateHoldingCosts, holdingCostParts, OWNER_TYPES, SALE_TERMS } from '../lib/listingSignals';
 import { classifyFloodZone } from '../lib/floodZone';
 import { downloadDealWorkbook } from '../lib/dealWorkbook';
 import { buildDealRequest } from '../lib/dealRequest';
@@ -95,6 +96,12 @@ const initialForm = {
   // The loan funds this share of the rehab budget on top of loan-to-value
   // times the price. 0 keeps the example's figures as documented.
   arv: '360000', rehabCost: '65000', rehabContingency: '10', rehabFinanced: '0', monthlyHolding: '1800',
+  // The parts of the holding cost, the listing's history and the seller's
+  // posture are facts about one property: they start empty, and typing an
+  // address clears them.
+  flipAnnualTaxes: '', flipAnnualInsurance: '', flipMonthlyUtilities: '', compSoldPerSf: '',
+  lastSalePrice: '', lastSaleDate: '', originalListPrice: '', daysOnMarket: '',
+  ownerType: '', disclosureStatus: '', saleTerms: '',
   otherProjectCosts: '6000', sellingCosts: '6', discountRate: '10', mcIterations: '2500',
   targetCashOnCash: '8', minimumDscr: '1.2', targetIrr: '15', preliminaryMarketCeiling: '',
   maxImmediateCapex: '', maxAnnualTaxes: '', maxAnnualInsurance: '',
@@ -396,6 +403,14 @@ const InvestmentCalculator = () => {
     const band = name === 'interestRate' && !MONTE_CARLO_INTEREST_FIELDS.some((field) => enteredFields.current.has(field))
       ? interestBand(value) : null;
     setForm((current) => ({ ...current, [name]: value, ...(band || {}) }));
+  };
+
+  // Several boxes filled by one button press. They count as entered, like typing.
+  const applyFields = (values) => {
+    invalidateAnalysis();
+    Object.keys(values).forEach((field) => enteredFields.current.add(field));
+    setPropertyProvenance((current) => ({ ...current, ...Object.fromEntries(Object.keys(values).map((field) => [field, { source: 'Your input', description: 'Entered for this analysis; verify before relying on it' }])) }));
+    setForm((current) => ({ ...current, ...values }));
   };
 
   const restoreCleared = () => {
@@ -922,11 +937,41 @@ const InvestmentCalculator = () => {
                 <Field label="Rehab financed by the loan" name="rehabFinanced" value={form.rehabFinanced} onChange={update} suffix="%" />
                 <Field label="Monthly holding costs" name="monthlyHolding" value={form.monthlyHolding} onChange={update} prefix="$" />
                 <Field label="Other project costs" name="otherProjectCosts" value={form.otherProjectCosts} onChange={update} prefix="$" />
+                <Field label="Renovated comparable sales (optional)" name="compSoldPerSf" value={form.compSoldPerSf} onChange={update} prefix="$" suffix="/sf" hint="Sold price per square foot of renovated houses of the same kind, size, age and setting." />
               </div>
               <p className="studio-provider-note"><ShieldCheck /> The loan is sized on the loan-to-value above times the price, plus this share of the rehabilitation budget. Hard-money lenders commonly fund most of the price and all of the rehab; the contingency stays yours. The whole loan is drawn at purchase and carries interest from the first month.</p>
+              <div className="studio-field-grid">
+                <Field label="Annual property taxes" name="flipAnnualTaxes" value={form.flipAnnualTaxes} onChange={update} prefix="$" hint="A public figure: the current bill." />
+                <Field label="Annual insurance" name="flipAnnualInsurance" value={form.flipAnnualInsurance} onChange={update} prefix="$" hint="Vacant-property or builder's-risk cover." />
+                <Field label="Monthly utilities" name="flipMonthlyUtilities" value={form.flipMonthlyUtilities} onChange={update} prefix="$" />
+              </div>
+              {(() => {
+                const parts = holdingCostParts(form);
+                const estimate = estimateHoldingCosts(form.rentableSquareFeet);
+                return (
+                  <div className="studio-inline-actions" role="group" aria-label="Holding costs from their parts">
+                    <p>{parts.entered ? `Taxes, insurance and utilities add up to ${money.format(parts.total)} a month.` : 'Build the monthly holding cost from its parts, or estimate the two that follow from the size of the house.'}</p>
+                    {estimate && <button type="button" onClick={() => applyFields(estimate)}>Estimate insurance and utilities from {Number(form.rentableSquareFeet).toLocaleString('en-US')} sf</button>}
+                    {parts.entered && parts.total > 0 && <button type="button" onClick={() => applyFields({ monthlyHolding: String(parts.total) })}>Use {money.format(parts.total)} as the monthly holding cost</button>}
+                  </div>
+                );
+              })()}
+            </fieldset>
+            <fieldset>
+              <legend><span>04</span> Listing history & seller</legend>
+              <div className="studio-field-grid">
+                <Field label="Last sale price" name="lastSalePrice" value={form.lastSalePrice} onChange={update} prefix="$" />
+                <Field label="Last sale date" name="lastSaleDate" value={form.lastSaleDate} onChange={update} type="month" min={undefined} step={undefined} />
+                <Field label="Original list price" name="originalListPrice" value={form.originalListPrice} onChange={update} prefix="$" hint="The first asking price of this listing." />
+                <Field label="Days on market" name="daysOnMarket" value={form.daysOnMarket} onChange={update} suffix="days" step="1" />
+                <SelectField label="Seller" name="ownerType" value={form.ownerType} onChange={update}>{OWNER_TYPES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</SelectField>
+                <SelectField label="Seller disclosure" name="disclosureStatus" value={form.disclosureStatus} onChange={update}>{DISCLOSURE_STATUSES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</SelectField>
+                <SelectField label="Sale terms" name="saleTerms" value={form.saleTerms} onChange={update}>{SALE_TERMS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</SelectField>
+              </div>
+              <p className="studio-provider-note"><ShieldCheck /> This site does not look up sale history or ownership. Enter what the listing and the public record show; the decision says what those facts usually mean, and typing a different address clears them.</p>
             </fieldset>
             <fieldset className="studio-mandate">
-              <legend><span>04</span> Targets & evidence</legend>
+              <legend><span>05</span> Targets & evidence</legend>
               <div className="studio-field-grid">
                 <Field label="Minimum profit" name="flipMinimumProfit" value={form.flipMinimumProfit} onChange={update} prefix="$" />
                 <Field label="Minimum return on cash" name="flipTargetRoi" value={form.flipTargetRoi} onChange={update} suffix="%" />
@@ -945,7 +990,7 @@ const InvestmentCalculator = () => {
           )}
 
           <fieldset className="studio-monte-carlo">
-            <legend><span>05</span> Monte Carlo risk laboratory</legend>
+            <legend><span>{form.strategy === 'flip' ? '06' : '05'}</span> Monte Carlo risk laboratory</legend>
             <div className="studio-case-picker">
               {MONTE_CARLO_CASES.map((caseName) => (
                 <div key={caseName} className="is-active"><CheckCircle2 /> {caseName}</div>
@@ -1078,6 +1123,16 @@ const InvestmentCalculator = () => {
                   </div>
                   {decision.scenarioNote && <p className="studio-valuation-notice">{decision.scenarioNote}</p>}
                 </section>
+
+                {decision.intelligence && (
+                  <section className="studio-decision-section">
+                    <div className="studio-decision-section__head"><span>PROPERTY INTELLIGENCE</span><small>What the listing, the seller and the figures say</small></div>
+                    {decision.intelligence.facts.length > 0 && <div className="studio-ceiling-list">
+                      {decision.intelligence.facts.map((fact) => <div key={fact.key}><span>{fact.label}<small>{fact.detail}</small></span><strong>{fact.value}</strong></div>)}
+                    </div>}
+                    {decision.intelligence.notes.length > 0 && <ul className="studio-risk-notes" aria-label="Property intelligence notes">{decision.intelligence.notes.map((note) => <li key={note}>{note}</li>)}</ul>}
+                  </section>
+                )}
 
                 <section className="studio-decision-section studio-diligence">
                   <div className="studio-decision-section__head"><span>DILIGENCE CONDITIONS & WALK-AWAY TESTS</span><small>{decision.evidenceGaps.length} evidence gaps</small></div>

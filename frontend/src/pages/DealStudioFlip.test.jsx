@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import axios from 'axios';
 import InvestmentCalculator, { EXAMPLE_ASSET_TYPES, exampleSwap, FLIP_EXAMPLE_SHARED, LAND_EXAMPLE_SHARED } from './InvestmentCalculator';
+import { DECISION_VERSION } from '../lib/dealDecision';
 
 // DE-25. The Fix & flip tab opened on the apartment-building example held for
 // five years, which read as a flip that lost $930,936 before the visitor had
@@ -218,7 +219,7 @@ describe('the fix and flip tab has a decision', () => {
     expect(text()).toContain('SCREEN');
     // The transparent model output is still there under the decision.
     expect(tile('Projected profit').textContent).toContain('$48,149');
-    expect(text()).toContain('diamond-decision-1.3.0');
+    expect(text()).toContain(DECISION_VERSION);
   });
 
   test('a flip priced above its ceiling is a No-Go that names the price that would work', async () => {
@@ -322,5 +323,57 @@ describe('rehab financing and the hold-period band on the fix and flip tab', () 
     expect(field('mcHoldMode')).toBeTruthy();
     await click('Rental & commercial');
     expect(field('mcHoldMode')).toBeNull();
+  });
+});
+
+describe('listing history, holding-cost parts and sanity checks on the fix and flip tab', () => {
+  test('the listing history boxes are on the tab, start empty, and follow the rule for typed figures', async () => {
+    await click('Fix & flip');
+    for (const name of ['lastSalePrice', 'lastSaleDate', 'originalListPrice', 'daysOnMarket', 'ownerType', 'disclosureStatus', 'saleTerms', 'compSoldPerSf', 'flipAnnualTaxes']) {
+      expect(field(name)).toBeTruthy();
+      expect(field(name).value).toBe('');
+    }
+    expect(field('lastSaleDate').type).toBe('month');
+    expect(text()).toContain('This site does not look up sale history or ownership.');
+    // As for every other figure (DE-25): what the visitor typed is kept when an
+    // address is typed; what was loaded or an example is cleared.
+    await setControl('lastSalePrice', '135000');
+    await setControl('ownerType', 'agent');
+    await setControl('address', '12 Example Rd');
+    expect(field('lastSalePrice').value).toBe('135000');
+    expect(field('ownerType').value).toBe('agent');
+    expect(field('purchasePrice').value).toBe('');
+  });
+
+  test('the decision shows the facts, the seller cautions and the per-square-foot check', async () => {
+    await click('Fix & flip');
+    for (const [name, value] of Object.entries({ purchasePrice: '93000', rentableSquareFeet: '1655', arv: '250000', rehabCost: '85000', rehabContingency: '15', lastSalePrice: '135000', lastSaleDate: '2025-04', originalListPrice: '141900', daysOnMarket: '270', ownerType: 'agent', disclosureStatus: 'none', saleTerms: 'as_is' })) await setControl(name, value);
+    await runBase();
+    expect(text()).toContain('PROPERTY INTELLIGENCE');
+    const facts = [...container.querySelectorAll('.studio-decision-section .studio-ceiling-list > div')].map((row) => row.textContent);
+    expect(facts.some((row) => row.startsWith('Last sale') && row.endsWith('$135,000'))).toBe(true);
+    expect(facts.some((row) => row.startsWith('Original list pricecut 34% to $93,000$141,900'))).toBe(true);
+    expect(facts.some((row) => row.startsWith('After-repair value per square foot$250,000 on 1,655 sf$151/sf'))).toBe(true);
+    expect(text()).toContain('Selling below their own basis after a short hold usually means a failed project or a problem found');
+    expect(text()).toContain('The market has already passed at higher prices');
+    expect(text()).toContain('Sold as-is: the 15% contingency is the only repair credit you will get.');
+    const exceptions = [...container.querySelectorAll('.studio-diligence .is-walk')];
+    expect(exceptions.length).toBeGreaterThanOrEqual(4);
+  });
+
+  test('holding costs can be built from their parts, with insurance and utilities estimated from the size', async () => {
+    await click('Fix & flip');
+    await setControl('rentableSquareFeet', '1655');
+    await setControl('flipAnnualTaxes', '1220');
+    await click('Estimate insurance and utilities from 1,655 sf');
+    expect(field('flipAnnualInsurance').value).toBe('1241');
+    expect(field('flipMonthlyUtilities').value).toBe('166');
+    expect(text()).toContain('Taxes, insurance and utilities add up to $371 a month.');
+    await click('Use $371 as the monthly holding cost');
+    expect(field('monthlyHolding').value).toBe('371');
+    // The figure now matches its parts, so the decision raises no holding-cost exception.
+    await runBase();
+    expect(text()).not.toContain('but taxes, insurance and utilities add up to');
+    expect(text()).toContain('Holding costs from their parts');
   });
 });

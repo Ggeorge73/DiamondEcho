@@ -6,6 +6,8 @@ const numericFields = [
   'insurance', 'repairsMaintenance', 'utilities', 'payrollAdmin', 'managementFee',
   'reserves', 'annualBelowNoiCosts', 'incomeGrowth', 'expenseGrowth', 'exitCap',
   'explicitSalePrice', 'arv', 'rehabCost', 'rehabContingency', 'rehabFinanced', 'monthlyHolding',
+  'flipAnnualTaxes', 'flipAnnualInsurance', 'flipMonthlyUtilities', 'compSoldPerSf',
+  'lastSalePrice', 'originalListPrice', 'daysOnMarket',
   'otherProjectCosts', 'siteAcres', 'parcelCount', 'wetlandsAcres',
   'developmentMonths', 'absorptionMonths', 'siteWorkCost', 'hardConstructionCost',
   'softCosts', 'permitsImpactFees', 'environmentalRemediation', 'developerFee',
@@ -39,7 +41,8 @@ export const validateDealForm = (form) => {
     'reserves', 'annualBelowNoiCosts', 'rehabCost', 'monthlyHolding', 'otherProjectCosts',
     'wetlandsAcres', 'absorptionMonths', 'siteWorkCost', 'hardConstructionCost',
     'softCosts', 'permitsImpactFees', 'environmentalRemediation', 'developerFee',
-    'annualCarryingCosts', 'stabilizedNoi']) {
+    'annualCarryingCosts', 'stabilizedNoi', 'flipAnnualTaxes', 'flipAnnualInsurance',
+    'flipMonthlyUtilities', 'compSoldPerSf', 'lastSalePrice', 'originalListPrice', 'daysOnMarket']) {
     if (Number(form[field] || 0) < 0) throw new Error(`${field} cannot be negative.`);
   }
   const requiredReviewed = [

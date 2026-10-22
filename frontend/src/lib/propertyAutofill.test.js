@@ -85,3 +85,23 @@ test('a property chosen from the list keeps the land tab on Lot / land', () => {
   expect(preparePropertyChange({ ...previous, strategy: 'land', propertyType: 'land' }, 'New parcel').propertyType).toBe('land');
   expect(preparePropertyChange({ ...previous, strategy: 'rental', propertyType: 'multifamily' }, 'New home').propertyType).toBe('single_family');
 });
+
+test('a public record fills the last sale and taxes for the flip decision, and a new address clears them', () => {
+  const result = applyPropertyAutofill(previous, {
+    formatted_address: 'Fourth home', city: 'Ellijay', state: 'GA', square_footage: 1655,
+    last_sale_price: 135000, last_sale_date: '2025-04-18', annual_taxes: 1220, provider: 'rentcast',
+  });
+  expect(result.form.lastSalePrice).toBe('135000');
+  expect(result.form.lastSaleDate).toBe('2025-04');
+  expect(result.form.flipAnnualTaxes).toBe('1220');
+  expect(result.form.purchasePrice).toBe('');
+  expect(result.provenance.lastSalePrice.description).toContain("context for the seller's basis, not a price");
+  for (const field of ['lastSalePrice', 'lastSaleDate', 'originalListPrice', 'daysOnMarket', 'flipAnnualTaxes', 'flipAnnualInsurance', 'flipMonthlyUtilities', 'compSoldPerSf']) {
+    expect(PROPERTY_ASSUMPTION_FIELDS).toContain(field);
+  }
+  const typed = { ...result.form, ownerType: 'agent', disclosureStatus: 'none', saleTerms: 'as_is', daysOnMarket: '270' };
+  const cleared = prepareAddressEdit(typed, 'Somewhere else', []).form;
+  expect([cleared.lastSalePrice, cleared.lastSaleDate, cleared.daysOnMarket, cleared.ownerType, cleared.disclosureStatus, cleared.saleTerms]).toEqual(['', '', '', '', '', '']);
+  const chosen = preparePropertyChange(typed, 'Chosen address');
+  expect([chosen.lastSalePrice, chosen.flipAnnualTaxes, chosen.ownerType]).toEqual(['', '', '']);
+});

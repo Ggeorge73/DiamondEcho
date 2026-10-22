@@ -1,13 +1,17 @@
 import { analyzeDealLocally } from './dealAnalysis';
 import { buildDealRequest } from './dealRequest';
 import { classifyFloodZone, floodZoneVerified } from './floodZone';
+import { arvChecks, buildListingSignals, holdingCostParts } from './listingSignals';
 
 // 1.1.0 (2026-10-06): land development gets a Go / No-Go decision.
 // 1.2.0 (2026-10-22): fix and flip gets a Go / No-Go decision and the highest
 // price that meets a minimum profit and a return on cash.
 // 1.3.0 (2026-10-22): in the land Downside and Upside cases the cost change
 // replaces the contingency instead of being applied on top of it.
-export const DECISION_VERSION = 'diamond-decision-1.3.0';
+// 1.4.0 (2026-10-22): the flip decision reads the listing history and seller
+// posture, checks the after-repair value per square foot, and checks the
+// holding costs against their parts.
+export const DECISION_VERSION = 'diamond-decision-1.4.0';
 
 const EXPLICIT_EXIT_DOWNSIDE_MULTIPLIER = 0.9;
 const EXPLICIT_EXIT_UPSIDE_MULTIPLIER = 1.1;
@@ -442,7 +446,7 @@ const FLIP_THIN_CUSHION = 0.10;
 // Other costs stay as entered; the loan is resized to the same share of the price.
 const flipAtPrice = (form, purchasePrice) => analyzeForm({ ...form, purchasePrice: String(purchasePrice) });
 
-export const buildFlipDecision = ({ form, evidence = {} }) => {
+export const buildFlipDecision = ({ form, evidence = {}, today = new Date() }) => {
   if (form.strategy !== 'flip') return null;
   const base = analyzeForm(form);
   const now = flipMetrics(base);
@@ -494,6 +498,16 @@ export const buildFlipDecision = ({ form, evidence = {} }) => {
   if (rule70 !== null && askingPrice > rule70) cautions.push(`The price is ${usd(askingPrice - rule70)} above the 70% rule screening figure of ${usd(rule70)}. The rule is a screen, not a valuation; it says the margin is thin for the work involved, so the after-repair value and the budget must hold.`);
   if (cushion !== null && now.profit > 0 && cushion < FLIP_THIN_CUSHION) cautions.push(`The after-repair value can fall only ${pct(cushion)} before the deal loses money.`);
   if (loanTermMonths !== null && n(form.holdMonths) > loanTermMonths) cautions.push(`The ${n(form.holdMonths)}-month hold is longer than the ${loanTermMonths}-month loan term, so the loan comes due before the sale.`);
+  // Items 2, 7 and 8: what the listing history and the seller's posture
+  // usually mean, the after-repair value per square foot, and the holding
+  // costs against their parts. Each caution is an exception to resolve.
+  const listing = buildListingSignals(form, { now: today });
+  const sanity = arvChecks(form);
+  const parts = holdingCostParts(form);
+  const holding = n(form.monthlyHolding);
+  if (!(holding > 0)) cautions.push('No monthly holding costs are entered; taxes, insurance and utilities run for every month of the hold.');
+  else if (parts.entered && parts.total > 0 && Math.abs(holding - parts.total) > Math.max(parts.total * 0.10, 25)) cautions.push(`Monthly holding costs are entered as ${usd(holding)}, but taxes, insurance and utilities add up to ${usd(parts.total)} a month.`);
+  cautions.push(...listing.cautions, ...sanity.cautions);
   const walkAwaySignals = [...cautions];
 
   const meetsTargets = exactMaximum !== null && askingPrice <= exactMaximum && hurdleResults.every((item) => item.pass);
@@ -547,6 +561,11 @@ export const buildFlipDecision = ({ form, evidence = {} }) => {
     scenarios,
     scenarioNote: FLIP_SCENARIO_NOTE,
     walkAwaySignals,
+    // Facts and notes for the page; the cautions are already in walkAwaySignals.
+    intelligence: {
+      facts: [...listing.facts, ...sanity.facts, ...(parts.entered ? [{ key: 'holdingParts', label: 'Holding costs from their parts', value: `${usd(parts.total)}/month`, detail: `taxes ${usd(parts.taxes)}, insurance ${usd(parts.insurance)}, utilities ${usd(parts.utilities)} a month; ${usd(holding)} entered` }] : [])],
+      notes: [...listing.signals, ...sanity.signals].filter((signal) => signal.level === 'note').map((signal) => signal.text),
+    },
     summary,
     valuationNotice: 'This is the most the house is worth to this plan at the figures entered. It is not an appraisal, a broker price opinion, or a statement of market value.',
   };
