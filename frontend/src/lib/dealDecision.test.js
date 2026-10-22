@@ -188,8 +188,10 @@ test('exceptions make a deal that meets its targets conditional', () => {
   expect(flood.walkAwaySignals).toEqual(['Flood zone AE is a FEMA Special Flood Hazard Area.']);
   const slow = land({ purchasePrice: '650000', ...verifiedSite, developmentMonths: '24', absorptionMonths: '12' }, allTicked);
   expect(slow.walkAwaySignals[0]).toContain('36 months, longer than the 24-month hold');
-  const thin = land({ purchasePrice: '700000', ...verifiedSite, expectedTerminalValue: '4000000', targetProfitMargin: '12', targetIrr: '' }, allTicked);
-  expect(thin.scenarios[0].metrics.profit).toBeLessThan(0);
+  // Thin enough that the downside (exit 10% lower, costs 10% over with the
+  // overrun replacing the contingency, six months longer) loses money.
+  const thin = land({ purchasePrice: '700000', ...verifiedSite, expectedTerminalValue: '3750000', targetProfitMargin: '8', targetIrr: '' }, allTicked);
+  expect(thin.scenarios[0].metrics.profit).toBeCloseTo(-45552, 0);
   expect(thin.walkAwaySignals.some((signal) => signal.startsWith('The downside case loses'))).toBe(true);
   expect(thin.call).toBe('CONDITIONAL GO');
 });
@@ -210,6 +212,12 @@ test('downside, base and upside are ordered, and the cushion is the room above b
   const [downside, base, upside] = decision.scenarios.map((scenario) => scenario.metrics.profit);
   expect(downside).toBeLessThan(base);
   expect(base).toBeLessThan(upside);
+  // In the stressed cases the cost figure replaces the contingency.
+  expect(decision.scenarios[0].assumptions.landContingency).toBe('0');
+  expect(decision.scenarios[0].assumptions.siteWorkCost).toBe('275000');
+  expect(decision.scenarios[2].assumptions.landContingency).toBe('0');
+  expect(decision.scenarios[1].assumptions).toEqual({});
+  expect(decision.scenarioNote).toContain('the overrun replaces the contingency');
   const { terminalValue, breakEvenTerminalValue, cushion } = decision.profitability;
   expect(cushion).toBeCloseTo((terminalValue - breakEvenTerminalValue) / terminalValue, 12);
   expect(cushion).toBeGreaterThan(0);

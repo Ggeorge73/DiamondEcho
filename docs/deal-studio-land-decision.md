@@ -75,9 +75,20 @@ Confidence is High at 8 or more, Medium at 5 to 7, Low below 5.
 
 | Case | Exit value | Development costs | Time | Interest rate |
 | --- | --- | --- | --- | --- |
-| Downside | 10% lower | 10% higher | 6 months longer | 0.5 points higher |
-| Base | as entered | as entered | as entered | as entered |
-| Upside | 5% higher | 5% lower | as entered | 0.25 points lower |
+| Downside | 10% lower | 10% over budget; the overrun replaces the contingency | 6 months longer | 0.5 points higher |
+| Base | as entered | as entered, contingency as a cost | as entered | as entered |
+| Upside | 5% higher | 5% under budget, contingency unspent | as entered | 0.25 points lower |
+
+Since 2026-10-22 the stressed cases, and the simulation's development-cost
+draw, treat the cost figure as the outcome: it replaces the construction
+contingency instead of carrying it on top (before, a 10% overrun with a 10%
+contingency cost 1.1 × 1.1 on site work and construction). The contingency
+covers site work and construction, so a draw equal to the contingency rate
+reproduces the base case on those; soft costs, permits, remediation and the
+developer fee carry no contingency and are simply that much over. Formula
+versions `diamond-underwriting-1.3.0` (service) and
+`diamond-underwriting-web-1.4.0` (page); the base analysis is unchanged. The
+same rule for fix and flip is in `docs/deal-studio-flip-decision.md`.
 
 A "Go" here means the figures entered meet the targets entered. It is not an
 appraisal, an offer, or an investment recommendation, and the page says so.

@@ -149,9 +149,9 @@ by test (`backend/tests/deal_intelligence/test_monte_carlo.py`,
 `frontend/src/lib/dealAnalysis.test.js`). The base analysis is unchanged; the
 formula versions are `diamond-underwriting-1.2.0` (service) and
 `diamond-underwriting-web-1.3.0` (page), so a risk result says which rule
-produced it. The land simulation still applies its contingency on top of a
-development-cost draw; it has the same shape of fault and is not changed
-here.
+produced it. The land simulation had the same shape of fault and was given
+the same rule the same day (service `1.3.0`, page `1.4.0`); see
+`docs/deal-studio-land-decision.md`.
 
 ## Tests
 

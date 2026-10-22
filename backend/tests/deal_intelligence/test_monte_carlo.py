@@ -357,3 +357,36 @@ def test_a_flip_without_a_contingency_takes_the_whole_overrun():
     simulated = _fixed_rehab_overrun(0.20, contingency=0)
     assert simulated == pytest.approx(_profit_with_rehab(85_000 * 1.20, 0), abs=0.01)
     assert simulated < analyze_deal(_flip_deal(0)).metrics["flip_profit"].value
+
+
+def _fixed_land_cost_overrun(overrun):
+    request = MonteCarloRequest(
+        deal=_land_deal(),
+        scenarios=[{
+            "name": "Fixed", "iterations": 250, "seed": 7,
+            "drivers": {"development_cost_change": {"minimum": overrun, "mode": overrun, "maximum": overrun}},
+        }],
+    )
+    summary = run_monte_carlo(request).scenarios[0].summaries["development_profit"]
+    assert summary.minimum == pytest.approx(summary.maximum)
+    return summary.p50
+
+
+def _land_profit_with_costs(factor, contingency_rate):
+    deal = _land_deal()
+    for field in ("site_work_cost", "hard_construction_cost", "soft_costs", "permits_impact_fees", "environmental_remediation", "developer_fee"):
+        setattr(deal.land, field, getattr(deal.land, field) * factor)
+    deal.land.contingency_rate = contingency_rate
+    return analyze_deal(deal).metrics["development_profit"].value
+
+
+def test_a_development_cost_overrun_replaces_the_construction_contingency():
+    # A 30% overrun on a 10% contingency used to cost 1.3 x 1.1 on site work
+    # and construction. The reference land deal has $1,800,000 of those and
+    # $400,000 of other costs that carry no contingency.
+    simulated = _fixed_land_cost_overrun(0.30)
+    assert simulated == pytest.approx(_land_profit_with_costs(1.30, 0), abs=0.01)
+    assert simulated > _land_profit_with_costs(1.30, 0.1)
+    base = analyze_deal(_land_deal()).metrics["development_profit"].value
+    assert _fixed_land_cost_overrun(0.10) == pytest.approx(base - 0.10 * 400_000, abs=0.01)
+    assert _fixed_land_cost_overrun(0.0) == pytest.approx(base + 0.10 * 1_800_000, abs=0.01)

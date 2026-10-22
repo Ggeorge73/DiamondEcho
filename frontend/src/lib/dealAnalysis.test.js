@@ -325,6 +325,57 @@ describe('the rehab contingency absorbs a simulated overrun instead of multiplyi
   });
 
   test('the service and browser engines carry the same change in their formula versions', () => {
-    expect(runMonteCarloLocally({ deal: buildDealRequest(ruralFixerForm), scenarios: [{ name: 'Fixed', iterations: 250, seed: 7, drivers: { rehab_cost_change: { minimum: 0, mode: 0, maximum: 0 } } }] }).formula_version).toBe('diamond-underwriting-web-1.3.0');
+    expect(runMonteCarloLocally({ deal: buildDealRequest(ruralFixerForm), scenarios: [{ name: 'Fixed', iterations: 250, seed: 7, drivers: { rehab_cost_change: { minimum: 0, mode: 0, maximum: 0 } } }] }).formula_version).toBe('diamond-underwriting-web-1.4.0');
+  });
+});
+
+describe('the construction contingency absorbs a simulated development-cost overrun', () => {
+  // The land fixture of the page test: $250,000 site work and $1,400,000
+  // construction with a 10% contingency, and $290,000 of other costs that
+  // carry none.
+  const landForm = {
+    strategy: 'land', propertyType: 'land', units: '4', rentableSquareFeet: '12000',
+    purchasePrice: '985000', closingCosts: '20000', dueDiligenceCosts: '15000', initialCapex: '0', holdMonths: '24',
+    ltv: '65', interestRate: '6.75', amortizationYears: '30', interestOnlyMonths: '24', loanTermYears: '2', originationFee: '1',
+    sellingCosts: '6', discountRate: '10',
+    developmentType: 'single_family_subdivision', dispositionStrategy: 'build_and_sell', siteAcres: '2.5', parcelCount: '1',
+    entitlementStatus: 'unentitled', utilityStatus: 'verify', accessStatus: 'verify', environmentalStatus: 'phase_i_required',
+    geotechnicalStatus: 'not_started', floodZone: '', wetlandsAcres: '0', developmentMonths: '18', absorptionMonths: '6',
+    siteWorkCost: '250000', hardConstructionCost: '1400000', softCosts: '150000', permitsImpactFees: '60000',
+    environmentalRemediation: '0', developerFee: '80000', landContingency: '10', annualCarryingCosts: '24000',
+    expectedTerminalValue: '4300000', stabilizedNoi: '0', stabilizedExitCap: '0', targetProfitMargin: '20',
+  };
+  const costFields = ['siteWorkCost', 'hardConstructionCost', 'softCosts', 'permitsImpactFees', 'environmentalRemediation', 'developerFee'];
+  // Scaled on the request, as the simulation does, so the loan stays the
+  // size it was sized at on the entered budget.
+  const profitWithCosts = (factor, contingency) => {
+    const request = buildDealRequest(landForm);
+    costFields.forEach((field) => { request.land[field.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)] *= factor; });
+    request.land.contingency_rate = contingency;
+    return analyzeDealLocally(request).metrics.development_profit.value;
+  };
+  const simulatedProfit = (overrun) => {
+    const result = runMonteCarloLocally({ deal: buildDealRequest(landForm), scenarios: [{ name: 'Fixed', iterations: 250, seed: 7, drivers: { development_cost_change: { minimum: overrun, mode: overrun, maximum: overrun } } }] });
+    const summary = result.scenarios[0].summaries.development_profit;
+    expect(summary.minimum).toBeCloseTo(summary.maximum, 6);
+    return summary.p50;
+  };
+  const base = analyzeDealLocally(buildDealRequest(landForm)).metrics.development_profit.value;
+
+  test('a 30% overrun on a 10% contingency costs 30% over budget, not 43%', () => {
+    const simulated = simulatedProfit(0.30);
+    expect(simulated).toBeCloseTo(profitWithCosts(1.30, 0), 2);
+    expect(simulated).toBeGreaterThan(profitWithCosts(1.30, 0.1));
+  });
+
+  test('a draw equal to the contingency matches the base case on the costs the contingency covers', () => {
+    // The other $290,000 carry no contingency, so they are 10% over.
+    expect(simulatedProfit(0.10)).toBeCloseTo(base - 0.10 * 290000, 2);
+    // No overrun at all: the reserve on site work and construction is unspent.
+    expect(simulatedProfit(0)).toBeCloseTo(base + 0.10 * 1650000, 2);
+  });
+
+  test('the formula version says which rule produced a land simulation', () => {
+    expect(runMonteCarloLocally({ deal: buildDealRequest(landForm), scenarios: [{ name: 'Fixed', iterations: 250, seed: 7, drivers: { development_cost_change: { minimum: 0, mode: 0, maximum: 0 } } }] }).formula_version).toBe('diamond-underwriting-web-1.4.0');
   });
 });

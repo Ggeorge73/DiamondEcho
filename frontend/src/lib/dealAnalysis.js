@@ -6,7 +6,9 @@ import { floodZoneWarning } from './floodZone';
 // 1.3.0 (2026-10-22): in a fix-and-flip simulation the rehab contingency absorbs
 // a rehab overrun instead of being applied on top of it. The base analysis is
 // unchanged.
-export const FORMULA_VERSION = 'diamond-underwriting-web-1.3.0';
+// 1.4.0 (2026-10-22): the same for a land development simulation's construction
+// contingency and a development-cost overrun. The base analysis is unchanged.
+export const FORMULA_VERSION = 'diamond-underwriting-web-1.4.0';
 
 const clean = (value, digits = 8) => value == null || !Number.isFinite(value) ? null : Number(value.toFixed(digits));
 const ratio = (numerator, denominator) => Math.abs(denominator) < 1e-12 ? null : clean(numerator / denominator);
@@ -356,7 +358,14 @@ const createScenarioRun = (deal, scenario) => {
           else shocked.land.stabilized_noi *= 1 + draw;
         }
         if (driver === 'development_cost_change') {
+          // As for a flip: the draw is the overrun that happened and the
+          // contingency is the reserve held for it, so the draw replaces the
+          // reserve instead of being applied on top of it. The reserve covers
+          // site work and construction, so a draw equal to the contingency rate
+          // reproduces the base case on those; the other costs, which carry no
+          // reserve, are simply that much over.
           LAND_COST_FIELDS.forEach((key) => { shocked.land[key] *= 1 + draw; });
+          shocked.land.contingency_rate = 0;
         }
       });
       let analysis;
