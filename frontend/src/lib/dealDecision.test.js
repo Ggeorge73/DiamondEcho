@@ -188,12 +188,37 @@ test('exceptions make a deal that meets its targets conditional', () => {
   expect(flood.walkAwaySignals).toEqual(['Flood zone AE is a FEMA Special Flood Hazard Area.']);
   const slow = land({ purchasePrice: '650000', ...verifiedSite, developmentMonths: '24', absorptionMonths: '12' }, allTicked);
   expect(slow.walkAwaySignals[0]).toContain('36 months, longer than the 24-month hold');
-  // Thin enough that the downside (exit 10% lower, costs 10% over with the
-  // overrun replacing the contingency, six months longer) loses money.
+  // With the cost rise replacing the contingency the downside is milder than it
+  // was, so the exit value sits lower to keep the downside case under water.
   const thin = land({ purchasePrice: '700000', ...verifiedSite, expectedTerminalValue: '3750000', targetProfitMargin: '8', targetIrr: '' }, allTicked);
-  expect(thin.scenarios[0].metrics.profit).toBeCloseTo(-45552, 0);
+  expect(thin.scenarios[0].metrics.profit).toBeLessThan(0);
   expect(thin.walkAwaySignals.some((signal) => signal.startsWith('The downside case loses'))).toBe(true);
   expect(thin.call).toBe('CONDITIONAL GO');
+});
+
+test('the stressed land cases replace the contingency instead of adding to it', () => {
+  const decision = land();
+  const [downside, base, upside] = decision.scenarios;
+  const rounded = (assumptions) => Object.fromEntries(Object.entries(assumptions).map(([key, value]) => [key, Math.round(Number(value) * 100) / 100]));
+  expect(rounded(downside.assumptions)).toEqual({
+    expectedTerminalValue: 3870000, siteWorkCost: 275000, hardConstructionCost: 1540000, softCosts: 165000,
+    permitsImpactFees: 66000, environmentalRemediation: 0, developerFee: 88000, landContingency: 0,
+    holdMonths: 30, interestRate: 7.25,
+  });
+  expect(rounded(upside.assumptions)).toEqual({
+    expectedTerminalValue: 4515000, siteWorkCost: 237500, hardConstructionCost: 1330000, softCosts: 142500,
+    permitsImpactFees: 57000, environmentalRemediation: 0, developerFee: 76000, landContingency: 0,
+    interestRate: 6.5,
+  });
+  expect(downside.metrics.profit).toBeLessThan(base.metrics.profit);
+  expect(base.metrics.profit).toBeLessThan(upside.metrics.profit);
+  // With the 10% contingency still applied, the downside used to charge
+  // 1.1 x 1.1 = 21% over on site work and hard construction, and size the
+  // loan, its fee and its interest on that larger cost.
+  const compounded = buildLandDecision({ form: { ...landForm, ...downside.assumptions, landContingency: '10' }, evidence: {} }).scenarios[1].metrics.profit;
+  expect(downside.metrics.profit).toBeGreaterThan(compounded + (275000 + 1540000) * 0.1 - 1);
+  expect(decision.scenarioNote).toContain('the rise replaces the contingency');
+  expect(decision.version).toBe('diamond-decision-1.3.0');
 });
 
 test('the IRR target is optional, and a comparable land value caps the price', () => {
@@ -212,12 +237,6 @@ test('downside, base and upside are ordered, and the cushion is the room above b
   const [downside, base, upside] = decision.scenarios.map((scenario) => scenario.metrics.profit);
   expect(downside).toBeLessThan(base);
   expect(base).toBeLessThan(upside);
-  // In the stressed cases the cost figure replaces the contingency.
-  expect(decision.scenarios[0].assumptions.landContingency).toBe('0');
-  expect(decision.scenarios[0].assumptions.siteWorkCost).toBe('275000');
-  expect(decision.scenarios[2].assumptions.landContingency).toBe('0');
-  expect(decision.scenarios[1].assumptions).toEqual({});
-  expect(decision.scenarioNote).toContain('the overrun replaces the contingency');
   const { terminalValue, breakEvenTerminalValue, cushion } = decision.profitability;
   expect(cushion).toBeCloseTo((terminalValue - breakEvenTerminalValue) / terminalValue, 12);
   expect(cushion).toBeGreaterThan(0);

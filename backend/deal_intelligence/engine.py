@@ -23,8 +23,9 @@ from .models import (
 # 1.2.0 (2026-10-22): in a fix-and-flip simulation the rehab contingency absorbs
 # a rehab overrun instead of being applied on top of it. The base analysis is
 # unchanged.
-# 1.3.0 (2026-10-22): the same for a land development simulation's construction
-# contingency and a development-cost overrun. The base analysis is unchanged.
+# 1.3.0 (2026-10-22): in a land-development simulation the contingency on site
+# work and hard construction absorbs a development-cost draw instead of being
+# applied on top of it. The base analysis is unchanged.
 # 1.4.0 (2026-10-22): a flip loan can fund a share of the rehab budget on top of
 # loan-to-value times the price (rehab_financed_rate, 0 by default, so earlier
 # figures are unchanged), and the simulation can draw the hold period.

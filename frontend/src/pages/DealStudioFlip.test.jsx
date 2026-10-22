@@ -218,7 +218,7 @@ describe('the fix and flip tab has a decision', () => {
     expect(text()).toContain('SCREEN');
     // The transparent model output is still there under the decision.
     expect(tile('Projected profit').textContent).toContain('$48,149');
-    expect(text()).toContain('diamond-decision-1.2.1');
+    expect(text()).toContain('diamond-decision-1.3.0');
   });
 
   test('a flip priced above its ceiling is a No-Go that names the price that would work', async () => {

@@ -113,7 +113,7 @@ def test_losses_without_a_solvable_irr_are_counted_not_dropped():
     assert scenario.summaries["npv"].loss_without_irr_count == 0
 
 
-def _land_deal():
+def _land_deal(contingency_rate=0.1):
     return DealAnalysisRequest(
         strategy="land",
         property={"property_type": "land", "unit_count": 12},
@@ -126,7 +126,7 @@ def _land_deal():
         land={
             "site_acres": 2.5, "planned_units": 12, "development_months": 24,
             "site_work_cost": 300_000, "hard_construction_cost": 1_500_000, "soft_costs": 200_000,
-            "permits_impact_fees": 100_000, "developer_fee": 100_000, "contingency_rate": 0.1,
+            "permits_impact_fees": 100_000, "developer_fee": 100_000, "contingency_rate": contingency_rate,
             "annual_carrying_costs": 30_000, "expected_terminal_value": 7_500_000,
             "target_profit_margin": 0.2,
         },
@@ -159,6 +159,65 @@ def test_land_development_monte_carlo_uses_the_land_drivers():
     # Costs only rise and the terminal value mostly falls in this case, so most
     # outcomes sit below the base profit; some must still be profitable.
     assert 0 < profit.probability_above_zero < 1
+
+
+_LAND_CONTINGENCY_BASIS = 300_000 + 1_500_000  # site work + hard construction
+_LAND_OTHER_COSTS = 200_000 + 100_000 + 0 + 100_000  # soft, permits, remediation, fee
+
+
+def _fixed_development_cost_change(change, contingency=0.1):
+    # A distribution with one value draws that value every time, so the
+    # simulation becomes a deterministic re-run with that cost change.
+    request = MonteCarloRequest(
+        deal=_land_deal(contingency),
+        scenarios=[{
+            "name": "Fixed", "iterations": 250, "seed": 7,
+            "drivers": {"development_cost_change": {"minimum": change, "mode": change, "maximum": change}},
+        }],
+    )
+    summary = run_monte_carlo(request).scenarios[0].summaries["development_profit"]
+    assert summary.minimum == pytest.approx(summary.maximum)
+    return summary.p50
+
+
+def _profit_with_costs_scaled(factor, contingency):
+    deal = _land_deal(contingency)
+    for field in (
+        "site_work_cost", "hard_construction_cost", "soft_costs",
+        "permits_impact_fees", "environmental_remediation", "developer_fee",
+    ):
+        setattr(deal.land, field, getattr(deal.land, field) * factor)
+    return analyze_deal(deal).metrics["development_profit"].value
+
+
+def test_a_development_cost_rise_beyond_the_contingency_adds_only_the_excess():
+    # Same shape of fault as item 6 of the 2026-10-22 flip review: a 30% rise
+    # with a 10% contingency used to cost 1.3 x 1.1 = 43% over budget on site
+    # work and hard construction.
+    simulated = _fixed_development_cost_change(0.30)
+    assert simulated == pytest.approx(_profit_with_costs_scaled(1.30, 0), abs=0.01)
+    compounded = _profit_with_costs_scaled(1.30, 0.10)
+    assert simulated == pytest.approx(compounded + _LAND_CONTINGENCY_BASIS * 1.30 * 0.10, abs=0.01)
+
+
+def test_a_draw_equal_to_the_land_contingency_is_the_base_case_on_the_contingency_basis():
+    base = analyze_deal(_land_deal()).metrics["development_profit"].value
+    # Site work and hard construction come out exactly as in the base case,
+    # which spends the whole reserve. The four costs that carry no contingency
+    # still rise by the draw, so the profit is below the base by that much.
+    assert _fixed_development_cost_change(0.10) == pytest.approx(base - _LAND_OTHER_COSTS * 0.10, abs=0.01)
+    # A smaller draw means the reserve was not all needed: better than the base
+    # case by the unspent share of the basis, less the rise in the other costs.
+    assert _fixed_development_cost_change(0.05) == pytest.approx(
+        base + _LAND_CONTINGENCY_BASIS * 0.05 - _LAND_OTHER_COSTS * 0.05, abs=0.01,
+    )
+    assert _fixed_development_cost_change(0.0) == pytest.approx(base + _LAND_CONTINGENCY_BASIS * 0.10, abs=0.01)
+
+
+def test_a_land_deal_without_a_contingency_takes_the_whole_cost_change():
+    simulated = _fixed_development_cost_change(0.20, contingency=0)
+    assert simulated == pytest.approx(_profit_with_costs_scaled(1.20, 0), abs=0.01)
+    assert simulated < analyze_deal(_land_deal(0)).metrics["development_profit"].value
 
 
 # --- Time budget (DE-33): a run that would overrun stops cleanly and says so ---
@@ -357,39 +416,6 @@ def test_a_flip_without_a_contingency_takes_the_whole_overrun():
     simulated = _fixed_rehab_overrun(0.20, contingency=0)
     assert simulated == pytest.approx(_profit_with_rehab(85_000 * 1.20, 0), abs=0.01)
     assert simulated < analyze_deal(_flip_deal(0)).metrics["flip_profit"].value
-
-
-def _fixed_land_cost_overrun(overrun):
-    request = MonteCarloRequest(
-        deal=_land_deal(),
-        scenarios=[{
-            "name": "Fixed", "iterations": 250, "seed": 7,
-            "drivers": {"development_cost_change": {"minimum": overrun, "mode": overrun, "maximum": overrun}},
-        }],
-    )
-    summary = run_monte_carlo(request).scenarios[0].summaries["development_profit"]
-    assert summary.minimum == pytest.approx(summary.maximum)
-    return summary.p50
-
-
-def _land_profit_with_costs(factor, contingency_rate):
-    deal = _land_deal()
-    for field in ("site_work_cost", "hard_construction_cost", "soft_costs", "permits_impact_fees", "environmental_remediation", "developer_fee"):
-        setattr(deal.land, field, getattr(deal.land, field) * factor)
-    deal.land.contingency_rate = contingency_rate
-    return analyze_deal(deal).metrics["development_profit"].value
-
-
-def test_a_development_cost_overrun_replaces_the_construction_contingency():
-    # A 30% overrun on a 10% contingency used to cost 1.3 x 1.1 on site work
-    # and construction. The reference land deal has $1,800,000 of those and
-    # $400,000 of other costs that carry no contingency.
-    simulated = _fixed_land_cost_overrun(0.30)
-    assert simulated == pytest.approx(_land_profit_with_costs(1.30, 0), abs=0.01)
-    assert simulated > _land_profit_with_costs(1.30, 0.1)
-    base = analyze_deal(_land_deal()).metrics["development_profit"].value
-    assert _fixed_land_cost_overrun(0.10) == pytest.approx(base - 0.10 * 400_000, abs=0.01)
-    assert _fixed_land_cost_overrun(0.0) == pytest.approx(base + 0.10 * 1_800_000, abs=0.01)
 
 
 def _fixed_hold_change(months):

@@ -122,12 +122,15 @@ def _sample_deal(
             else:
                 deal.land.stabilized_noi *= 1 + value
         elif driver == MonteCarloDriver.DEVELOPMENT_COST_CHANGE and deal.land:
-            # As for a flip: the draw is the overrun that happened and the
-            # contingency is the reserve held for it, so the draw replaces the
-            # reserve instead of being applied on top of it. The reserve covers
-            # site work and construction, so a draw equal to the contingency
-            # rate reproduces the base case on those; the other costs, which
-            # carry no reserve, are simply that much over.
+            # The draw is the cost change that happened, and the contingency is
+            # the reserve held for it on site work and hard construction, so the
+            # draw replaces the reserve instead of being added on top of it: a
+            # 30% draw with a 10% contingency costs 30% over budget on those two
+            # fields, not 1.3 x 1.1 = 43%. A draw equal to the contingency rate
+            # reproduces the base case, which treats the whole reserve as spent;
+            # a smaller draw means it was not all needed. Soft costs, permits,
+            # remediation and the developer fee carry no contingency, so the
+            # draw is their whole change.
             for field in _DEVELOPMENT_COST_FIELDS:
                 setattr(deal.land, field, getattr(deal.land, field) * (1 + value))
             deal.land.contingency_rate = 0

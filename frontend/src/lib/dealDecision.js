@@ -5,9 +5,9 @@ import { classifyFloodZone, floodZoneVerified } from './floodZone';
 // 1.1.0 (2026-10-06): land development gets a Go / No-Go decision.
 // 1.2.0 (2026-10-22): fix and flip gets a Go / No-Go decision and the highest
 // price that meets a minimum profit and a return on cash.
-// 1.2.1 (2026-10-22): in the land downside and upside cases the cost figure
-// replaces the contingency instead of carrying it on top.
-export const DECISION_VERSION = 'diamond-decision-1.2.1';
+// 1.3.0 (2026-10-22): in the land Downside and Upside cases the cost change
+// replaces the contingency instead of being applied on top of it.
+export const DECISION_VERSION = 'diamond-decision-1.3.0';
 
 const EXPLICIT_EXIT_DOWNSIDE_MULTIPLIER = 0.9;
 const EXPLICIT_EXIT_UPSIDE_MULTIPLIER = 1.1;
@@ -243,9 +243,10 @@ const landMetrics = (analysis) => ({
 
 const buildLandScenario = (form, name, changes) => ({ name, assumptions: changes, metrics: landMetrics(analyzeForm({ ...form, ...changes })) });
 
-// In the two stressed cases the cost figure is the outcome, so it replaces the
-// contingency reserve rather than being carried on top of it, as in the
-// simulation.
+// In the two stressed cases the cost figures are the outcome, so the change
+// replaces the contingency reserve on site work and hard construction rather
+// than being added on top of it, as in the simulation. A 10% rise with a 10%
+// contingency is therefore the base case's cost, not 1.1 x 1.1 = 21% over.
 const buildLandScenarios = (form) => [
   buildLandScenario(form, 'Downside', {
     ...scaleTerminalValue(form, 0.9),
@@ -263,7 +264,7 @@ const buildLandScenarios = (form) => [
   }),
 ];
 
-export const LAND_SCENARIO_NOTE = 'Downside: exit value 10% lower, development costs 10% over budget (the overrun replaces the contingency), six months longer, interest 0.5 points higher. Upside: exit value 5% higher, costs 5% under budget with the contingency unspent, interest 0.25 points lower.';
+export const LAND_SCENARIO_NOTE = 'Downside: exit value 10% lower, development costs 10% higher (the rise replaces the contingency), six months longer, interest 0.5 points higher. Upside: exit value 5% higher, costs 5% lower with the contingency unspent, interest 0.25 points lower.';
 
 // Other costs stay as entered; the facility is resized to the same share of cost.
 const landAtPrice = (form, purchasePrice) => analyzeForm({ ...form, purchasePrice: String(purchasePrice) });

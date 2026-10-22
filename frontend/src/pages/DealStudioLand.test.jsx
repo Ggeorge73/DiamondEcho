@@ -92,11 +92,11 @@ describe('land development Go / No-Go', () => {
     const rows = [...container.querySelectorAll('.studio-scenario-row')].map((row) => row.textContent);
     expect(rows[0]).toBe('CaseProfitMarginROIIRR');
     expect(rows.slice(1).map((row) => row.split('$')[0].replace('-', ''))).toEqual(['Downside', 'Base', 'Upside']);
-    // The downside's 10% cost overrun replaces the 10% contingency rather
-    // than stacking on it, so this deal's downside still makes money.
+    // The downside's 10% cost rise replaces the 10% contingency, so this deal
+    // no longer loses money in it (it lost $93,752 when the contingency was
+    // applied on top of the rise).
     expect(rows[1]).toContain('Downside$106,035');
     expect(text()).not.toContain('The downside case loses');
-    expect(text()).toContain('the overrun replaces the contingency');
   });
 
   test('the residual land value shown beside the decision is the same number as the ceiling', async () => {
