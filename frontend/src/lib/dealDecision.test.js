@@ -1,4 +1,4 @@
-import { buildDecision, buildLandDecision, buildRentalDecision, LAND_CHECKLIST_ITEMS, LAND_EVIDENCE_ITEMS } from './dealDecision';
+import { buildDecision, buildFlipDecision, buildLandDecision, buildRentalDecision, FLIP_EVIDENCE_ITEMS, LAND_CHECKLIST_ITEMS, LAND_EVIDENCE_ITEMS } from './dealDecision';
 import { analyzeDealLocally } from './dealAnalysis';
 import { buildDealRequest } from './dealRequest';
 
@@ -215,9 +215,169 @@ test('downside, base and upside are ordered, and the cushion is the room above b
   expect(cushion).toBeGreaterThan(0);
 });
 
-test('the page asks one function for the decision, and fix and flip has none', () => {
+test('the page asks one function for the decision, and every strategy has one', () => {
   expect(buildDecision({ form: landForm }).strategy).toBe('land');
   expect(buildDecision({ form: oakStreetForm }).verdict).toBe('REPRICE OR PASS');
-  expect(buildDecision({ form: { ...landForm, strategy: 'flip' } })).toBeNull();
+  expect(buildDecision({ form: ruralFixerForm }).strategy).toBe('flip');
+  expect(buildDecision({ form: { ...landForm, strategy: 'other' } })).toBeNull();
   expect(buildLandDecision({ form: oakStreetForm })).toBeNull();
+  expect(buildFlipDecision({ form: oakStreetForm })).toBeNull();
+});
+
+// ---------------------------------------------------------------------------
+// Fix and flip (item 3 of the 2026-10-22 review of the Fix & flip tab).
+//
+// A rural fixer: $93,000 price, hard-money loan at 70% / 11% / interest only /
+// 2 points, $85,000 rehab with a 15% contingency, $250,000 after-repair value,
+// seven-month hold. The base figures were checked by hand: profit $24,121,
+// 16.83% on cash, 70% rule figure $77,250.
+const ruralFixerForm = {
+  strategy: 'flip', propertyType: 'single_family', market: '', units: '1', rentableSquareFeet: '1655',
+  purchasePrice: '93000', closingCosts: '3000', dueDiligenceCosts: '2000', initialCapex: '0', holdMonths: '7',
+  ltv: '70', interestRate: '11', amortizationYears: '30', interestOnlyMonths: '7', loanTermYears: '1', originationFee: '2',
+  arv: '250000', rehabCost: '85000', rehabContingency: '15', monthlyHolding: '450', otherProjectCosts: '4000',
+  sellingCosts: '7', discountRate: '10', flipMinimumProfit: '30000', flipTargetRoi: '20',
+};
+const flipAt = (changes) => buildFlipDecision({ form: { ...ruralFixerForm, ...changes }, evidence: {} });
+const allFlipEvidence = Object.fromEntries(FLIP_EVIDENCE_ITEMS.map((item) => [item.key, true]));
+
+test('a flip priced above its ceiling is a No-Go that names the price that would work', () => {
+  const decision = flipAt({});
+  expect(decision.call).toBe('NO-GO');
+  expect(decision.verdict).toBe('NO-GO AT THIS PRICE — REPRICE OR PASS');
+  expect(decision.tone).toBe('red');
+  // Profit moves $1.0589 for every dollar of price (the dollar, 2 points on
+  // 70% of it, and seven months' interest on it), so $30,000 needs the price
+  // $5,553 lower: $87,447.
+  expect(decision.exactMaximum).toBe(87447);
+  expect(decision.recommendedMaximum).toBe(87000);
+  expect(decision.ceilings.find((item) => item.binding).key).toBe('profit');
+  expect(decision.ceilings.find((item) => item.key === 'roi').value).toBeGreaterThan(87447);
+  expect(decision.summary).toBe('At $93,000 the deal is modeled to earn $24,121 (16.83% on cash), short of your $30,000 minimum profit and your 20% return on cash. The highest price that meets your targets is $87,447, which is $5,553 below this price.');
+  expect(decision.hurdleResults.map((item) => [item.label, item.pass])).toEqual([['Profit', false], ['Return on cash', false]]);
+  expect(decision.openingRange).toEqual([80000, 84000]);
+  expect(decision.profitability.rule70).toBe(77250);
+  expect(decision.profitability.cushion).toBeCloseTo(0.1037, 4);
+  expect(decision.profitability.breakEvenArv).toBeCloseTo(224064, 0);
+  expect(decision.profitability.rehabCushion).toBeCloseTo(0.2838, 4);
+});
+
+test('running the deal at the profit ceiling earns exactly the minimum profit', () => {
+  const ceiling = flipAt({}).ceilings.find((item) => item.key === 'profit').value;
+  const profit = analyzeDealLocally(buildDealRequest({ ...ruralFixerForm, purchasePrice: String(ceiling) })).metrics.flip_profit.value;
+  expect(profit).toBeGreaterThanOrEqual(30000);
+  expect(profit).toBeLessThan(30002);
+  const roiCeiling = flipAt({}).ceilings.find((item) => item.key === 'roi').value;
+  const roi = analyzeDealLocally(buildDealRequest({ ...ruralFixerForm, purchasePrice: String(roiCeiling) })).metrics.flip_roi.value;
+  expect(roi).toBeGreaterThanOrEqual(0.2);
+  expect(roi).toBeLessThan(0.2001);
+});
+
+test('the 70% rule is listed as a screen, never binds, and exceeding it is an exception', () => {
+  const decision = flipAt({});
+  const screen = decision.ceilings.find((item) => item.key === 'rule70');
+  expect(screen.screen).toBe(true);
+  expect(screen.binding).toBe(false);
+  expect(screen.value).toBe(77250);
+  expect(decision.walkAwaySignals).toContain('The price is $15,750 above the 70% rule screening figure of $77,250. The rule is a screen, not a valuation; it says the margin is thin for the work involved, so the after-repair value and the budget must hold.');
+  expect(decision.walkAwaySignals).toContain('The downside case loses $2,269.');
+  // A 70% figure below every target ceiling never changes the maximum.
+  expect(decision.exactMaximum).toBeGreaterThan(screen.value);
+});
+
+test('within 5% above the ceiling the call is to negotiate', () => {
+  const decision = flipAt({ purchasePrice: '90000' });
+  expect(decision.call).toBe('NEGOTIATE');
+  expect(decision.verdict).toBe('NEGOTIATE — WITHIN 5% OF THE CEILING');
+  expect(decision.summary).toContain('short of your $30,000 minimum profit and your 20% return on cash. The highest price that meets your targets is $87,447, which is $2,553 below this price.');
+});
+
+test('a price that meets the targets is a conditional Go until the evidence is verified, then a Go', () => {
+  const conditional = flipAt({ purchasePrice: '77000' });
+  expect(conditional.call).toBe('CONDITIONAL GO');
+  expect(conditional.verdict).toBe('CONDITIONAL GO — VERIFY BEFORE CLOSING');
+  expect(conditional.walkAwaySignals).toEqual([]);
+  expect(conditional.openingRange).toBeNull();
+  expect(conditional.summary).toBe('At $77,000 the deal is modeled to earn $41,063 (29.86% on cash), which meets your targets. The highest price that still meets them is $87,447.');
+  expect(conditional.evidenceGaps).toHaveLength(7);
+  expect(conditional.confidence).toBe('Low');
+  const go = buildFlipDecision({ form: { ...ruralFixerForm, purchasePrice: '77000' }, evidence: allFlipEvidence });
+  expect(go.call).toBe('GO');
+  expect(go.verdict).toBe('GO — MEETS YOUR TARGETS');
+  expect(go.tone).toBe('green');
+  expect(go.confidence).toBe('High');
+  expect(go.evidenceGaps).toEqual([]);
+});
+
+test('exceptions make a flip that meets its targets conditional', () => {
+  // Meets the targets with every item verified, but the price is above the
+  // 70% screening figure.
+  const screened = buildFlipDecision({ form: { ...ruralFixerForm, purchasePrice: '80000' }, evidence: allFlipEvidence });
+  expect(screened.hurdleResults.every((item) => item.pass)).toBe(true);
+  expect(screened.verdict).toBe('CONDITIONAL GO — RESOLVE EXCEPTIONS');
+  expect(screened.walkAwaySignals).toEqual(['The price is $2,750 above the 70% rule screening figure of $77,250. The rule is a screen, not a valuation; it says the margin is thin for the work involved, so the after-repair value and the budget must hold.']);
+  // Meets the targets, but the sale is a month after the loan comes due.
+  const overdue = buildFlipDecision({ form: { ...ruralFixerForm, purchasePrice: '70000', holdMonths: '13' }, evidence: allFlipEvidence });
+  expect(overdue.hurdleResults.every((item) => item.pass)).toBe(true);
+  expect(overdue.verdict).toBe('CONDITIONAL GO — RESOLVE EXCEPTIONS');
+  expect(overdue.walkAwaySignals).toContain('The 13-month hold is longer than the 12-month loan term, so the loan comes due before the sale.');
+});
+
+test('a thin cushion is an exception that says how far the after-repair value can fall', () => {
+  const decision = buildFlipDecision({ form: { ...ruralFixerForm, purchasePrice: '95000', flipMinimumProfit: '20000', flipTargetRoi: '0' }, evidence: allFlipEvidence });
+  expect(decision.hurdleResults.every((item) => item.pass)).toBe(true);
+  expect(decision.verdict).toBe('CONDITIONAL GO — RESOLVE EXCEPTIONS');
+  expect(decision.profitability.cushion).toBeCloseTo(0.0946, 3);
+  expect(decision.walkAwaySignals).toContain('The after-repair value can fall only 9.46% before the deal loses money.');
+});
+
+test('a deal that loses money, or that no price can rescue, is a No-Go that says why', () => {
+  const losing = flipAt({ purchasePrice: '130000' });
+  expect(losing.verdict).toBe('NO-GO — THE DEAL LOSES MONEY');
+  expect(losing.summary).toContain('At $130,000 the deal is modeled to lose $15,059');
+  const unreachable = flipAt({ flipMinimumProfit: '200000' });
+  expect(unreachable.verdict).toBe('NO-GO — NO PRICE MEETS YOUR TARGETS');
+  expect(unreachable.exactMaximum).toBeNull();
+  expect(unreachable.summary).toBe('At $93,000 the deal is modeled to earn $24,121 (16.83% on cash). With the after-repair value and costs entered, no price meets your targets.');
+  expect(flipAt({ arv: '0' }).verdict).toBe('NO-GO — NO AFTER-REPAIR VALUE ENTERED');
+});
+
+test('the return-on-cash target is optional and a zero minimum profit means break-even', () => {
+  const profitOnly = flipAt({ flipTargetRoi: '0' });
+  expect(profitOnly.hurdleResults.map((item) => item.label)).toEqual(['Profit']);
+  expect(profitOnly.ceilings.map((item) => item.key)).toEqual(['profit', 'rule70']);
+  expect(profitOnly.summary).toContain('short of your $30,000 minimum profit. The highest price');
+  const breakEven = flipAt({ flipMinimumProfit: '0', flipTargetRoi: '0' });
+  expect(breakEven.ceilings[0].label).toBe('Break-even (no minimum profit)');
+  // The price at which profit is exactly zero: $93,000 plus $24,121 / 1.0589.
+  expect(breakEven.exactMaximum).toBeGreaterThan(115700);
+  expect(breakEven.exactMaximum).toBeLessThan(115800);
+});
+
+test('downside, base and upside are ordered, and the stressed rehab replaces the contingency', () => {
+  const decision = flipAt({});
+  const [downside, base, upside] = decision.scenarios;
+  expect([downside.name, base.name, upside.name]).toEqual(['Downside', 'Base', 'Upside']);
+  expect(downside.metrics.profit).toBeLessThan(base.metrics.profit);
+  expect(base.metrics.profit).toBeLessThan(upside.metrics.profit);
+  expect(base.metrics.profit).toBeCloseTo(24121, 0);
+  expect(downside.assumptions).toEqual({ arv: '225000', rehabCost: '97750', rehabContingency: '0', holdMonths: '10' });
+  expect(upside.assumptions).toEqual({ arv: '262500', rehabContingency: '0' });
+  // Base margin is profit over the after-repair value.
+  expect(base.metrics.margin).toBeCloseTo(24121 / 250000, 4);
+  expect(decision.scenarioNote).toContain('the overrun replaces the contingency');
+});
+
+test('the untouched page example is a conditional Go with the default targets', () => {
+  const example = buildFlipDecision({ form: {
+    strategy: 'flip', propertyType: 'single_family', market: 'Atlanta, GA', units: '1', rentableSquareFeet: '1800',
+    purchasePrice: '180000', closingCosts: '5500', dueDiligenceCosts: '1500', initialCapex: '0', holdMonths: '10',
+    ltv: '65', interestRate: '6.75', amortizationYears: '30', interestOnlyMonths: '10', loanTermYears: '1', originationFee: '1',
+    arv: '360000', rehabCost: '65000', rehabContingency: '10', monthlyHolding: '1800', otherProjectCosts: '6000',
+    sellingCosts: '6', discountRate: '10', flipMinimumProfit: '30000', flipTargetRoi: '20',
+  }, evidence: {} });
+  expect(example.verdict).toBe('CONDITIONAL GO — VERIFY BEFORE CLOSING');
+  expect(example.summary).toBe('At $180,000 the deal is modeled to earn $48,149 (27.79% on cash), which meets your targets. The highest price that still meets them is $192,034.');
+  expect(example.recommendedMaximum).toBe(192000);
+  expect(example.walkAwaySignals).toEqual([]);
 });

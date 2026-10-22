@@ -104,7 +104,14 @@ def _sample_deal(
         elif driver == MonteCarloDriver.AFTER_REPAIR_VALUE_CHANGE and deal.flip:
             deal.flip.after_repair_value *= 1 + value
         elif driver == MonteCarloDriver.REHAB_COST_CHANGE and deal.flip:
+            # The draw is the overrun that happened, and the contingency is the
+            # reserve held for it, so the draw replaces the reserve instead of
+            # being added on top of it: a 35% overrun with a 15% contingency
+            # costs 35% over budget, not 1.35 x 1.15 = 55%. A draw equal to the
+            # contingency rate reproduces the base case, which treats the whole
+            # reserve as spent; a smaller draw means it was not all needed.
             deal.flip.rehab_cost *= 1 + value
+            deal.flip.rehab_contingency_rate = 0
         elif driver == MonteCarloDriver.TERMINAL_VALUE_CHANGE and deal.land:
             # Shock whichever input sets the terminal value, as the browser engine does.
             if deal.land.expected_terminal_value > 0:

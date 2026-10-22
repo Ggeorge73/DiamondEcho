@@ -20,7 +20,10 @@ from .models import (
 # 1.1.0 (2026-10-06): residual land value is the land price at which the deal
 # earns exactly the target development margin, and the flood-zone warning reads
 # the FEMA designation instead of treating any text as a zone.
-FORMULA_VERSION = "diamond-underwriting-1.1.0"
+# 1.2.0 (2026-10-22): in a fix-and-flip simulation the rehab contingency absorbs
+# a rehab overrun instead of being applied on top of it. The base analysis is
+# unchanged.
+FORMULA_VERSION = "diamond-underwriting-1.2.0"
 
 
 # FEMA flood-zone designations. Mirrors ``classifyFloodZone`` in

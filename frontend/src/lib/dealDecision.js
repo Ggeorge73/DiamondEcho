@@ -3,7 +3,9 @@ import { buildDealRequest } from './dealRequest';
 import { classifyFloodZone, floodZoneVerified } from './floodZone';
 
 // 1.1.0 (2026-10-06): land development gets a Go / No-Go decision.
-export const DECISION_VERSION = 'diamond-decision-1.1.0';
+// 1.2.0 (2026-10-22): fix and flip gets a Go / No-Go decision and the highest
+// price that meets a minimum profit and a return on cash.
+export const DECISION_VERSION = 'diamond-decision-1.2.0';
 
 const EXPLICIT_EXIT_DOWNSIDE_MULTIPLIER = 0.9;
 const EXPLICIT_EXIT_UPSIDE_MULTIPLIER = 1.1;
@@ -37,8 +39,8 @@ const atPrice = (form, purchasePrice) => {
   });
 };
 
-const findPriceCeiling = ({ form, metricKey, target, minimum = 1000, analyzeAt = atPrice }) => {
-  if (!(target > 0)) return null;
+const findPriceCeiling = ({ form, metricKey, target, minimum = 1000, analyzeAt = atPrice, allowZeroTarget = false }) => {
+  if (!Number.isFinite(target) || (!allowZeroTarget && !(target > 0))) return null;
   const statedPrice = Math.max(n(form.purchasePrice), 100000);
   let lower = minimum;
   let upper = Math.min(50000000, Math.max(statedPrice * 3, 1000000));
@@ -373,9 +375,179 @@ export const buildLandDecision = ({ form, evidence = {} }) => {
   };
 };
 
+// ---------------------------------------------------------------------------
+// Fix and flip: Go / No-Go and the highest price that meets the targets
+// (item 3 of the 2026-10-22 review of the Fix & flip tab).
+//
+// Two targets, both entered by the visitor: a minimum profit in dollars and a
+// minimum return on cash (flip ROI). For each, the page finds by repeated
+// calculation the highest purchase price at which the target is still met;
+// other costs stay as entered and the loan stays the same share of the price.
+// The lowest ceiling controls. The 70% rule figure is shown beside them as a
+// screen, never as a target.
+export const FLIP_EVIDENCE_ITEMS = [
+  { key: 'flipArvVerified', label: 'After-repair value supported by sold comparables of the same kind of house', action: 'Use recent sales of renovated houses of similar size, age, type and setting; a comparable of a different kind of property does not price this one.' },
+  { key: 'flipBudgetVerified', label: 'Rehab budget backed by a contractor walk-through and written bids', action: 'Walk the property with a contractor and replace allowances with written bids; confirm the contingency against what is still unknown.' },
+  { key: 'flipInspectionVerified', label: 'Inspection complete, including roof, structure, HVAC, electrical, plumbing, and septic or well where they apply', action: 'Order the inspections before the diligence period ends, and price every defect found into the budget or the offer.' },
+  { key: 'flipHoldingVerified', label: 'Holding costs priced: taxes, insurance, utilities', action: 'Confirm the tax bill, get a quote for vacant-property or builder\'s-risk insurance, and estimate utilities for the hold.' },
+  { key: 'flipLenderVerified', label: 'Lender term sheet confirmed', action: 'Confirm the advance on the price and on the rehab, points, rate, draw schedule, term, and extension fees in a term sheet.' },
+  { key: 'flipTitleVerified', label: 'Title, survey, access, and liens reviewed', action: 'Review the title commitment and survey for easements, encroachments, liens, open permits, and recorded restrictions.' },
+  { key: 'flipExitVerified', label: 'Exit plan and selling costs confirmed', action: 'Confirm the listing terms, the selling costs, and the days on market for renovated houses in this area.' },
+];
+
+const flipMetrics = (analysis) => {
+  const profit = metricValue(analysis, 'flip_profit');
+  const salePrice = finite(analysis.metrics?.flip_profit?.components?.sale_price) || 0;
+  return {
+    profit,
+    roi: metricValue(analysis, 'flip_roi'),
+    margin: profit !== null && salePrice > 0 ? profit / salePrice : null,
+    irr: metricValue(analysis, 'irr'),
+    equityMultiple: metricValue(analysis, 'equity_multiple'),
+  };
+};
+
+const buildFlipScenario = (form, name, changes) => ({ name, assumptions: changes, metrics: flipMetrics(analyzeForm({ ...form, ...changes })) });
+
+// In the two stressed cases the rehab figure is the outcome, so it replaces
+// the contingency reserve rather than being added on top of it, as in the
+// simulation.
+const buildFlipScenarios = (form) => [
+  buildFlipScenario(form, 'Downside', {
+    arv: String(n(form.arv) * 0.9),
+    rehabCost: String(Math.round(n(form.rehabCost) * 115) / 100),
+    rehabContingency: '0',
+    holdMonths: String(n(form.holdMonths) + 3),
+  }),
+  buildFlipScenario(form, 'Base', {}),
+  buildFlipScenario(form, 'Upside', {
+    arv: String(n(form.arv) * 1.05),
+    rehabContingency: '0',
+  }),
+];
+
+export const FLIP_SCENARIO_NOTE = 'Downside: after-repair value 10% lower, rehab 15% over budget (the overrun replaces the contingency), three months longer. Upside: after-repair value 5% higher, rehab on budget with the contingency unspent.';
+
+// The after-repair value can fall this far before the deal loses money.
+const FLIP_THIN_CUSHION = 0.10;
+
+// Other costs stay as entered; the loan is resized to the same share of the price.
+const flipAtPrice = (form, purchasePrice) => analyzeForm({ ...form, purchasePrice: String(purchasePrice) });
+
+export const buildFlipDecision = ({ form, evidence = {} }) => {
+  if (form.strategy !== 'flip') return null;
+  const base = analyzeForm(form);
+  const now = flipMetrics(base);
+  const askingPrice = n(form.purchasePrice);
+  const arv = n(form.arv);
+  const sellingCostRate = n(form.sellingCosts) / 100;
+  const rule70 = metricValue(base, 'max_offer_70_rule');
+  const targets = { profit: Math.max(0, n(form.flipMinimumProfit)), roi: n(form.flipTargetRoi) / 100 };
+
+  const ceilings = [
+    { key: 'profit', label: targets.profit > 0 ? `${usd(targets.profit)} minimum profit` : 'Break-even (no minimum profit)', value: findPriceCeiling({ form, metricKey: 'flip_profit', target: targets.profit, analyzeAt: flipAtPrice, allowZeroTarget: true }), source: 'Profit hurdle' },
+  ];
+  if (targets.roi > 0) ceilings.push({ key: 'roi', label: `${n(form.flipTargetRoi)}% return on cash`, value: findPriceCeiling({ form, metricKey: 'flip_roi', target: targets.roi, analyzeAt: flipAtPrice }), source: 'Return hurdle' });
+  // A screen, shown for comparison. It never sets the maximum.
+  ceilings.push({ key: 'rule70', label: '70% rule screening figure', value: rule70, source: '70% of after-repair value less rehab and contingency; a screen, not a target', screen: true });
+
+  const targetCeilings = ceilings.filter((item) => !item.screen);
+  const workable = arv > 0 && targetCeilings.every((item) => item.value !== null && item.value > 0);
+  const exactMaximum = workable ? Math.min(...targetCeilings.map((item) => item.value)) : null;
+  const increment = exactMaximum !== null && exactMaximum < 250000 ? 1000 : 5000;
+  const recommendedMaximum = exactMaximum === null ? null : roundDown(exactMaximum, increment);
+  const hasRecommendedMaximum = recommendedMaximum !== null && recommendedMaximum > 0;
+  const bindingKey = exactMaximum === null ? null : targetCeilings.find((item) => item.value === exactMaximum)?.key;
+
+  const hurdleResults = [
+    { label: 'Profit', actual: now.profit, target: targets.profit, pass: now.profit !== null && now.profit >= targets.profit, format: 'money' },
+  ];
+  if (targets.roi > 0) hurdleResults.push({ label: 'Return on cash', actual: now.roi, target: targets.roi, pass: now.roi !== null && now.roi >= targets.roi, format: 'rate' });
+
+  const items = FLIP_EVIDENCE_ITEMS.map((item) => ({ ...item, verified: Boolean(evidence[item.key]) }));
+  const verified = items.filter((item) => item.verified);
+  const gaps = items.filter((item) => !item.verified).map(({ key, label, action }) => ({ key, label, action }));
+  const confidence = verified.length >= 6 ? 'High' : verified.length >= 3 ? 'Medium' : 'Low';
+
+  const scenarios = buildFlipScenarios(form);
+  const downside = scenarios[0].metrics;
+  // Profit moves one for one with net sale proceeds, so the break-even
+  // after-repair value and the room above it follow from the profit.
+  const breakEvenArv = now.profit !== null && sellingCostRate < 1 ? arv - now.profit / (1 - sellingCostRate) : null;
+  const cushion = arv > 0 && breakEvenArv !== null ? (arv - breakEvenArv) / arv : null;
+  // Rehab is paid from equity dollar for dollar, so this is the further
+  // overrun, beyond the contingency, that uses up the profit.
+  const rehabCushion = now.profit !== null && n(form.rehabCost) > 0 ? now.profit / n(form.rehabCost) : null;
+  const loanTermMonths = n(form.ltv) > 0 ? n(form.loanTermYears) * 12 : null;
+
+  // Conditions to resolve before going ahead.
+  const cautions = [];
+  if (downside.profit !== null && downside.profit < 0) cautions.push(`The downside case loses ${usd(Math.abs(downside.profit))}.`);
+  if (rule70 !== null && askingPrice > rule70) cautions.push(`The price is ${usd(askingPrice - rule70)} above the 70% rule screening figure of ${usd(rule70)}. The rule is a screen, not a valuation; it says the margin is thin for the work involved, so the after-repair value and the budget must hold.`);
+  if (cushion !== null && now.profit > 0 && cushion < FLIP_THIN_CUSHION) cautions.push(`The after-repair value can fall only ${pct(cushion)} before the deal loses money.`);
+  if (loanTermMonths !== null && n(form.holdMonths) > loanTermMonths) cautions.push(`The ${n(form.holdMonths)}-month hold is longer than the ${loanTermMonths}-month loan term, so the loan comes due before the sale.`);
+  const walkAwaySignals = [...cautions];
+
+  const meetsTargets = exactMaximum !== null && askingPrice <= exactMaximum && hurdleResults.every((item) => item.pass);
+  let call = 'NO-GO'; let verdict; let tone = 'red';
+  if (!(arv > 0)) verdict = 'NO-GO — NO AFTER-REPAIR VALUE ENTERED';
+  else if (now.profit !== null && now.profit <= 0) verdict = 'NO-GO — THE DEAL LOSES MONEY';
+  else if (exactMaximum === null) verdict = 'NO-GO — NO PRICE MEETS YOUR TARGETS';
+  else if (askingPrice > exactMaximum * 1.05) verdict = 'NO-GO AT THIS PRICE — REPRICE OR PASS';
+  else if (!meetsTargets) { call = 'NEGOTIATE'; verdict = 'NEGOTIATE — WITHIN 5% OF THE CEILING'; tone = 'amber'; }
+  else if (cautions.length) { call = 'CONDITIONAL GO'; verdict = 'CONDITIONAL GO — RESOLVE EXCEPTIONS'; tone = 'amber'; }
+  else if (gaps.length) { call = 'CONDITIONAL GO'; verdict = 'CONDITIONAL GO — VERIFY BEFORE CLOSING'; tone = 'amber'; }
+  else { call = 'GO'; verdict = 'GO — MEETS YOUR TARGETS'; tone = 'green'; }
+
+  const gapToAsk = recommendedMaximum === null ? null : askingPrice - recommendedMaximum;
+  const earns = now.profit === null ? 'cannot be valued'
+    : now.profit >= 0 ? `is modeled to earn ${usd(now.profit)}${now.roi === null ? '' : ` (${pct(now.roi)} on cash)`}`
+      : `is modeled to lose ${usd(Math.abs(now.profit))}`;
+  const missed = hurdleResults.filter((item) => !item.pass).map((item) => (item.label === 'Return on cash'
+    ? `your ${n(form.flipTargetRoi)}% return on cash`
+    : targets.profit > 0 ? `your ${usd(targets.profit)} minimum profit` : 'break-even'));
+  const missedText = missed.length ? missed.join(' and ') : 'your targets';
+  let summary;
+  if (!(arv > 0)) summary = 'Enter an after-repair value so profit can be measured.';
+  else if (exactMaximum === null) summary = `At ${usd(askingPrice)} the deal ${earns}. With the after-repair value and costs entered, no price meets your targets.`;
+  else if (meetsTargets) summary = `At ${usd(askingPrice)} the deal ${earns}, which meets your targets. The highest price that still meets them is ${usd(exactMaximum)}.`;
+  else summary = `At ${usd(askingPrice)} the deal ${earns}, short of ${missedText}. The highest price that meets your targets is ${usd(exactMaximum)}, which is ${usd(askingPrice - exactMaximum)} below this price.`;
+
+  return {
+    version: DECISION_VERSION,
+    strategy: 'flip',
+    call,
+    verdict,
+    tone,
+    confidence,
+    evidenceVerified: verified.length,
+    evidenceTotal: items.length,
+    evidenceGaps: gaps,
+    hurdleResults,
+    ceilings: ceilings.map((item) => ({ ...item, binding: item.key === bindingKey })),
+    exactMaximum,
+    recommendedMaximum,
+    askingPrice,
+    gapToAsk,
+    // Shown only when the price has to come down to reach the ceiling.
+    openingRange: hasRecommendedMaximum && askingPrice > recommendedMaximum ? [roundNearest(recommendedMaximum * 0.92, increment), roundNearest(recommendedMaximum * 0.97, increment)] : null,
+    profitability: {
+      profit: now.profit, roi: now.roi, margin: now.margin, irr: now.irr, equityMultiple: now.equityMultiple,
+      targetProfit: targets.profit, targetRoi: targets.roi,
+      arv, breakEvenArv, cushion, rehabCushion, rule70,
+    },
+    scenarios,
+    scenarioNote: FLIP_SCENARIO_NOTE,
+    walkAwaySignals,
+    summary,
+    valuationNotice: 'This is the most the house is worth to this plan at the figures entered. It is not an appraisal, a broker price opinion, or a statement of market value.',
+  };
+};
+
 // One entry point for the page: the decision for whichever strategy has one.
 export const buildDecision = ({ form, evidence = {} }) => (
   form.strategy === 'rental' ? buildRentalDecision({ form, evidence })
     : form.strategy === 'land' ? buildLandDecision({ form, evidence })
-      : null
+      : form.strategy === 'flip' ? buildFlipDecision({ form, evidence })
+        : null
 );
