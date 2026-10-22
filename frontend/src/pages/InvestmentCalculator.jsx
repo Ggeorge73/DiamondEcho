@@ -12,6 +12,7 @@ import '../components/calculators/calculators.css';
 import { analyzeDealLocally, BROWSER_MONTE_CARLO_ITERATION_CAP, runMonteCarloInBrowser } from '../lib/dealAnalysis';
 import { scenarioDisclosure, splitWarnings } from '../lib/monteCarloDisclosure';
 import { buildDecision, FLIP_EVIDENCE_ITEMS, LAND_CHECKLIST_ITEMS, RENTAL_EVIDENCE_ITEMS } from '../lib/dealDecision';
+import { DISCLOSURE_STATUSES, estimateHoldingCosts, holdingCostParts, OWNER_TYPES, SALE_TERMS } from '../lib/listingSignals';
 import { classifyFloodZone } from '../lib/floodZone';
 import { downloadDealWorkbook } from '../lib/dealWorkbook';
 import { buildDealRequest } from '../lib/dealRequest';
@@ -92,7 +93,15 @@ const initialForm = {
   // The fix-and-flip example: one single-family house, bought, renovated and
   // sold in ten months. An illustration like the rest. The figures the flip
   // tab shares with the other two tabs are in FLIP_EXAMPLE_SHARED below.
-  arv: '360000', rehabCost: '65000', rehabContingency: '10', monthlyHolding: '1800',
+  // The loan funds this share of the rehab budget on top of loan-to-value
+  // times the price. 0 keeps the example's figures as documented.
+  arv: '360000', rehabCost: '65000', rehabContingency: '10', rehabFinanced: '0', loanBasis: 'purchase_price', monthlyHolding: '1800',
+  // The parts of the holding cost, the listing's history and the seller's
+  // posture are facts about one property: they start empty, and typing an
+  // address clears them.
+  flipAnnualTaxes: '', flipAnnualInsurance: '', flipMonthlyUtilities: '', compSoldPerSf: '',
+  lastSalePrice: '', lastSaleDate: '', originalListPrice: '', daysOnMarket: '',
+  ownerType: '', disclosureStatus: '', saleTerms: '',
   otherProjectCosts: '6000', sellingCosts: '6', discountRate: '10', mcIterations: '2500',
   targetCashOnCash: '8', minimumDscr: '1.2', targetIrr: '15', preliminaryMarketCeiling: '',
   maxImmediateCapex: '', maxAnnualTaxes: '', maxAnnualInsurance: '',
@@ -118,6 +127,8 @@ const initialForm = {
   mcInterestMin: '5.75', mcInterestMode: '6.75', mcInterestMax: '8.5',
   mcArvMin: '-15', mcArvMode: '0', mcArvMax: '10', mcRehabMin: '0',
   mcRehabMode: '10', mcRehabMax: '30',
+  // Months added to the hold period (item 5 of the 2026-10-22 review).
+  mcHoldMin: '0', mcHoldMode: '1', mcHoldMax: '4',
 };
 
 // The simulation's interest-rate band: one point below the entered rate to
@@ -394,6 +405,14 @@ const InvestmentCalculator = () => {
     setForm((current) => ({ ...current, [name]: value, ...(band || {}) }));
   };
 
+  // Several boxes filled by one button press. They count as entered, like typing.
+  const applyFields = (values) => {
+    invalidateAnalysis();
+    Object.keys(values).forEach((field) => enteredFields.current.add(field));
+    setPropertyProvenance((current) => ({ ...current, ...Object.fromEntries(Object.keys(values).map((field) => [field, { source: 'Your input', description: 'Entered for this analysis; verify before relying on it' }])) }));
+    setForm((current) => ({ ...current, ...values }));
+  };
+
   const restoreCleared = () => {
     if (!notice?.restore) return;
     const restored = notice.restore;
@@ -574,14 +593,18 @@ const InvestmentCalculator = () => {
       exit_cap_rate: { minimum: rate(form.mcExitCapMin), mode: rate(n(form.mcExitCapMode) * (downside ? 1.05 : 1)), maximum: rate(n(form.mcExitCapMax) * scale) },
       interest_rate: { minimum: rate(form.mcInterestMin), mode: rate(form.mcInterestMode), maximum: rate(n(form.mcInterestMax) * scale) },
     };
+    // In months; the high end stretches with the case like the other drivers.
+    const holdMonths = { minimum: n(form.mcHoldMin), mode: n(form.mcHoldMode), maximum: Math.round(n(form.mcHoldMax) * scale) };
     if (form.strategy === 'land') return {
       terminal_value_change: { minimum: rate(n(form.mcArvMin) * scale), mode: rate(form.mcArvMode), maximum: rate(form.mcArvMax) },
       development_cost_change: { minimum: rate(form.mcRehabMin), mode: rate(form.mcRehabMode), maximum: rate(n(form.mcRehabMax) * scale) },
+      hold_months_change: holdMonths,
       interest_rate: { minimum: rate(form.mcInterestMin), mode: rate(form.mcInterestMode), maximum: rate(n(form.mcInterestMax) * scale) },
     };
     return {
       after_repair_value_change: { minimum: rate(n(form.mcArvMin) * scale), mode: rate(form.mcArvMode), maximum: rate(form.mcArvMax) },
       rehab_cost_change: { minimum: rate(form.mcRehabMin), mode: rate(form.mcRehabMode), maximum: rate(n(form.mcRehabMax) * scale) },
+      hold_months_change: holdMonths,
       interest_rate: { minimum: rate(form.mcInterestMin), mode: rate(form.mcInterestMode), maximum: rate(n(form.mcInterestMax) * scale) },
     };
   };
@@ -624,7 +647,7 @@ const InvestmentCalculator = () => {
     ? ['irr', 'cash_on_cash', 'cap_rate', 'dscr', 'noi', 'npv', 'equity_multiple', 'break_even_occupancy']
     : form.strategy === 'land'
       ? ['development_profit', 'development_roi', 'irr', 'npv', 'development_margin', 'total_development_cost', 'residual_land_value', 'break_even_terminal_value', 'cost_per_acre', 'cost_per_unit', 'cost_per_buildable_sf', 'ltc']
-      : ['flip_profit', 'flip_roi', 'irr', 'npv', 'equity_multiple', 'ltv', 'ltc', 'max_offer_70_rule'];
+      : ['flip_profit', 'flip_roi', 'irr', 'npv', 'equity_multiple', 'loan_amount', 'ltv', 'ltc', 'max_offer_70_rule'];
 
   const displayMetric = (metric) => {
     if (!metric || metric.value === null) return '—';
@@ -641,7 +664,7 @@ const InvestmentCalculator = () => {
     irr: 'Projected IRR', cash_on_cash: 'Cash-on-cash', cap_rate: 'Going-in cap rate', dscr: 'DSCR',
     noi: 'Year-one NOI', npv: 'Net present value', equity_multiple: 'Equity multiple',
     break_even_occupancy: 'Break-even occupancy', flip_profit: 'Projected profit', flip_roi: 'Flip ROI',
-    ltv: 'Loan-to-value', ltc: 'Loan-to-cost', max_offer_70_rule: '70% screening threshold',
+    ltv: 'Loan-to-value', ltc: 'Loan-to-cost', max_offer_70_rule: '70% screening threshold', loan_amount: 'Loan amount',
     development_profit: 'Development profit', development_roi: 'Development ROI',
     development_margin: 'Development margin', total_development_cost: 'Total development cost',
     residual_land_value: 'Residual land value', break_even_terminal_value: 'Break-even terminal value',
@@ -767,7 +790,7 @@ const InvestmentCalculator = () => {
           <fieldset>
             <legend><span>02</span> Capital structure</legend>
             <div className="studio-field-grid">
-              <Field label={form.strategy === 'land' ? 'Construction loan-to-cost' : 'Loan-to-value'} name="ltv" value={form.ltv} onChange={update} suffix="%" />
+              <Field label={form.strategy === 'land' ? 'Construction loan-to-cost' : form.strategy === 'flip' && form.loanBasis === 'total_project_cost' ? 'Loan-to-cost' : form.strategy === 'flip' && form.loanBasis === 'after_repair_value' ? 'Loan-to-after-repair value' : 'Loan-to-value'} name="ltv" value={form.ltv} onChange={update} suffix="%" />
               <Field label="Interest rate" name="interestRate" value={form.interestRate} onChange={update} suffix="%" />
               <Field label="Amortization" name="amortizationYears" value={form.amortizationYears} onChange={update} suffix="years" step="1" />
               <Field label="Interest-only period" name="interestOnlyMonths" value={form.interestOnlyMonths} onChange={update} suffix="months" step="1" />
@@ -911,12 +934,47 @@ const InvestmentCalculator = () => {
                 <Field label="After-repair value" name="arv" value={form.arv} onChange={update} prefix="$" />
                 <Field label="Rehabilitation budget" name="rehabCost" value={form.rehabCost} onChange={update} prefix="$" />
                 <Field label="Rehab contingency" name="rehabContingency" value={form.rehabContingency} onChange={update} suffix="%" />
+                <SelectField label="Loan sized on" name="loanBasis" value={form.loanBasis} onChange={update}><option value="purchase_price">Purchase price</option><option value="total_project_cost">Total project cost</option><option value="after_repair_value">After-repair value</option></SelectField>
+                {form.loanBasis === 'purchase_price'
+                  ? <Field label="Rehab financed by the loan" name="rehabFinanced" value={form.rehabFinanced} onChange={update} suffix="%" />
+                  : <Field label="Rehab financed by the loan" name="rehabFinancedUnused" value="" onChange={() => {}} suffix="%" placeholder="in the basis" hint="The rehab is already inside this loan basis." />}
                 <Field label="Monthly holding costs" name="monthlyHolding" value={form.monthlyHolding} onChange={update} prefix="$" />
                 <Field label="Other project costs" name="otherProjectCosts" value={form.otherProjectCosts} onChange={update} prefix="$" />
+                <Field label="Renovated comparable sales (optional)" name="compSoldPerSf" value={form.compSoldPerSf} onChange={update} prefix="$" suffix="/sf" hint="Sold price per square foot of renovated houses of the same kind, size, age and setting." />
               </div>
+              <p className="studio-provider-note"><ShieldCheck /> The loan is the percentage above times what it is sized on: the purchase price (plus the financed share of the rehabilitation budget), the total project cost, or the after-repair value. Hard-money lenders commonly fund most of the price and all of the rehab, or a share of the after-repair value; the contingency stays yours. The whole loan is drawn at purchase and carries interest from the first month, and it keeps its size in the risk run and the stressed cases, as a lender's does.</p>
+              <div className="studio-field-grid">
+                <Field label="Annual property taxes" name="flipAnnualTaxes" value={form.flipAnnualTaxes} onChange={update} prefix="$" hint="A public figure: the current bill." />
+                <Field label="Annual insurance" name="flipAnnualInsurance" value={form.flipAnnualInsurance} onChange={update} prefix="$" hint="Vacant-property or builder's-risk cover." />
+                <Field label="Monthly utilities" name="flipMonthlyUtilities" value={form.flipMonthlyUtilities} onChange={update} prefix="$" />
+              </div>
+              {(() => {
+                const parts = holdingCostParts(form);
+                const estimate = estimateHoldingCosts(form.rentableSquareFeet);
+                return (
+                  <div className="studio-inline-actions" role="group" aria-label="Holding costs from their parts">
+                    <p>{parts.entered ? `Taxes, insurance and utilities add up to ${money.format(parts.total)} a month.` : 'Build the monthly holding cost from its parts, or estimate the two that follow from the size of the house.'}</p>
+                    {estimate && <button type="button" onClick={() => applyFields(estimate)}>Estimate insurance and utilities from {Number(form.rentableSquareFeet).toLocaleString('en-US')} sf</button>}
+                    {parts.entered && parts.total > 0 && <button type="button" onClick={() => applyFields({ monthlyHolding: String(parts.total) })}>Use {money.format(parts.total)} as the monthly holding cost</button>}
+                  </div>
+                );
+              })()}
+            </fieldset>
+            <fieldset>
+              <legend><span>04</span> Listing history & seller</legend>
+              <div className="studio-field-grid">
+                <Field label="Last sale price" name="lastSalePrice" value={form.lastSalePrice} onChange={update} prefix="$" />
+                <Field label="Last sale date" name="lastSaleDate" value={form.lastSaleDate} onChange={update} type="month" min={undefined} step={undefined} />
+                <Field label="Original list price" name="originalListPrice" value={form.originalListPrice} onChange={update} prefix="$" hint="The first asking price of this listing." />
+                <Field label="Days on market" name="daysOnMarket" value={form.daysOnMarket} onChange={update} suffix="days" step="1" />
+                <SelectField label="Seller" name="ownerType" value={form.ownerType} onChange={update}>{OWNER_TYPES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</SelectField>
+                <SelectField label="Seller disclosure" name="disclosureStatus" value={form.disclosureStatus} onChange={update}>{DISCLOSURE_STATUSES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</SelectField>
+                <SelectField label="Sale terms" name="saleTerms" value={form.saleTerms} onChange={update}>{SALE_TERMS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</SelectField>
+              </div>
+              <p className="studio-provider-note"><ShieldCheck /> This site does not look up sale history or ownership. Enter what the listing and the public record show; the decision says what those facts usually mean, and typing a different address clears them.</p>
             </fieldset>
             <fieldset className="studio-mandate">
-              <legend><span>04</span> Targets & evidence</legend>
+              <legend><span>05</span> Targets & evidence</legend>
               <div className="studio-field-grid">
                 <Field label="Minimum profit" name="flipMinimumProfit" value={form.flipMinimumProfit} onChange={update} prefix="$" />
                 <Field label="Minimum return on cash" name="flipTargetRoi" value={form.flipTargetRoi} onChange={update} suffix="%" />
@@ -935,7 +993,7 @@ const InvestmentCalculator = () => {
           )}
 
           <fieldset className="studio-monte-carlo">
-            <legend><span>05</span> Monte Carlo risk laboratory</legend>
+            <legend><span>{form.strategy === 'flip' ? '06' : '05'}</span> Monte Carlo risk laboratory</legend>
             <div className="studio-case-picker">
               {MONTE_CARLO_CASES.map((caseName) => (
                 <div key={caseName} className="is-active"><CheckCircle2 /> {caseName}</div>
@@ -962,12 +1020,15 @@ const InvestmentCalculator = () => {
                 <Field label={`${form.strategy === 'land' ? 'Development cost' : 'Rehab'} overrun · low`} name="mcRehabMin" value={form.mcRehabMin} onChange={update} suffix="%" />
                 <Field label={`${form.strategy === 'land' ? 'Development cost' : 'Rehab'} overrun · mode`} name="mcRehabMode" value={form.mcRehabMode} onChange={update} suffix="%" />
                 <Field label={`${form.strategy === 'land' ? 'Development cost' : 'Rehab'} overrun · high`} name="mcRehabMax" value={form.mcRehabMax} onChange={update} suffix="%" />
+                <Field label="Hold period change · low" name="mcHoldMin" value={form.mcHoldMin} onChange={update} suffix="months" step="1" />
+                <Field label="Hold period change · mode" name="mcHoldMode" value={form.mcHoldMode} onChange={update} suffix="months" step="1" />
+                <Field label="Hold period change · high" name="mcHoldMax" value={form.mcHoldMax} onChange={update} suffix="months" step="1" />
               </>}
               <Field label="Interest rate · low" name="mcInterestMin" value={form.mcInterestMin} onChange={update} suffix="%" />
               <Field label="Interest rate · mode" name="mcInterestMode" value={form.mcInterestMode} onChange={update} suffix="%" />
               <Field label="Interest rate · high" name="mcInterestMax" value={form.mcInterestMax} onChange={update} suffix="%" />
             </div>
-            <p className="studio-case-note">The simulation draws the loan's interest rate from the band above, which follows the interest rate you entered until you change the band yourself. For a loan whose rate is fixed, set low, mode and high to that rate.{form.strategy === 'flip' ? ' A rehab overrun drawn here replaces the contingency rather than adding to it: a draw equal to the contingency is the base case.' : ''}</p>
+            <p className="studio-case-note">The simulation draws the loan's interest rate from the band above, which follows the interest rate you entered until you change the band yourself. For a loan whose rate is fixed, set low, mode and high to that rate.{form.strategy !== 'rental' ? ' The hold period change is in months, added to the hold period you entered and rounded to whole months; the stress cases stretch its high end like the other drivers.' : ''}{form.strategy === 'flip' ? ' A rehab overrun drawn here replaces the contingency rather than adding to it: a draw equal to the contingency is the base case.' : ''}</p>
             <div className="studio-risk-actions">
               <p><TrendingUp /> Reproducible triangular distributions, percentile outcomes, downside probabilities, and excluded-iteration disclosure.</p>
               <button type="button" onClick={runRiskAnalysis} disabled={riskLoading}>{riskLoading ? <><Loader2 className="spin" /> Simulating</> : <>Run Monte Carlo <BarChart3 /></>}</button>
@@ -1065,6 +1126,16 @@ const InvestmentCalculator = () => {
                   </div>
                   {decision.scenarioNote && <p className="studio-valuation-notice">{decision.scenarioNote}</p>}
                 </section>
+
+                {decision.intelligence && (
+                  <section className="studio-decision-section">
+                    <div className="studio-decision-section__head"><span>PROPERTY INTELLIGENCE</span><small>What the listing, the seller and the figures say</small></div>
+                    {decision.intelligence.facts.length > 0 && <div className="studio-ceiling-list">
+                      {decision.intelligence.facts.map((fact) => <div key={fact.key}><span>{fact.label}<small>{fact.detail}</small></span><strong>{fact.value}</strong></div>)}
+                    </div>}
+                    {decision.intelligence.notes.length > 0 && <ul className="studio-risk-notes" aria-label="Property intelligence notes">{decision.intelligence.notes.map((note) => <li key={note}>{note}</li>)}</ul>}
+                  </section>
+                )}
 
                 <section className="studio-decision-section studio-diligence">
                   <div className="studio-decision-section__head"><span>DILIGENCE CONDITIONS & WALK-AWAY TESTS</span><small>{decision.evidenceGaps.length} evidence gaps</small></div>

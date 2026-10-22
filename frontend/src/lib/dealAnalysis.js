@@ -9,7 +9,14 @@ import { floodZoneWarning } from './floodZone';
 // 1.4.0 (2026-10-22): in a land-development simulation the contingency on site
 // work and hard construction absorbs a development-cost draw instead of being
 // applied on top of it. The base analysis is unchanged.
-export const FORMULA_VERSION = 'diamond-underwriting-web-1.4.0';
+// 1.5.0 (2026-10-22): a flip loan can fund a share of the rehab budget on top of
+// loan-to-value times the price (rehab_financed_rate, 0 by default, so earlier
+// figures are unchanged), and the simulation can draw the hold period.
+// 1.6.0 (2026-10-22): a loan can be sized on the purchase price (the default and
+// the earlier behaviour), the total project cost, or a flip's after-repair value
+// (loan_basis); the simulation and the stressed cases keep the loan at its base
+// size, as a lender does.
+export const FORMULA_VERSION = 'diamond-underwriting-web-1.6.0';
 
 const clean = (value, digits = 8) => value == null || !Number.isFinite(value) ? null : Number(value.toFixed(digits));
 const ratio = (numerator, denominator) => Math.abs(denominator) < 1e-12 ? null : clean(numerator / denominator);
@@ -22,8 +29,35 @@ const periodicPayment = (principal, periodicRate, periods) => {
   return principal * periodicRate * growth / (growth - 1);
 };
 
-const loanSchedule = (loan, purchasePrice, projectionMonths) => {
-  const principal = loan.principal || purchasePrice * (loan.loan_to_value || 0);
+// Every cost funded at acquisition, before loan fees: the loan basis for
+// 'total_project_cost'. Matches the figure each strategy's analysis uses.
+export const totalProjectCost = (request) => {
+  const { acquisition: a } = request;
+  let cost = a.purchase_price + a.closing_costs + a.due_diligence_costs + a.initial_capex;
+  if (request.flip) cost += request.flip.rehab_cost * (1 + request.flip.rehab_contingency_rate) + request.flip.other_project_costs;
+  if (request.land) {
+    const l = request.land;
+    cost += l.site_work_cost + l.hard_construction_cost + l.soft_costs + l.permits_impact_fees + l.environmental_remediation + l.developer_fee + (l.site_work_cost + l.hard_construction_cost) * l.contingency_rate;
+  }
+  return cost;
+};
+export const loanBasisAmount = (request, loan) => {
+  if (loan.loan_basis === 'total_project_cost') return totalProjectCost(request);
+  if (loan.loan_basis === 'after_repair_value' && request.flip) return request.flip.after_repair_value;
+  return request.acquisition.purchase_price;
+};
+// The loan amount: as given, or loan-to-value times its basis, plus the
+// financed share of a flip's rehab budget when the basis is the price (the
+// other bases already carry the rehab). The contingency stays the investor's.
+export const loanPrincipal = (request, loan) => {
+  if (loan.principal) return loan.principal;
+  const financedRehab = request.flip && (loan.loan_basis || 'purchase_price') === 'purchase_price' ? (request.flip.rehab_cost || 0) * (loan.rehab_financed_rate || 0) : 0;
+  return loanBasisAmount(request, loan) * (loan.loan_to_value || 0) + financedRehab;
+};
+const BASIS_WORDS = { purchase_price: 'purchase price', total_project_cost: 'total project cost', after_repair_value: 'after-repair value' };
+const loanSizingFormula = (request) => (request.debt || []).length === 0 ? 'no loan' : request.debt.map((loan) => (loan.principal ? 'loan amount as entered' : `loan-to-value x ${BASIS_WORDS[loan.loan_basis || 'purchase_price']}${request.flip && (loan.loan_basis || 'purchase_price') === 'purchase_price' && loan.rehab_financed_rate ? ' + financed share of the rehab budget' : ''}`)).join('; ');
+
+const loanSchedule = (loan, principal, projectionMonths) => {
   const rate = (loan.annual_interest_rate || 0) / 12;
   const ioMonths = loan.interest_only_months || 0;
   const termMonths = loan.term_months || 360;
@@ -179,6 +213,11 @@ const analyzeFlip = (request, schedules, totalDebt, originationFees) => {
     flip_profit: metric(profit, request.property.currency, 'sum of all project equity cash flows, including net sale proceeds', { sale_price: salePrice, selling_costs: sellingCosts, equity_contributions: contributions }),
     flip_roi: metric(ratio(profit, contributions), 'decimal_rate', 'flip profit / total equity contributions', { profit, equity_contributions: contributions }),
     max_offer_70_rule: metric(flip.after_repair_value * 0.7 - rehab, request.property.currency, '70% of after-repair value - rehab with contingency', { after_repair_value: flip.after_repair_value, rehab_with_contingency: rehab }, 'The 70% rule is a screening heuristic, not a valuation.'),
+    loan_amount: metric(totalDebt, request.property.currency, loanSizingFormula(request), {
+      total_debt: totalDebt,
+      basis_amount: (request.debt || []).filter((loan) => !loan.principal).reduce((sum, loan) => sum + loanBasisAmount(request, loan), 0),
+      financed_rehab: (request.debt || []).filter((loan) => !loan.principal && (loan.loan_basis || 'purchase_price') === 'purchase_price').reduce((sum, loan) => sum + flip.rehab_cost * (loan.rehab_financed_rate || 0), 0),
+    }),
   });
   const warnings = ['Calculated securely in this browser; no live analysis service was required.', 'After-repair value, construction budget, and timeline are user assumptions and require independent verification.'];
   if (salePrice === 0) warnings.push('No after-repair value was entered, so the model assumes $0 disposition proceeds.');
@@ -261,7 +300,7 @@ const analyzeLand = (request, schedules, totalDebt, originationFees) => {
 
 export const analyzeDealLocally = (request) => {
   if (!(request.acquisition.purchase_price > 0)) throw new Error('Purchase price must be greater than zero.');
-  const schedules = (request.debt || []).map((loan) => loanSchedule(loan, request.acquisition.purchase_price, request.acquisition.hold_months));
+  const schedules = (request.debt || []).map((loan) => loanSchedule(loan, loanPrincipal(request, loan), request.acquisition.hold_months));
   const totalDebt = schedules.reduce((sum, schedule) => sum + schedule.principal, 0);
   const originationFees = schedules.reduce((sum, schedule, index) => sum + schedule.principal * (request.debt[index].origination_fee_rate || 0), 0);
   if (request.strategy === 'rental') return analyzeRental(request, schedules, totalDebt, originationFees);
@@ -313,6 +352,7 @@ export const MONTE_CARLO_STANDARD_WARNINGS = [
 // Copies only the parts a draw changes; every value is a number or a string.
 const copyDeal = (deal) => ({
   ...deal,
+  acquisition: { ...deal.acquisition },
   operating: deal.operating ? { ...deal.operating } : deal.operating,
   flip: deal.flip ? { ...deal.flip } : deal.flip,
   land: deal.land ? { ...deal.land } : deal.land,
@@ -325,7 +365,25 @@ const LAND_COST_FIELDS = ['site_work_cost', 'hard_construction_cost', 'soft_cost
 // One case's simulation, advanced in steps. Each case keeps its own random
 // stream, so its figures are the same whether it runs in one go or in steps
 // with other cases taking turns in between.
-const createScenarioRun = (deal, scenario) => {
+// A lender sizes the loan once, at origination, on the underwritten figures.
+// A draw that lowers the after-repair value or raises the rehab must not
+// resize it, so a flip's loans are fixed at their base amount before any
+// iteration runs. Other strategies' loans are left as sent.
+// A pinned loan never exceeds the project cost it funds: when a case's cost
+// falls below the base loan (a stressed case that spends no contingency, say),
+// the lender funds the cost and no more. The marker never leaves the browser.
+export const pinLoans = (deal) => {
+  if (!deal.flip || !(deal.debt || []).some((loan) => !loan.principal)) return deal;
+  return { ...deal, debt: deal.debt.map((loan) => (loan.principal ? loan : { ...loan, principal: loanPrincipal(deal, loan), loan_to_value: undefined, pinned: true })) };
+};
+export const capPinnedLoans = (deal) => {
+  if (!(deal.debt || []).some((loan) => loan.pinned)) return deal;
+  const cost = totalProjectCost(deal);
+  return { ...deal, debt: deal.debt.map((loan) => (loan.pinned && loan.principal > cost ? { ...loan, principal: cost } : loan)) };
+};
+
+const createScenarioRun = (baseDeal, scenario) => {
+  const deal = pinLoans(baseDeal);
   const iterations = Math.min(scenario.iterations, BROWSER_MONTE_CARLO_ITERATION_CAP);
   const random = seededRandom(scenario.seed);
   const drivers = Object.entries(scenario.drivers);
@@ -343,6 +401,8 @@ const createScenarioRun = (deal, scenario) => {
         if (driver === 'operating_expense_change') shocked.operating.operating_expenses *= 1 + draw;
         if (driver === 'exit_cap_rate') shocked.exit.exit_cap_rate = draw;
         if (driver === 'interest_rate') shocked.debt.forEach((loan) => { loan.annual_interest_rate = draw; });
+        // Months, rounded; the hold stays within the model's range.
+        if (driver === 'hold_months_change') shocked.acquisition.hold_months = Math.max(1, Math.min(600, Math.round(shocked.acquisition.hold_months + draw)));
         if (driver === 'after_repair_value_change') shocked.flip.after_repair_value *= 1 + draw;
         if (driver === 'rehab_cost_change') {
           // The draw is the overrun that happened, and the contingency is the
@@ -373,7 +433,7 @@ const createScenarioRun = (deal, scenario) => {
         }
       });
       let analysis;
-      try { analysis = analyzeDealLocally(shocked); } catch (error) { failures += 1; if (!firstFailure) firstFailure = error; continue; }
+      try { analysis = analyzeDealLocally(capPinnedLoans(shocked)); } catch (error) { failures += 1; if (!firstFailure) firstFailure = error; continue; }
       const lossIrr = lossEquivalentIrr(analysis);
       Object.entries(analysis.metrics).forEach(([key, item]) => {
         if (!values[key]) values[key] = [];

@@ -1,4 +1,4 @@
-import { analyzeDealLocally, BROWSER_MONTE_CARLO_ITERATION_CAP, lossEquivalentReturn, nextTask, runMonteCarloInBrowser, runMonteCarloLocally } from './dealAnalysis';
+import { analyzeDealLocally, BROWSER_MONTE_CARLO_ITERATION_CAP, FORMULA_VERSION, loanPrincipal, lossEquivalentReturn, nextTask, pinLoans, runMonteCarloInBrowser, runMonteCarloLocally, totalProjectCost } from './dealAnalysis';
 import { buildDealRequest } from './dealRequest';
 
 const johnsCreekDeal = {
@@ -196,7 +196,7 @@ describe('the land contingency absorbs a simulated cost change instead of multip
   });
 
   test('the service and browser engines carry the same change in their formula versions', () => {
-    expect(runMonteCarloLocally({ deal: buildDealRequest(landForm), scenarios: [{ name: 'Fixed', iterations: 10, seed: 7, drivers: { development_cost_change: { minimum: 0, mode: 0, maximum: 0 } } }] }).formula_version).toBe('diamond-underwriting-web-1.4.0');
+    expect(runMonteCarloLocally({ deal: buildDealRequest(landForm), scenarios: [{ name: 'Fixed', iterations: 10, seed: 7, drivers: { development_cost_change: { minimum: 0, mode: 0, maximum: 0 } } }] }).formula_version).toBe(FORMULA_VERSION);
   });
 });
 
@@ -377,7 +377,112 @@ describe('the rehab contingency absorbs a simulated overrun instead of multiplyi
     expect(simulatedProfit(0.20, '0')).toBeCloseTo(profitWithRehab(85000 * 1.20, '0'), 2);
   });
 
-  test('the service and browser engines carry the same change in their formula versions', () => {
-    expect(runMonteCarloLocally({ deal: buildDealRequest(ruralFixerForm), scenarios: [{ name: 'Fixed', iterations: 250, seed: 7, drivers: { rehab_cost_change: { minimum: 0, mode: 0, maximum: 0 } } }] }).formula_version).toBe('diamond-underwriting-web-1.4.0');
+  test('a simulation result carries the browser formula version, so it says which rule produced it', () => {
+    expect(FORMULA_VERSION).toMatch(/^diamond-underwriting-web-1\.[5-9]\.\d+$|^diamond-underwriting-web-[2-9]\./);
+    expect(runMonteCarloLocally({ deal: buildDealRequest(ruralFixerForm), scenarios: [{ name: 'Fixed', iterations: 250, seed: 7, drivers: { rehab_cost_change: { minimum: 0, mode: 0, maximum: 0 } } }] }).formula_version).toBe(FORMULA_VERSION);
+  });
+});
+
+describe('a flip loan can fund a share of the rehab budget', () => {
+  const profitAt = (rehabFinanced) => analyzeDealLocally(buildDealRequest({ ...ruralFixerForm, rehabFinanced })).metrics;
+
+  test('the loan is loan-to-value times the price plus the financed rehab, and costs its points and interest', () => {
+    const onPriceOnly = profitAt('0');
+    const withRehab = profitAt('100');
+    expect(onPriceOnly.ltc.value).toBeCloseTo(0.326, 3);
+    // 70% of $93,000 plus all of the $85,000 budget: $150,100 on $199,750 of cost.
+    expect(withRehab.ltc.value).toBeCloseTo(150100 / 199750, 6);
+    expect(withRehab.ltv.value).toBeCloseTo(150100 / 93000, 6);
+    expect(withRehab.flip_profit.value).toBeCloseTo(onPriceOnly.flip_profit.value - 85000 * (0.02 + 0.11 * 7 / 12), 2);
+    expect(withRehab.flip_roi.value).toBeGreaterThan(onPriceOnly.flip_roi.value);
+  });
+
+  test('the request carries the share, and the workbook sizes the loan the same way', () => {
+    const request = buildDealRequest({ ...ruralFixerForm, rehabFinanced: '100' });
+    expect(request.debt[0].rehab_financed_rate).toBe(1);
+    expect(buildDealRequest({ ...ruralFixerForm, strategy: 'rental', annualRent: '12000', exitCap: '7' }).debt[0].rehab_financed_rate).toBeUndefined();
+  });
+});
+
+describe('the hold period is a simulation driver in whole months', () => {
+  const fixedHold = (months, form = ruralFixerForm) => {
+    const result = runMonteCarloLocally({ deal: buildDealRequest(form), scenarios: [{ name: 'Fixed', iterations: 250, seed: 7, drivers: { hold_months_change: { minimum: months, mode: months, maximum: months } } }] });
+    const summary = result.scenarios[0].summaries.flip_profit;
+    expect(summary.minimum).toBeCloseTo(summary.maximum, 6);
+    return summary.p50;
+  };
+  const profitWithHold = (holdMonths) => analyzeDealLocally(buildDealRequest({ ...ruralFixerForm, holdMonths })).metrics.flip_profit.value;
+
+  test('three months longer is the seven-month deal re-run at ten months', () => {
+    expect(fixedHold(3)).toBeCloseTo(profitWithHold('10'), 2);
+    expect(fixedHold(3)).toBeLessThan(profitWithHold('7'));
+    expect(fixedHold(2.6)).toBeCloseTo(profitWithHold('10'), 2);
+  });
+
+  test('the hold never drops below one month, and the base deal is untouched between iterations', () => {
+    expect(fixedHold(-20)).toBeCloseTo(profitWithHold('1'), 2);
+    const deal = buildDealRequest(ruralFixerForm);
+    runMonteCarloLocally({ deal, scenarios: [{ name: 'Fixed', iterations: 250, seed: 7, drivers: { hold_months_change: { minimum: 3, mode: 3, maximum: 3 } } }] });
+    expect(deal.acquisition.hold_months).toBe(7);
+  });
+});
+
+describe('the loan basis', () => {
+  const metricsAt = (changes) => analyzeDealLocally(buildDealRequest({ ...ruralFixerForm, ...changes })).metrics;
+
+  test('the loan is loan-to-value times the price, the total project cost or the after-repair value', () => {
+    const request = buildDealRequest(ruralFixerForm);
+    expect(totalProjectCost(request)).toBe(199750);
+    expect(metricsAt({}).loan_amount.value).toBe(65100);
+    expect(metricsAt({}).loan_amount.formula).toBe('loan-to-value x purchase price');
+    expect(metricsAt({ loanBasis: 'total_project_cost' }).loan_amount.value).toBeCloseTo(139825, 2);
+    expect(metricsAt({ loanBasis: 'after_repair_value' }).loan_amount.value).toBe(175000);
+    expect(metricsAt({ loanBasis: 'after_repair_value' }).ltv.value).toBeCloseTo(175000 / 93000, 6);
+    expect(metricsAt({ loanBasis: 'after_repair_value' }).ltc.value).toBeCloseTo(175000 / 199750, 6);
+  });
+
+  test('the financed share of the rehab applies to the price basis only, because the other bases already carry it', () => {
+    expect(metricsAt({ rehabFinanced: '100' }).loan_amount.value).toBe(150100);
+    expect(metricsAt({ rehabFinanced: '100' }).loan_amount.formula).toBe('loan-to-value x purchase price + financed share of the rehab budget');
+    expect(metricsAt({ rehabFinanced: '100', loanBasis: 'total_project_cost' }).loan_amount.value).toBeCloseTo(139825, 2);
+    expect(metricsAt({ rehabFinanced: '100', loanBasis: 'after_repair_value' }).loan_amount.value).toBe(175000);
+    // An explicit loan amount is taken as given.
+    const request = buildDealRequest({ ...ruralFixerForm, loanBasis: 'after_repair_value' });
+    request.debt[0] = { ...request.debt[0], principal: 100000, loan_to_value: undefined };
+    expect(loanPrincipal(request, request.debt[0])).toBe(100000);
+    expect(analyzeDealLocally(request).metrics.loan_amount.formula).toBe('loan amount as entered');
+  });
+
+  test('the simulation keeps the loan at its base size when a draw moves the after-repair value or the rehab', () => {
+    const deal = buildDealRequest({ ...ruralFixerForm, loanBasis: 'after_repair_value' });
+    const pinned = pinLoans(deal);
+    expect(pinned.debt[0].principal).toBe(175000);
+    expect(pinned.debt[0].loan_to_value).toBeUndefined();
+    expect(deal.debt[0].principal).toBeUndefined();
+    const fixedArv = runMonteCarloLocally({ deal, scenarios: [{ name: 'Fixed', iterations: 250, seed: 7, drivers: { after_repair_value_change: { minimum: -0.1, mode: -0.1, maximum: -0.1 } } }] }).scenarios[0].summaries.flip_profit.p50;
+    const resized = buildDealRequest({ ...ruralFixerForm, loanBasis: 'after_repair_value', arv: '225000' });
+    const kept = { ...resized, debt: [{ ...resized.debt[0], principal: 175000, loan_to_value: undefined }] };
+    expect(fixedArv).toBeCloseTo(analyzeDealLocally(kept).metrics.flip_profit.value, 2);
+    expect(fixedArv).not.toBeCloseTo(analyzeDealLocally(resized).metrics.flip_profit.value, 0);
+    // The same for a rehab overrun on a loan that funds the rehab budget.
+    const funded = buildDealRequest({ ...ruralFixerForm, rehabFinanced: '100' });
+    const overrun = runMonteCarloLocally({ deal: funded, scenarios: [{ name: 'Fixed', iterations: 250, seed: 7, drivers: { rehab_cost_change: { minimum: 0.35, mode: 0.35, maximum: 0.35 } } }] }).scenarios[0].summaries.flip_profit.p50;
+    const overrunKept = { ...funded, flip: { ...funded.flip, rehab_cost: 85000 * 1.35, rehab_contingency_rate: 0 }, debt: [{ ...funded.debt[0], principal: 150100, loan_to_value: undefined }] };
+    expect(overrun).toBeCloseTo(analyzeDealLocally(overrunKept).metrics.flip_profit.value, 2);
+    // A rental's loan is left as sent.
+    const rental = buildDealRequest({ ...ruralFixerForm, strategy: 'rental', annualRent: '12000', exitCap: '7' });
+    expect(pinLoans(rental)).toBe(rental);
+  });
+
+  test('a pinned loan never exceeds the project cost the draw leaves', () => {
+    // A rehab draw of 0 spends no contingency: $187,000 of cost under a $175,000
+    // after-repair-value loan is fine, but at a lower price the cost drops
+    // below the loan and the lender funds the cost and no more.
+    const deal = buildDealRequest({ ...ruralFixerForm, purchasePrice: '70000', loanBasis: 'after_repair_value' });
+    const run = runMonteCarloLocally({ deal, scenarios: [{ name: 'Fixed', iterations: 250, seed: 7, drivers: { rehab_cost_change: { minimum: 0, mode: 0, maximum: 0 } } }] }).scenarios[0];
+    expect(run.failed_iterations).toBe(0);
+    const cost = 70000 + 3000 + 2000 + 85000 + 4000;
+    const capped = { ...deal, flip: { ...deal.flip, rehab_contingency_rate: 0 }, debt: [{ ...deal.debt[0], principal: cost, loan_to_value: undefined }] };
+    expect(run.summaries.flip_profit.p50).toBeCloseTo(analyzeDealLocally(capped).metrics.flip_profit.value, 2);
   });
 });

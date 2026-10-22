@@ -12,6 +12,8 @@ from .models import (
     DealAnalysisRequest,
     DealAnalysisResponse,
     DealStrategy,
+    DebtInputs,
+    LoanBasis,
     MetricResult,
     PeriodCashFlow,
 )
@@ -26,7 +28,14 @@ from .models import (
 # 1.3.0 (2026-10-22): in a land-development simulation the contingency on site
 # work and hard construction absorbs a development-cost draw instead of being
 # applied on top of it. The base analysis is unchanged.
-FORMULA_VERSION = "diamond-underwriting-1.3.0"
+# 1.4.0 (2026-10-22): a flip loan can fund a share of the rehab budget on top of
+# loan-to-value times the price (rehab_financed_rate, 0 by default, so earlier
+# figures are unchanged), and the simulation can draw the hold period.
+# 1.5.0 (2026-10-22): a loan can be sized on the purchase price (the default and
+# the earlier behaviour), the total project cost, or a flip's after-repair value
+# (loan_basis); the simulation and the stressed cases keep the loan at its base
+# size, as a lender does.
+FORMULA_VERSION = "diamond-underwriting-1.5.0"
 
 
 # FEMA flood-zone designations. Mirrors ``classifyFloodZone`` in
@@ -78,6 +87,47 @@ def _metric(
     )
 
 
+def total_project_cost(request: DealAnalysisRequest) -> float:
+    """Every cost funded at acquisition, before loan fees: the loan basis for
+    ``total_project_cost``. Matches the figure each strategy's analysis uses."""
+    acquisition = request.acquisition
+    cost = (
+        acquisition.purchase_price + acquisition.closing_costs
+        + acquisition.due_diligence_costs + acquisition.initial_capex
+    )
+    if request.flip:
+        cost += request.flip.rehab_cost * (1 + request.flip.rehab_contingency_rate) + request.flip.other_project_costs
+    if request.land:
+        land = request.land
+        cost += (
+            land.site_work_cost + land.hard_construction_cost + land.soft_costs
+            + land.permits_impact_fees + land.environmental_remediation + land.developer_fee
+            + (land.site_work_cost + land.hard_construction_cost) * land.contingency_rate
+        )
+    return cost
+
+
+def loan_basis_amount(request: DealAnalysisRequest, loan: DebtInputs) -> float:
+    if loan.loan_basis == LoanBasis.TOTAL_PROJECT_COST:
+        return total_project_cost(request)
+    if loan.loan_basis == LoanBasis.AFTER_REPAIR_VALUE and request.flip:
+        return request.flip.after_repair_value
+    return request.acquisition.purchase_price
+
+
+def loan_principal(request: DealAnalysisRequest, loan: DebtInputs) -> float:
+    """The loan amount: as given, or loan-to-value times its basis, plus the
+    financed share of a flip's rehab budget when the basis is the price (the
+    other bases already carry the rehab). The contingency stays the investor's."""
+    if loan.principal:
+        return loan.principal
+    financed_rehab = (
+        request.flip.rehab_cost * loan.rehab_financed_rate
+        if request.flip and loan.loan_basis == LoanBasis.PURCHASE_PRICE else 0
+    )
+    return loan_basis_amount(request, loan) * (loan.loan_to_value or 0) + financed_rehab
+
+
 def _resolved_debt_and_schedules(
     request: DealAnalysisRequest,
 ) -> Tuple[List[float], List[List[LoanMonth]], float]:
@@ -85,7 +135,7 @@ def _resolved_debt_and_schedules(
     schedules: List[List[LoanMonth]] = []
     fees = 0.0
     for loan in request.debt:
-        principal = loan.principal or request.acquisition.purchase_price * (loan.loan_to_value or 0)
+        principal = loan_principal(request, loan)
         principals.append(principal)
         fees += principal * loan.origination_fee_rate
         schedules.append(
@@ -361,6 +411,28 @@ def _rental_analysis(
     )
 
 
+_BASIS_WORDS = {
+    LoanBasis.PURCHASE_PRICE: "purchase price",
+    LoanBasis.TOTAL_PROJECT_COST: "total project cost",
+    LoanBasis.AFTER_REPAIR_VALUE: "after-repair value",
+}
+
+
+def _loan_sizing_formula(request: DealAnalysisRequest) -> str:
+    if not request.debt:
+        return "no loan"
+    parts = []
+    for loan in request.debt:
+        if loan.principal:
+            parts.append("loan amount as entered")
+        else:
+            text = f"loan-to-value x {_BASIS_WORDS[loan.loan_basis]}"
+            if request.flip and loan.loan_basis == LoanBasis.PURCHASE_PRICE and loan.rehab_financed_rate:
+                text += " + financed share of the rehab budget"
+            parts.append(text)
+    return "; ".join(parts)
+
+
 def _flip_analysis(
     request: DealAnalysisRequest,
     principals: Sequence[float],
@@ -451,6 +523,19 @@ def _flip_analysis(
                 "70% of after-repair value - rehab with contingency",
                 {"after_repair_value": flip.after_repair_value, "rehab_with_contingency": rehab_with_contingency},
                 "The 70% rule is a screening heuristic, not a valuation or investment recommendation.",
+            ),
+            "loan_amount": _metric(
+                total_debt,
+                request.property.currency,
+                _loan_sizing_formula(request),
+                {
+                    "total_debt": total_debt,
+                    "basis_amount": sum(loan_basis_amount(request, loan) for loan in request.debt if not loan.principal),
+                    "financed_rehab": sum(
+                        flip.rehab_cost * loan.rehab_financed_rate
+                        for loan in request.debt if not loan.principal and loan.loan_basis == LoanBasis.PURCHASE_PRICE
+                    ),
+                },
             ),
         }
     )

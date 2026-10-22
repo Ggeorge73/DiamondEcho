@@ -416,3 +416,78 @@ def test_a_flip_without_a_contingency_takes_the_whole_overrun():
     simulated = _fixed_rehab_overrun(0.20, contingency=0)
     assert simulated == pytest.approx(_profit_with_rehab(85_000 * 1.20, 0), abs=0.01)
     assert simulated < analyze_deal(_flip_deal(0)).metrics["flip_profit"].value
+
+
+def _fixed_hold_change(months):
+    request = MonteCarloRequest(
+        deal=_flip_deal(),
+        scenarios=[{
+            "name": "Fixed", "iterations": 250, "seed": 7,
+            "drivers": {"hold_months_change": {"minimum": months, "mode": months, "maximum": months}},
+        }],
+    )
+    summary = run_monte_carlo(request).scenarios[0].summaries["flip_profit"]
+    assert summary.minimum == pytest.approx(summary.maximum)
+    return summary.p50
+
+
+def test_the_hold_period_is_a_simulation_driver_in_whole_months():
+    # Item 5 of the 2026-10-22 review: timeline is what kills a slow flip, and
+    # the simulation could not draw it.
+    deal = _flip_deal()
+    deal.acquisition.hold_months = 10
+    three_months_longer = analyze_deal(deal).metrics["flip_profit"].value
+    assert _fixed_hold_change(3) == pytest.approx(three_months_longer, abs=0.01)
+    assert _fixed_hold_change(3) < analyze_deal(_flip_deal()).metrics["flip_profit"].value
+    # A fractional draw is rounded to whole months, and the hold never drops below one.
+    assert _fixed_hold_change(2.6) == pytest.approx(three_months_longer, abs=0.01)
+    deal.acquisition.hold_months = 1
+    assert _fixed_hold_change(-20) == pytest.approx(analyze_deal(deal).metrics["flip_profit"].value, abs=0.01)
+
+
+def test_the_simulation_keeps_a_flip_loan_at_its_base_size():
+    # A lender sizes the loan once, on the underwritten after-repair value; a
+    # draw that lowers the value must not shrink the loan.
+    deal = _flip_deal()
+    deal.debt[0].loan_basis = "after_repair_value"
+    request = MonteCarloRequest(
+        deal=deal,
+        scenarios=[{
+            "name": "Fixed", "iterations": 250, "seed": 7,
+            "drivers": {"after_repair_value_change": {"minimum": -0.1, "mode": -0.1, "maximum": -0.1}},
+        }],
+    )
+    simulated = run_monte_carlo(request).scenarios[0].summaries["flip_profit"].p50
+    kept = _flip_deal()
+    kept.flip.after_repair_value = 225_000
+    kept.debt[0].principal = 175_000
+    kept.debt[0].loan_to_value = None
+    assert simulated == pytest.approx(analyze_deal(kept).metrics["flip_profit"].value, abs=0.01)
+    resized = _flip_deal()
+    resized.flip.after_repair_value = 225_000
+    resized.debt[0].loan_basis = "after_repair_value"
+    assert abs(simulated - analyze_deal(resized).metrics["flip_profit"].value) > 100
+    # The request itself is left as sent.
+    assert deal.debt[0].principal is None
+
+
+def test_a_pinned_loan_never_exceeds_the_project_cost_a_draw_leaves():
+    deal = _flip_deal()
+    deal.acquisition.purchase_price = 70_000
+    deal.debt[0].loan_basis = "after_repair_value"
+    request = MonteCarloRequest(
+        deal=deal,
+        scenarios=[{
+            "name": "Fixed", "iterations": 250, "seed": 7,
+            "drivers": {"rehab_cost_change": {"minimum": 0, "mode": 0, "maximum": 0}},
+        }],
+    )
+    scenario = run_monte_carlo(request).scenarios[0]
+    assert scenario.failed_iterations == 0
+    cost = 70_000 + 3_000 + 2_000 + 85_000 + 4_000
+    capped = _flip_deal()
+    capped.acquisition.purchase_price = 70_000
+    capped.flip.rehab_contingency_rate = 0
+    capped.debt[0].principal = cost
+    capped.debt[0].loan_to_value = None
+    assert scenario.summaries["flip_profit"].p50 == pytest.approx(analyze_deal(capped).metrics["flip_profit"].value, abs=0.01)

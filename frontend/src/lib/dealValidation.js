@@ -5,7 +5,9 @@ const numericFields = [
   'discountRate', 'annualRent', 'otherIncome', 'vacancy', 'propertyTaxes',
   'insurance', 'repairsMaintenance', 'utilities', 'payrollAdmin', 'managementFee',
   'reserves', 'annualBelowNoiCosts', 'incomeGrowth', 'expenseGrowth', 'exitCap',
-  'explicitSalePrice', 'arv', 'rehabCost', 'rehabContingency', 'monthlyHolding',
+  'explicitSalePrice', 'arv', 'rehabCost', 'rehabContingency', 'rehabFinanced', 'monthlyHolding',
+  'flipAnnualTaxes', 'flipAnnualInsurance', 'flipMonthlyUtilities', 'compSoldPerSf',
+  'lastSalePrice', 'originalListPrice', 'daysOnMarket',
   'otherProjectCosts', 'siteAcres', 'parcelCount', 'wetlandsAcres',
   'developmentMonths', 'absorptionMonths', 'siteWorkCost', 'hardConstructionCost',
   'softCosts', 'permitsImpactFees', 'environmentalRemediation', 'developerFee',
@@ -15,7 +17,7 @@ const numericFields = [
   'mcVacancyMax', 'mcExpenseMin', 'mcExpenseMode', 'mcExpenseMax',
   'mcExitCapMin', 'mcExitCapMode', 'mcExitCapMax', 'mcInterestMin',
   'mcInterestMode', 'mcInterestMax', 'mcArvMin', 'mcArvMode', 'mcArvMax',
-  'mcRehabMin', 'mcRehabMode', 'mcRehabMax', 'targetCashOnCash', 'minimumDscr',
+  'mcRehabMin', 'mcRehabMode', 'mcRehabMax', 'mcHoldMin', 'mcHoldMode', 'mcHoldMax', 'targetCashOnCash', 'minimumDscr',
   'targetIrr', 'preliminaryMarketCeiling', 'maxImmediateCapex',
   'maxAnnualTaxes', 'maxAnnualInsurance', 'flipMinimumProfit', 'flipTargetRoi',
 ];
@@ -39,7 +41,8 @@ export const validateDealForm = (form) => {
     'reserves', 'annualBelowNoiCosts', 'rehabCost', 'monthlyHolding', 'otherProjectCosts',
     'wetlandsAcres', 'absorptionMonths', 'siteWorkCost', 'hardConstructionCost',
     'softCosts', 'permitsImpactFees', 'environmentalRemediation', 'developerFee',
-    'annualCarryingCosts', 'stabilizedNoi']) {
+    'annualCarryingCosts', 'stabilizedNoi', 'flipAnnualTaxes', 'flipAnnualInsurance',
+    'flipMonthlyUtilities', 'compSoldPerSf', 'lastSalePrice', 'originalListPrice', 'daysOnMarket']) {
     if (Number(form[field] || 0) < 0) throw new Error(`${field} cannot be negative.`);
   }
   const requiredReviewed = [
@@ -100,6 +103,7 @@ export const validateDealForm = (form) => {
   }
   if (form.strategy === 'flip') {
     requireRange(form, 'rehabContingency', 'Rehab contingency', 0, 100);
+    if (form.rehabFinanced !== undefined) requireRange(form, 'rehabFinanced', 'Rehab financed by the loan', 0, 100);
     if (form.flipMinimumProfit !== undefined) requireRange(form, 'flipMinimumProfit', 'Minimum profit', 0, Number.MAX_SAFE_INTEGER);
     if (form.flipTargetRoi !== undefined) requireRange(form, 'flipTargetRoi', 'Minimum return on cash', 0, 1000);
   }
@@ -111,6 +115,8 @@ const driverBounds = {
   after_repair_value_change: [-0.9, 5], rehab_cost_change: [-0.9, 5],
   terminal_value_change: [-0.9, 5], development_cost_change: [-0.9, 5],
   vacancy_rate: [0, 0.95], exit_cap_rate: [0.001, 0.5], interest_rate: [0, 1],
+  // Months added to the hold period.
+  hold_months_change: [-599, 599],
 };
 
 // The simulation never models vacancy above this level. The stress cases scale the

@@ -6,9 +6,9 @@ import os
 import random
 import time
 from statistics import fmean
-from typing import Callable, Dict, List, Mapping, Optional
+from typing import Callable, Dict, List, Mapping, Optional, Tuple
 
-from .engine import FORMULA_VERSION, analyze_deal
+from .engine import FORMULA_VERSION, analyze_deal, loan_principal, total_project_cost
 from .models import (
     DealAnalysisRequest,
     DealStrategy,
@@ -98,6 +98,9 @@ def _sample_deal(
             deal.operating.operating_expenses *= 1 + value
         elif driver == MonteCarloDriver.EXIT_CAP_RATE:
             deal.exit.exit_cap_rate = max(0.001, min(value, 0.50))
+        elif driver == MonteCarloDriver.HOLD_MONTHS_CHANGE:
+            # Months, rounded; the hold stays within the model's range.
+            deal.acquisition.hold_months = max(1, min(600, int(round(deal.acquisition.hold_months + value))))
         elif driver == MonteCarloDriver.INTEREST_RATE:
             for debt in deal.debt:
                 debt.annual_interest_rate = max(0, min(value, 1))
@@ -134,6 +137,35 @@ def _sample_deal(
     return deal
 
 
+def _pin_loans(deal: DealAnalysisRequest) -> Tuple[DealAnalysisRequest, List[int]]:
+    """A lender sizes the loan once, at origination, on the underwritten
+    figures. A draw that lowers the after-repair value or raises the rehab
+    must not resize it, so a flip's loans are fixed at their base amount
+    before any iteration runs. Other strategies' loans are left as sent.
+    Returns the deal and the indices of the loans it fixed."""
+    if not deal.flip or not any(loan.principal is None for loan in deal.debt):
+        return deal, []
+    pinned = deal.model_copy(deep=True)
+    indices = []
+    for index, loan in enumerate(pinned.debt):
+        if loan.principal is None:
+            loan.principal = loan_principal(deal, loan)
+            loan.loan_to_value = None
+            indices.append(index)
+    return pinned, indices
+
+
+def _cap_pinned_loans(deal: DealAnalysisRequest, pinned: List[int]) -> None:
+    """A pinned loan never exceeds the project cost it funds: when a draw
+    takes the cost below the base loan, the lender funds the cost and no more."""
+    if not pinned:
+        return
+    cost = total_project_cost(deal)
+    for index in pinned:
+        if deal.debt[index].principal > cost:
+            deal.debt[index].principal = cost
+
+
 class _ScenarioRun:
     """One scenario's simulation, advanced in steps so a run can stop on time.
 
@@ -142,8 +174,9 @@ class _ScenarioRun:
     therefore gives the same figures as asking for ``n`` iterations outright.
     """
 
-    def __init__(self, base: DealAnalysisRequest, scenario: MonteCarloScenario) -> None:
+    def __init__(self, base: DealAnalysisRequest, scenario: MonteCarloScenario, pinned: Optional[List[int]] = None) -> None:
         self.base = base
+        self.pinned = pinned or []
         self.scenario = scenario
         self.rng = random.Random(scenario.seed)
         self.target_metrics = _TARGET_METRICS[base.strategy]
@@ -160,7 +193,9 @@ class _ScenarioRun:
         for _ in range(min(count, self.remaining)):
             self.attempted += 1
             try:
-                result = analyze_deal(_sample_deal(self.base, self.scenario, self.rng))
+                sampled = _sample_deal(self.base, self.scenario, self.rng)
+                _cap_pinned_loans(sampled, self.pinned)
+                result = analyze_deal(sampled)
                 for key in self.target_metrics:
                     metric = result.metrics.get(key)
                     if metric and metric.value is not None:
@@ -238,7 +273,8 @@ def run_monte_carlo(
     comparable. With no budget, or a budget that is not reached, the figures
     are identical to running each scenario to the end on its own.
     """
-    runs = [_ScenarioRun(request.deal, scenario) for scenario in request.scenarios]
+    base, pinned = _pin_loans(request.deal)
+    runs = [_ScenarioRun(base, scenario, pinned) for scenario in request.scenarios]
     deadline = None if time_budget is None else clock() + time_budget
     while any(run.remaining for run in runs):
         for run in runs:

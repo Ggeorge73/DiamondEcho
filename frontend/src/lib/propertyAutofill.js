@@ -15,6 +15,10 @@ export const PROPERTY_ASSUMPTION_FIELDS = [
   'softCosts', 'permitsImpactFees', 'environmentalRemediation',
   'developerFee', 'landContingency', 'annualCarryingCosts',
   'expectedTerminalValue', 'stabilizedNoi', 'stabilizedExitCap',
+  // Listing history, holding-cost parts and comparable sales are facts about
+  // one property too (items 2, 7 and 8 of the 2026-10-22 flip review).
+  'lastSalePrice', 'lastSaleDate', 'originalListPrice', 'daysOnMarket',
+  'flipAnnualTaxes', 'flipAnnualInsurance', 'flipMonthlyUtilities', 'compSoldPerSf',
 ];
 
 const hasValue = (value) => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
@@ -24,6 +28,8 @@ const SITE_CHOICE_RESETS = {
   developmentType: '', dispositionStrategy: '', entitlementStatus: '',
   utilityStatus: 'verify', accessStatus: 'verify',
   environmentalStatus: 'phase_i_required', geotechnicalStatus: 'not_started',
+  // Who is selling, and how, is about this listing only.
+  ownerType: '', disclosureStatus: '', saleTerms: '',
 };
 
 // A different property was chosen from the suggestions, or a listing link was
@@ -93,7 +99,13 @@ export const applyPropertyAutofill = (form, record) => {
     provenance.propertyType = { source: sourceLabel, description: 'Reported property type' };
   }
   if (hasValue(record?.square_footage)) fill('rentableSquareFeet', record.square_footage, 'Reported building area; verify rentable area');
-  if (hasValue(record?.annual_taxes)) fill('propertyTaxes', record.annual_taxes, 'Reported historical annual taxes; reassess after purchase');
+  if (hasValue(record?.annual_taxes)) {
+    fill('propertyTaxes', record.annual_taxes, 'Reported historical annual taxes; reassess after purchase');
+    fill('flipAnnualTaxes', record.annual_taxes, 'Reported historical annual taxes; reassess after purchase');
+  }
+  // The last sale is context for the seller's basis, never a purchase price.
+  if (hasValue(record?.last_sale_price)) fill('lastSalePrice', record.last_sale_price, 'Reported last sale; context for the seller\'s basis, not a price');
+  if (record?.last_sale_date && /^\d{4}-\d{2}/.test(String(record.last_sale_date))) fill('lastSaleDate', String(record.last_sale_date).slice(0, 7), 'Reported last sale date');
   if (record?.property_type && !String(record.property_type).toLowerCase().includes('multi')) {
     fill('units', 1, 'Single-property working assumption; verify unit count');
   }
