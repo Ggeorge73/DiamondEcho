@@ -6,7 +6,10 @@ import { floodZoneWarning } from './floodZone';
 // 1.3.0 (2026-10-22): in a fix-and-flip simulation the rehab contingency absorbs
 // a rehab overrun instead of being applied on top of it. The base analysis is
 // unchanged.
-export const FORMULA_VERSION = 'diamond-underwriting-web-1.3.0';
+// 1.4.0 (2026-10-22): in a land-development simulation the contingency on site
+// work and hard construction absorbs a development-cost draw instead of being
+// applied on top of it. The base analysis is unchanged.
+export const FORMULA_VERSION = 'diamond-underwriting-web-1.4.0';
 
 const clean = (value, digits = 8) => value == null || !Number.isFinite(value) ? null : Number(value.toFixed(digits));
 const ratio = (numerator, denominator) => Math.abs(denominator) < 1e-12 ? null : clean(numerator / denominator);
@@ -356,7 +359,17 @@ const createScenarioRun = (deal, scenario) => {
           else shocked.land.stabilized_noi *= 1 + draw;
         }
         if (driver === 'development_cost_change') {
+          // The draw is the cost change that happened, and the contingency is
+          // the reserve held for it on site work and hard construction, so the
+          // draw replaces the reserve instead of being added on top of it: a
+          // 30% draw with a 10% contingency costs 30% over budget on those two
+          // fields, not 1.3 x 1.1 = 43%. A draw equal to the contingency rate
+          // reproduces the base case, which treats the whole reserve as spent;
+          // a smaller draw means it was not all needed. Soft costs, permits,
+          // remediation and the developer fee carry no contingency, so the draw
+          // is their whole change.
           LAND_COST_FIELDS.forEach((key) => { shocked.land[key] *= 1 + draw; });
+          shocked.land.contingency_rate = 0;
         }
       });
       let analysis;

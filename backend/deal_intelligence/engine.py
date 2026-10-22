@@ -23,7 +23,10 @@ from .models import (
 # 1.2.0 (2026-10-22): in a fix-and-flip simulation the rehab contingency absorbs
 # a rehab overrun instead of being applied on top of it. The base analysis is
 # unchanged.
-FORMULA_VERSION = "diamond-underwriting-1.2.0"
+# 1.3.0 (2026-10-22): in a land-development simulation the contingency on site
+# work and hard construction absorbs a development-cost draw instead of being
+# applied on top of it. The base analysis is unchanged.
+FORMULA_VERSION = "diamond-underwriting-1.3.0"
 
 
 # FEMA flood-zone designations. Mirrors ``classifyFloodZone`` in
