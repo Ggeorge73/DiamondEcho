@@ -52,6 +52,14 @@ class AcquisitionInputs(StrictModel):
     hold_months: int = Field(default=60, ge=1, le=600)
 
 
+class LoanBasis(str, Enum):
+    """What loan_to_value is a share of. Lenders size a flip loan on the
+    price, on the whole project cost, or on the after-repair value."""
+    PURCHASE_PRICE = "purchase_price"
+    TOTAL_PROJECT_COST = "total_project_cost"
+    AFTER_REPAIR_VALUE = "after_repair_value"
+
+
 class DebtInputs(StrictModel):
     name: str = Field(default="Senior loan", min_length=1, max_length=80)
     principal: Optional[float] = Field(default=None, gt=0)
@@ -66,6 +74,11 @@ class DebtInputs(StrictModel):
     # commonly fund most of the price and all of the rehab. Ignored with an
     # explicit principal, and for strategies without a rehab budget.
     rehab_financed_rate: float = Field(default=0, ge=0, le=1)
+    # What loan_to_value is a share of. With total_project_cost the rehab is
+    # already inside the basis, and with after_repair_value the lender has
+    # priced it in, so rehab_financed_rate applies to the purchase_price basis
+    # only. after_repair_value is valid for a flip analysis only.
+    loan_basis: LoanBasis = LoanBasis.PURCHASE_PRICE
 
     @model_validator(mode="after")
     def exactly_one_principal_source(self) -> "DebtInputs":
@@ -208,6 +221,10 @@ class DealAnalysisRequest(StrictModel):
                     "land development uses expected_terminal_value or stabilized_noi with "
                     "stabilized_exit_cap_rate; exit_cap_rate and explicit_sale_price are not valid"
                 )
+        if self.strategy != DealStrategy.FLIP and any(
+            loan.loan_basis == LoanBasis.AFTER_REPAIR_VALUE for loan in self.debt
+        ):
+            raise ValueError("an after_repair_value loan basis is only valid for a flip analysis")
         return self
 
 

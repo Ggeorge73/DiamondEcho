@@ -179,7 +179,28 @@ On the reference deal at 100%: loan $150,100, loan-to-cost 75.1%, and the
 extra $85,000 costs 2 points and seven months of 11% interest, $7,154, so
 profit falls to $16,967 while the return on cash rises, because less cash is
 in. The decision and the maximum offer follow from the same calculation.
-Not done: a choice of loan basis (price, total cost, or after-repair value).
+
+**Loan basis.** A "Loan sized on" choice beside it: the loan is the
+percentage in the Capital structure box times the **purchase price** (the
+default and the earlier behaviour, plus the financed share of the rehab), the
+**total project cost** (price, closing, diligence, capital work, rehab with
+contingency and other costs), or the **after-repair value**. The rehab share
+applies to the price basis only, because the other two already carry the
+rehab. The label on the percentage follows the choice (loan-to-value,
+loan-to-cost, loan-to-after-repair value), and a "Loan amount" tile states
+the figure and how it was sized. On the reference deal at 70%: $65,100 on the
+price, $139,825 on the $199,750 of project cost, $175,000 on the after-repair
+value. In both engines (`loan_basis` on the loan; an after-repair-value basis
+is rejected for a rental or land deal, where there is no such value).
+
+A lender sizes the loan once, at origination, on the underwritten figures. So
+the simulation and the three stressed cases keep each flip loan at its base
+amount: a draw that lowers the after-repair value, or a stressed rehab on a
+loan that funds the budget, does not resize it. Before this, a loan that
+funded the rehab would have grown with a simulated overrun. One cap: a
+pinned loan never exceeds the project cost of the case it is in, because a
+lender funds the cost and no more; a case that spends no contingency under
+an after-repair-value loan is sized that way rather than failing.
 
 ## The hold period as a risk driver (item 5)
 
@@ -196,7 +217,8 @@ ten months exactly. The Rental tab does not show the band: a few months on
 a five-year hold is not the risk there.
 
 Formula versions after items 4 and 5: `diamond-underwriting-1.4.0` (service)
-and `diamond-underwriting-web-1.5.0` (page).
+and `diamond-underwriting-web-1.5.0` (page); after the loan basis,
+`1.5.0` and `web-1.6.0`.
 
 ## Listing history and seller signals (item 2)
 

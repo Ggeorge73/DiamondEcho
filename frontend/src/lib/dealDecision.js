@@ -1,4 +1,4 @@
-import { analyzeDealLocally } from './dealAnalysis';
+import { analyzeDealLocally, capPinnedLoans, pinLoans } from './dealAnalysis';
 import { buildDealRequest } from './dealRequest';
 import { classifyFloodZone, floodZoneVerified } from './floodZone';
 import { arvChecks, buildListingSignals, holdingCostParts } from './listingSignals';
@@ -419,7 +419,14 @@ const flipMetrics = (analysis) => {
   };
 };
 
-const buildFlipScenario = (form, name, changes) => ({ name, assumptions: changes, metrics: flipMetrics(analyzeForm({ ...form, ...changes })) });
+// The loan stays at its base amount in the stressed cases: a lender sizes it
+// once, on the underwritten figures, not on a lower exit or a bigger budget,
+// and never lends more than the case's project cost.
+const buildFlipScenario = (form, name, changes) => {
+  const base = pinLoans(buildDealRequest(form));
+  const request = capPinnedLoans({ ...buildDealRequest({ ...form, ...changes }), debt: base.debt });
+  return { name, assumptions: changes, metrics: flipMetrics(analyzeDealLocally(request)) };
+};
 
 // In the two stressed cases the rehab figure is the outcome, so it replaces
 // the contingency reserve rather than being added on top of it, as in the

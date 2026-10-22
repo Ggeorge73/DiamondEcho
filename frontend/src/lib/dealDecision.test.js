@@ -446,3 +446,23 @@ test('with nothing typed about the listing, the flip decision only reminds, and 
   expect(flipAt({ purchasePrice: '77000', flipAnnualTaxes: '1220', flipAnnualInsurance: '1241', flipMonthlyUtilities: '245' }).walkAwaySignals).toEqual([]);
   expect(flipAt({ purchasePrice: '77000', monthlyHolding: '0' }).walkAwaySignals).toEqual(['No monthly holding costs are entered; taxes, insurance and utilities run for every month of the hold.']);
 });
+
+test('the stressed flip cases keep the loan at its base size', () => {
+  // On the after-repair-value basis a 10% lower exit would otherwise shrink the loan.
+  const decision = flipAt({ purchasePrice: '77000', loanBasis: 'after_repair_value' });
+  const [downside, base] = decision.scenarios;
+  const baseRequest = buildDealRequest({ ...ruralFixerForm, purchasePrice: '77000', loanBasis: 'after_repair_value' });
+  expect(analyzeDealLocally(baseRequest).metrics.loan_amount.value).toBe(175000);
+  const stressed = buildDealRequest({ ...ruralFixerForm, purchasePrice: '77000', loanBasis: 'after_repair_value', ...downside.assumptions });
+  const kept = { ...stressed, debt: [{ ...stressed.debt[0], principal: 175000, loan_to_value: undefined }] };
+  expect(downside.metrics.profit).toBeCloseTo(analyzeDealLocally(kept).metrics.flip_profit.value, 6);
+  expect(downside.metrics.profit).not.toBeCloseTo(analyzeDealLocally(stressed).metrics.flip_profit.value, 0);
+  expect(base.metrics.profit).toBeCloseTo(analyzeDealLocally(baseRequest).metrics.flip_profit.value, 6);
+  // The upside spends no contingency, so its $171,000 of cost is below the
+  // $175,000 loan: the loan is capped at the cost rather than the case failing.
+  const upside = decision.scenarios[2];
+  const upsideRequest = buildDealRequest({ ...ruralFixerForm, purchasePrice: '77000', loanBasis: 'after_repair_value', ...upside.assumptions });
+  const capped = { ...upsideRequest, debt: [{ ...upsideRequest.debt[0], principal: 171000, loan_to_value: undefined }] };
+  expect(upside.metrics.profit).toBeCloseTo(analyzeDealLocally(capped).metrics.flip_profit.value, 6);
+  expect(upside.metrics.profit).toBeGreaterThan(base.metrics.profit);
+});

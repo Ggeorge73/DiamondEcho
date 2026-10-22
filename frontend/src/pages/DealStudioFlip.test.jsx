@@ -304,7 +304,7 @@ describe('rehab financing and the hold-period band on the fix and flip tab', () 
   test('the loan can fund a share of the rehab, and loan-to-cost says so', async () => {
     await click('Fix & flip');
     expect(field('rehabFinanced').value).toBe('0');
-    expect(text()).toContain('plus this share of the rehabilitation budget');
+    expect(text()).toContain('plus the financed share of the rehabilitation budget');
     await runBase();
     expect(tile('Loan-to-cost').textContent).toContain('44.23%');
     await setControl('rehabFinanced', '100');
@@ -375,5 +375,36 @@ describe('listing history, holding-cost parts and sanity checks on the fix and f
     await runBase();
     expect(text()).not.toContain('but taxes, insurance and utilities add up to');
     expect(text()).toContain('Holding costs from their parts');
+  });
+});
+
+describe('the loan basis on the fix and flip tab', () => {
+  const fixer = {
+    purchasePrice: '93000', closingCosts: '3000', dueDiligenceCosts: '2000', initialCapex: '0', holdMonths: '7',
+    ltv: '70', interestRate: '11', interestOnlyMonths: '7', loanTermYears: '1', originationFee: '2',
+    arv: '250000', rehabCost: '85000', rehabContingency: '15', monthlyHolding: '450', otherProjectCosts: '4000', sellingCosts: '7',
+  };
+
+  test('the loan can be sized on the price, the total project cost or the after-repair value, and the page says which', async () => {
+    await click('Fix & flip');
+    for (const [name, value] of Object.entries(fixer)) await setControl(name, value);
+    expect(field('loanBasis').value).toBe('purchase_price');
+    expect(text()).toContain('Loan-to-value%');
+    await runBase();
+    expect(tile('Loan amount').textContent).toContain('$65,100');
+    expect(tile('Loan amount').textContent).toContain('loan-to-value x purchase price');
+    await setControl('loanBasis', 'total_project_cost');
+    expect(text()).toContain('Loan-to-cost%');
+    expect(text()).toContain('The rehab is already inside this loan basis.');
+    await runBase();
+    // 70% of $199,750 of project cost.
+    expect(tile('Loan amount').textContent).toContain('$139,825');
+    expect(tile('Loan amount').textContent).toContain('loan-to-value x total project cost');
+    await setControl('loanBasis', 'after_repair_value');
+    expect(text()).toContain('Loan-to-after-repair value%');
+    await runBase();
+    expect(tile('Loan amount').textContent).toContain('$175,000');
+    expect(tile('Loan-to-value').textContent).toContain('188.17%');
+    expect(tile('Loan-to-cost').textContent).toContain('87.61%');
   });
 });

@@ -95,7 +95,7 @@ const initialForm = {
   // tab shares with the other two tabs are in FLIP_EXAMPLE_SHARED below.
   // The loan funds this share of the rehab budget on top of loan-to-value
   // times the price. 0 keeps the example's figures as documented.
-  arv: '360000', rehabCost: '65000', rehabContingency: '10', rehabFinanced: '0', monthlyHolding: '1800',
+  arv: '360000', rehabCost: '65000', rehabContingency: '10', rehabFinanced: '0', loanBasis: 'purchase_price', monthlyHolding: '1800',
   // The parts of the holding cost, the listing's history and the seller's
   // posture are facts about one property: they start empty, and typing an
   // address clears them.
@@ -647,7 +647,7 @@ const InvestmentCalculator = () => {
     ? ['irr', 'cash_on_cash', 'cap_rate', 'dscr', 'noi', 'npv', 'equity_multiple', 'break_even_occupancy']
     : form.strategy === 'land'
       ? ['development_profit', 'development_roi', 'irr', 'npv', 'development_margin', 'total_development_cost', 'residual_land_value', 'break_even_terminal_value', 'cost_per_acre', 'cost_per_unit', 'cost_per_buildable_sf', 'ltc']
-      : ['flip_profit', 'flip_roi', 'irr', 'npv', 'equity_multiple', 'ltv', 'ltc', 'max_offer_70_rule'];
+      : ['flip_profit', 'flip_roi', 'irr', 'npv', 'equity_multiple', 'loan_amount', 'ltv', 'ltc', 'max_offer_70_rule'];
 
   const displayMetric = (metric) => {
     if (!metric || metric.value === null) return '—';
@@ -664,7 +664,7 @@ const InvestmentCalculator = () => {
     irr: 'Projected IRR', cash_on_cash: 'Cash-on-cash', cap_rate: 'Going-in cap rate', dscr: 'DSCR',
     noi: 'Year-one NOI', npv: 'Net present value', equity_multiple: 'Equity multiple',
     break_even_occupancy: 'Break-even occupancy', flip_profit: 'Projected profit', flip_roi: 'Flip ROI',
-    ltv: 'Loan-to-value', ltc: 'Loan-to-cost', max_offer_70_rule: '70% screening threshold',
+    ltv: 'Loan-to-value', ltc: 'Loan-to-cost', max_offer_70_rule: '70% screening threshold', loan_amount: 'Loan amount',
     development_profit: 'Development profit', development_roi: 'Development ROI',
     development_margin: 'Development margin', total_development_cost: 'Total development cost',
     residual_land_value: 'Residual land value', break_even_terminal_value: 'Break-even terminal value',
@@ -790,7 +790,7 @@ const InvestmentCalculator = () => {
           <fieldset>
             <legend><span>02</span> Capital structure</legend>
             <div className="studio-field-grid">
-              <Field label={form.strategy === 'land' ? 'Construction loan-to-cost' : 'Loan-to-value'} name="ltv" value={form.ltv} onChange={update} suffix="%" />
+              <Field label={form.strategy === 'land' ? 'Construction loan-to-cost' : form.strategy === 'flip' && form.loanBasis === 'total_project_cost' ? 'Loan-to-cost' : form.strategy === 'flip' && form.loanBasis === 'after_repair_value' ? 'Loan-to-after-repair value' : 'Loan-to-value'} name="ltv" value={form.ltv} onChange={update} suffix="%" />
               <Field label="Interest rate" name="interestRate" value={form.interestRate} onChange={update} suffix="%" />
               <Field label="Amortization" name="amortizationYears" value={form.amortizationYears} onChange={update} suffix="years" step="1" />
               <Field label="Interest-only period" name="interestOnlyMonths" value={form.interestOnlyMonths} onChange={update} suffix="months" step="1" />
@@ -934,12 +934,15 @@ const InvestmentCalculator = () => {
                 <Field label="After-repair value" name="arv" value={form.arv} onChange={update} prefix="$" />
                 <Field label="Rehabilitation budget" name="rehabCost" value={form.rehabCost} onChange={update} prefix="$" />
                 <Field label="Rehab contingency" name="rehabContingency" value={form.rehabContingency} onChange={update} suffix="%" />
-                <Field label="Rehab financed by the loan" name="rehabFinanced" value={form.rehabFinanced} onChange={update} suffix="%" />
+                <SelectField label="Loan sized on" name="loanBasis" value={form.loanBasis} onChange={update}><option value="purchase_price">Purchase price</option><option value="total_project_cost">Total project cost</option><option value="after_repair_value">After-repair value</option></SelectField>
+                {form.loanBasis === 'purchase_price'
+                  ? <Field label="Rehab financed by the loan" name="rehabFinanced" value={form.rehabFinanced} onChange={update} suffix="%" />
+                  : <Field label="Rehab financed by the loan" name="rehabFinancedUnused" value="" onChange={() => {}} suffix="%" placeholder="in the basis" hint="The rehab is already inside this loan basis." />}
                 <Field label="Monthly holding costs" name="monthlyHolding" value={form.monthlyHolding} onChange={update} prefix="$" />
                 <Field label="Other project costs" name="otherProjectCosts" value={form.otherProjectCosts} onChange={update} prefix="$" />
                 <Field label="Renovated comparable sales (optional)" name="compSoldPerSf" value={form.compSoldPerSf} onChange={update} prefix="$" suffix="/sf" hint="Sold price per square foot of renovated houses of the same kind, size, age and setting." />
               </div>
-              <p className="studio-provider-note"><ShieldCheck /> The loan is sized on the loan-to-value above times the price, plus this share of the rehabilitation budget. Hard-money lenders commonly fund most of the price and all of the rehab; the contingency stays yours. The whole loan is drawn at purchase and carries interest from the first month.</p>
+              <p className="studio-provider-note"><ShieldCheck /> The loan is the percentage above times what it is sized on: the purchase price (plus the financed share of the rehabilitation budget), the total project cost, or the after-repair value. Hard-money lenders commonly fund most of the price and all of the rehab, or a share of the after-repair value; the contingency stays yours. The whole loan is drawn at purchase and carries interest from the first month, and it keeps its size in the risk run and the stressed cases, as a lender's does.</p>
               <div className="studio-field-grid">
                 <Field label="Annual property taxes" name="flipAnnualTaxes" value={form.flipAnnualTaxes} onChange={update} prefix="$" hint="A public figure: the current bill." />
                 <Field label="Annual insurance" name="flipAnnualInsurance" value={form.flipAnnualInsurance} onChange={update} prefix="$" hint="Vacant-property or builder's-risk cover." />
