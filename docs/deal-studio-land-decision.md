@@ -75,9 +75,14 @@ Confidence is High at 8 or more, Medium at 5 to 7, Low below 5.
 
 | Case | Exit value | Development costs | Time | Interest rate |
 | --- | --- | --- | --- | --- |
-| Downside | 10% lower | 10% higher | 6 months longer | 0.5 points higher |
-| Base | as entered | as entered | as entered | as entered |
-| Upside | 5% higher | 5% lower | as entered | 0.25 points lower |
+| Downside | 10% lower | 10% higher; the rise replaces the contingency | 6 months longer | 0.5 points higher |
+| Base | as entered | as entered, contingency as a cost | as entered | as entered |
+| Upside | 5% higher | 5% lower, contingency unspent | as entered | 0.25 points lower |
+
+In the two stressed cases the cost figures are the outcome, so the contingency
+is set to zero rather than applied on top of the changed costs (see "The
+contingency in the simulation" below). The loan is still sized on the stressed
+cost, as the form does for every case.
 
 A "Go" here means the figures entered meet the targets entered. It is not an
 appraisal, an offer, or an investment recommendation, and the page says so.
@@ -114,6 +119,43 @@ older than `diamond-underwriting-1.1.0`, it calculates on the device instead, so
 the older residual is never shown. Redeploying the service from `main` is a
 production change that needs Gbenga's yes; after it, the service answers land
 deals itself again.
+
+## The contingency in the simulation (2026-10-22)
+
+The fix-and-flip simulation was changed on 2026-10-22 (item 6 of that day's
+advisor review, written up in `docs/deal-studio-flip-decision.md`,
+Ggeorge73/DiamondEcho#98) so that a
+drawn rehab overrun replaces the contingency reserve instead of being applied
+on top of it. The land simulation had the same shape of fault: the
+"Development cost change" draw scaled six cost fields, and the analysis then
+applied the contingency to site work and hard construction, so a 30% draw
+with a 10% contingency cost 1.3 × 1.1 = 43% over budget on those two fields.
+
+Now, for each iteration, the six cost fields are scaled by (1 + draw) and the
+contingency rate is set to zero. The draw is the cost change that happened and
+the contingency is the reserve held for it, so the draw **replaces** the
+reserve on the contingency basis (site work + hard construction): a 30% draw
+with a 10% contingency costs 30% over budget there, not 43%. A draw equal to
+the contingency rate reproduces the base case on that basis, which treats the
+whole reserve as spent; a smaller draw means the reserve was not all needed.
+
+Soft costs, permits and impact fees, environmental remediation and the
+developer fee carry no contingency, so the draw is their whole change, as
+before. For that reason a draw equal to the contingency rate reproduces the
+base case **on site work and hard construction only**: those four costs are
+still higher by the draw. Only when they are zero is the whole base case
+reproduced. This is the one point where the land rule differs from the flip
+rule, where the whole rehab budget carries the contingency.
+
+The deterministic Downside and Upside cases above follow the same rule. Both
+engines changed in the same way and are pinned to the same figures by test
+(`backend/tests/deal_intelligence/test_monte_carlo.py`,
+`frontend/src/lib/dealAnalysis.test.js`, `frontend/src/lib/dealDecision.test.js`).
+The base analysis is unchanged; the formula versions are
+`diamond-underwriting-1.3.0` (service) and `diamond-underwriting-web-1.4.0`
+(page), and the decision version is `diamond-decision-1.3.0`, so a result says
+which rule produced it. The page's check that a land answer came from a service
+at `diamond-underwriting-1.1.0` or later is unaffected.
 
 ## Found on production after the merge (DE-38)
 

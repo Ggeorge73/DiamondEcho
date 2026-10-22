@@ -147,6 +147,59 @@ const landForm = {
 };
 const landAt = (changes = {}) => analyzeDealLocally(buildDealRequest({ ...landForm, ...changes }));
 
+describe('the land contingency absorbs a simulated cost change instead of multiplying it', () => {
+  // Site work + hard construction carry the contingency; the other four cost
+  // fields do not.
+  const contingencyBasis = 250000 + 1400000;
+  const otherCosts = 150000 + 60000 + 0 + 80000;
+  const landCostFields = ['site_work_cost', 'hard_construction_cost', 'soft_costs', 'permits_impact_fees', 'environmental_remediation', 'developer_fee'];
+  // One value for low, mode and high draws that value every time, so the
+  // simulation becomes a deterministic re-run with that cost change.
+  const simulatedProfit = (change, contingency = '10') => {
+    const deal = buildDealRequest({ ...landForm, landContingency: contingency });
+    const result = runMonteCarloLocally({ deal, scenarios: [{ name: 'Fixed', iterations: 250, seed: 7, drivers: { development_cost_change: { minimum: change, mode: change, maximum: change } } }] });
+    const summary = result.scenarios[0].summaries.development_profit;
+    expect(summary.minimum).toBeCloseTo(summary.maximum, 6);
+    return summary.p50;
+  };
+  // Scaled on the request, as the simulation does, so the loan (sized by the
+  // form on total cost, contingency included) is the same in every case.
+  const profitWithCostsScaled = (factor, contingencyRate) => {
+    const deal = buildDealRequest(landForm);
+    landCostFields.forEach((field) => { deal.land[field] *= factor; });
+    deal.land.contingency_rate = contingencyRate;
+    return analyzeDealLocally(deal).metrics.development_profit.value;
+  };
+
+  test('a 30% rise on a 10% contingency costs 30% over budget, not 43%', () => {
+    const simulated = simulatedProfit(0.30);
+    expect(simulated).toBeCloseTo(profitWithCostsScaled(1.30, 0), 2);
+    // The old result: 1.3 x 1.1 = 43% over on site work and hard construction.
+    expect(simulated).toBeCloseTo(profitWithCostsScaled(1.30, 0.10) + contingencyBasis * 1.30 * 0.10, 2);
+  });
+
+  test('a draw equal to the contingency is the base case on the contingency basis, and a smaller one is better by the unspent reserve', () => {
+    const base = landAt().metrics.development_profit.value;
+    // Site work and hard construction come out exactly as in the base case;
+    // the four costs that carry no contingency still rise by the draw.
+    expect(simulatedProfit(0.10)).toBeCloseTo(base - otherCosts * 0.10, 2);
+    expect(simulatedProfit(0.05)).toBeCloseTo(base + contingencyBasis * 0.05 - otherCosts * 0.05, 2);
+    expect(simulatedProfit(0)).toBeCloseTo(base + contingencyBasis * 0.10, 2);
+  });
+
+  test('without a contingency the whole cost change is taken', () => {
+    const deal = buildDealRequest({ ...landForm, landContingency: '0' });
+    const scaled = buildDealRequest({ ...landForm, landContingency: '0' });
+    landCostFields.forEach((field) => { scaled.land[field] *= 1.20; });
+    expect(simulatedProfit(0.20, '0')).toBeCloseTo(analyzeDealLocally(scaled).metrics.development_profit.value, 2);
+    expect(simulatedProfit(0.20, '0')).toBeLessThan(analyzeDealLocally(deal).metrics.development_profit.value);
+  });
+
+  test('the service and browser engines carry the same change in their formula versions', () => {
+    expect(runMonteCarloLocally({ deal: buildDealRequest(landForm), scenarios: [{ name: 'Fixed', iterations: 10, seed: 7, drivers: { development_cost_change: { minimum: 0, mode: 0, maximum: 0 } } }] }).formula_version).toBe('diamond-underwriting-web-1.4.0');
+  });
+});
+
 test('residual land value is the price at which the deal earns exactly the target margin', () => {
   // It used to take the target margin off net proceeds and leave out loan fees,
   // so it could sit above the price while the margin missed its target.
@@ -325,6 +378,6 @@ describe('the rehab contingency absorbs a simulated overrun instead of multiplyi
   });
 
   test('the service and browser engines carry the same change in their formula versions', () => {
-    expect(runMonteCarloLocally({ deal: buildDealRequest(ruralFixerForm), scenarios: [{ name: 'Fixed', iterations: 250, seed: 7, drivers: { rehab_cost_change: { minimum: 0, mode: 0, maximum: 0 } } }] }).formula_version).toBe('diamond-underwriting-web-1.3.0');
+    expect(runMonteCarloLocally({ deal: buildDealRequest(ruralFixerForm), scenarios: [{ name: 'Fixed', iterations: 250, seed: 7, drivers: { rehab_cost_change: { minimum: 0, mode: 0, maximum: 0 } } }] }).formula_version).toBe('diamond-underwriting-web-1.4.0');
   });
 });
