@@ -17,7 +17,7 @@ const numericFields = [
   'mcInterestMode', 'mcInterestMax', 'mcArvMin', 'mcArvMode', 'mcArvMax',
   'mcRehabMin', 'mcRehabMode', 'mcRehabMax', 'targetCashOnCash', 'minimumDscr',
   'targetIrr', 'preliminaryMarketCeiling', 'maxImmediateCapex',
-  'maxAnnualTaxes', 'maxAnnualInsurance',
+  'maxAnnualTaxes', 'maxAnnualInsurance', 'flipMinimumProfit', 'flipTargetRoi',
 ];
 
 const requireRange = (form, field, label, minimum, maximum, { integer = false, exclusive = false } = {}) => {
@@ -98,7 +98,11 @@ export const validateDealForm = (form) => {
     requireRange(form, 'developmentMonths', 'Development schedule', 1, 600, { integer: true });
     requireRange(form, 'expectedTerminalValue', 'Expected terminal value', 0, Number.MAX_SAFE_INTEGER);
   }
-  if (form.strategy === 'flip') requireRange(form, 'rehabContingency', 'Rehab contingency', 0, 100);
+  if (form.strategy === 'flip') {
+    requireRange(form, 'rehabContingency', 'Rehab contingency', 0, 100);
+    if (form.flipMinimumProfit !== undefined) requireRange(form, 'flipMinimumProfit', 'Minimum profit', 0, Number.MAX_SAFE_INTEGER);
+    if (form.flipTargetRoi !== undefined) requireRange(form, 'flipTargetRoi', 'Minimum return on cash', 0, 1000);
+  }
   if (form.strategy === 'land') requireRange(form, 'landContingency', 'Construction contingency', 0, 100);
 };
 

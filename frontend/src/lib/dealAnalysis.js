@@ -3,7 +3,10 @@ import { floodZoneWarning } from './floodZone';
 // 1.2.0 (2026-10-06): residual land value is the land price at which the deal
 // earns exactly the target development margin; the flood-zone warning reads the
 // FEMA designation; Monte Carlo can run in steps so the page stays responsive.
-export const FORMULA_VERSION = 'diamond-underwriting-web-1.2.0';
+// 1.3.0 (2026-10-22): in a fix-and-flip simulation the rehab contingency absorbs
+// a rehab overrun instead of being applied on top of it. The base analysis is
+// unchanged.
+export const FORMULA_VERSION = 'diamond-underwriting-web-1.3.0';
 
 const clean = (value, digits = 8) => value == null || !Number.isFinite(value) ? null : Number(value.toFixed(digits));
 const ratio = (numerator, denominator) => Math.abs(denominator) < 1e-12 ? null : clean(numerator / denominator);
@@ -338,7 +341,16 @@ const createScenarioRun = (deal, scenario) => {
         if (driver === 'exit_cap_rate') shocked.exit.exit_cap_rate = draw;
         if (driver === 'interest_rate') shocked.debt.forEach((loan) => { loan.annual_interest_rate = draw; });
         if (driver === 'after_repair_value_change') shocked.flip.after_repair_value *= 1 + draw;
-        if (driver === 'rehab_cost_change') shocked.flip.rehab_cost *= 1 + draw;
+        if (driver === 'rehab_cost_change') {
+          // The draw is the overrun that happened, and the contingency is the
+          // reserve held for it, so the draw replaces the reserve instead of
+          // being added on top of it: a 35% overrun with a 15% contingency costs
+          // 35% over budget, not 1.35 x 1.15 = 55%. A draw equal to the
+          // contingency rate reproduces the base case, which treats the whole
+          // reserve as spent; a smaller draw means it was not all needed.
+          shocked.flip.rehab_cost *= 1 + draw;
+          shocked.flip.rehab_contingency_rate = 0;
+        }
         if (driver === 'terminal_value_change') {
           if (shocked.land.expected_terminal_value > 0) shocked.land.expected_terminal_value *= 1 + draw;
           else shocked.land.stabilized_noi *= 1 + draw;

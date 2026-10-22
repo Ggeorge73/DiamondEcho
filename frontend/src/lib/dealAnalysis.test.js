@@ -270,3 +270,61 @@ describe('the pause between simulation blocks', () => {
     expect(timers).toHaveBeenCalledTimes(1);
   });
 });
+
+// A rural fixer underwritten on 2026-10-22: $93,000 price, hard-money loan at
+// 70% / 11% / interest only / 2 points, $85,000 rehab with a 15% contingency,
+// $250,000 after-repair value, seven-month hold. The figures were checked by
+// hand and match the analysis service to the dollar.
+const ruralFixerForm = {
+  strategy: 'flip', propertyType: 'single_family', market: '', units: '1', rentableSquareFeet: '1655',
+  purchasePrice: '93000', closingCosts: '3000', dueDiligenceCosts: '2000', initialCapex: '0', holdMonths: '7',
+  ltv: '70', interestRate: '11', amortizationYears: '30', interestOnlyMonths: '7', loanTermYears: '1', originationFee: '2',
+  arv: '250000', rehabCost: '85000', rehabContingency: '15', monthlyHolding: '450', otherProjectCosts: '4000',
+  sellingCosts: '7', discountRate: '10',
+};
+
+test('the fix-and-flip reference deal matches the figures checked by hand', () => {
+  const { metrics } = analyzeDealLocally(buildDealRequest(ruralFixerForm));
+  expect(metrics.flip_profit.value).toBeCloseTo(24121, -1);
+  expect(metrics.flip_roi.value).toBeCloseTo(0.1683, 4);
+  expect(metrics.irr.value).toBeCloseTo(0.3156, 4);
+  expect(metrics.npv.value).toBeCloseTo(15296, -1);
+  expect(metrics.equity_multiple.value).toBeCloseTo(1.17, 2);
+  expect(metrics.ltc.value).toBeCloseTo(0.326, 3);
+  expect(metrics.max_offer_70_rule.value).toBe(77250);
+});
+
+describe('the rehab contingency absorbs a simulated overrun instead of multiplying it', () => {
+  // One value for low, mode and high draws that value every time, so the
+  // simulation becomes a deterministic re-run with that overrun.
+  const simulatedProfit = (overrun, contingency = '15') => {
+    const deal = buildDealRequest({ ...ruralFixerForm, rehabContingency: contingency });
+    const result = runMonteCarloLocally({ deal, scenarios: [{ name: 'Fixed', iterations: 250, seed: 7, drivers: { rehab_cost_change: { minimum: overrun, mode: overrun, maximum: overrun } } }] });
+    const summary = result.scenarios[0].summaries.flip_profit;
+    expect(summary.minimum).toBeCloseTo(summary.maximum, 6);
+    return summary.p50;
+  };
+  const profitWithRehab = (rehabCost, contingency) => analyzeDealLocally(buildDealRequest({ ...ruralFixerForm, rehabCost: String(rehabCost), rehabContingency: contingency })).metrics.flip_profit.value;
+
+  test('a 35% overrun on a 15% contingency costs 35% over budget, not 55%', () => {
+    const simulated = simulatedProfit(0.35);
+    expect(simulated).toBeCloseTo(profitWithRehab(85000 * 1.35, '0'), 2);
+    // Item 6 of the 2026-10-22 review: the old result, 1.35 x 1.15 = 55% over.
+    expect(simulated).toBeGreaterThan(profitWithRehab(85000 * 1.35, '15') + 10000);
+  });
+
+  test('a draw equal to the contingency is the base case, and a smaller one is better by the unspent reserve', () => {
+    const base = analyzeDealLocally(buildDealRequest(ruralFixerForm)).metrics.flip_profit.value;
+    expect(simulatedProfit(0.15)).toBeCloseTo(base, 2);
+    expect(simulatedProfit(0.10)).toBeCloseTo(base + 85000 * 0.05, 2);
+    expect(simulatedProfit(0)).toBeCloseTo(base + 85000 * 0.15, 2);
+  });
+
+  test('without a contingency the whole overrun is taken', () => {
+    expect(simulatedProfit(0.20, '0')).toBeCloseTo(profitWithRehab(85000 * 1.20, '0'), 2);
+  });
+
+  test('the service and browser engines carry the same change in their formula versions', () => {
+    expect(runMonteCarloLocally({ deal: buildDealRequest(ruralFixerForm), scenarios: [{ name: 'Fixed', iterations: 250, seed: 7, drivers: { rehab_cost_change: { minimum: 0, mode: 0, maximum: 0 } } }] }).formula_version).toBe('diamond-underwriting-web-1.3.0');
+  });
+});

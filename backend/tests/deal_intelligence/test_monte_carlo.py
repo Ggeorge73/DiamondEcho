@@ -1,3 +1,4 @@
+import pytest
 from backend.deal_intelligence.models import DealAnalysisRequest, MonteCarloRequest
 from backend.deal_intelligence.engine import analyze_deal
 from backend.deal_intelligence.monte_carlo import loss_equivalent_return, run_monte_carlo
@@ -275,3 +276,84 @@ def test_the_route_applies_the_budget(monkeypatch):
         assert scenario["iterations_requested"] == 1000
         assert scenario["iterations_completed"] + scenario["failed_iterations"] == 50
         assert any("simulation capped at 50 iterations" in w for w in scenario["warnings"])
+
+
+def _flip_deal(rehab_contingency_rate=0.15):
+    # A rural fixer underwritten on 2026-10-22: $93,000 price, hard-money loan
+    # at 70% / 11% / interest only / 2 points, $85,000 rehab with a 15%
+    # contingency, $250,000 after-repair value, seven-month hold.
+    return DealAnalysisRequest(
+        strategy="flip",
+        property={"property_type": "single_family"},
+        acquisition={
+            "purchase_price": 93_000, "closing_costs": 3_000,
+            "due_diligence_costs": 2_000, "hold_months": 7,
+        },
+        debt=[{
+            "loan_to_value": 0.70, "annual_interest_rate": 0.11, "amortization_years": 30,
+            "interest_only_months": 7, "term_months": 12, "origination_fee_rate": 0.02,
+        }],
+        flip={
+            "after_repair_value": 250_000, "rehab_cost": 85_000,
+            "rehab_contingency_rate": rehab_contingency_rate,
+            "monthly_holding_costs": 450, "other_project_costs": 4_000,
+        },
+        exit={"selling_cost_rate": 0.07},
+        assumptions={"annual_discount_rate": 0.10},
+    )
+
+
+def test_the_flip_reference_deal_matches_the_figures_checked_by_hand():
+    result = analyze_deal(_flip_deal())
+    assert result.metrics["flip_profit"].value == pytest.approx(24_121, abs=1)
+    assert result.metrics["flip_roi"].value == pytest.approx(0.1683, abs=0.0001)
+    assert result.metrics["irr"].value == pytest.approx(0.3156, abs=0.0001)
+    assert result.metrics["npv"].value == pytest.approx(15_296, abs=1)
+    assert result.metrics["equity_multiple"].value == pytest.approx(1.17, abs=0.005)
+    assert result.metrics["ltc"].value == pytest.approx(0.326, abs=0.0005)
+    assert result.metrics["max_offer_70_rule"].value == pytest.approx(77_250)
+
+
+def _fixed_rehab_overrun(overrun, contingency=0.15):
+    # A distribution with one value draws that value every time, so the
+    # simulation becomes a deterministic re-run with that overrun.
+    request = MonteCarloRequest(
+        deal=_flip_deal(contingency),
+        scenarios=[{
+            "name": "Fixed", "iterations": 250, "seed": 7,
+            "drivers": {"rehab_cost_change": {"minimum": overrun, "mode": overrun, "maximum": overrun}},
+        }],
+    )
+    summary = run_monte_carlo(request).scenarios[0].summaries["flip_profit"]
+    assert summary.minimum == pytest.approx(summary.maximum)
+    return summary.p50
+
+
+def _profit_with_rehab(rehab_cost, contingency):
+    deal = _flip_deal(contingency)
+    deal.flip.rehab_cost = rehab_cost
+    return analyze_deal(deal).metrics["flip_profit"].value
+
+
+def test_a_rehab_overrun_beyond_the_contingency_adds_only_the_excess():
+    # Item 6 of the 2026-10-22 review: a 35% overrun on top of a 15%
+    # contingency used to cost 1.35 x 1.15 = 55% over budget.
+    simulated = _fixed_rehab_overrun(0.35)
+    assert simulated == pytest.approx(_profit_with_rehab(85_000 * 1.35, 0), abs=0.01)
+    compounded = _profit_with_rehab(85_000 * 1.35, 0.15)
+    assert simulated > compounded + 10_000
+
+
+def test_a_draw_equal_to_the_contingency_is_the_base_case_and_a_smaller_one_is_better():
+    base = analyze_deal(_flip_deal()).metrics["flip_profit"].value
+    assert _fixed_rehab_overrun(0.15) == pytest.approx(base, abs=0.01)
+    # The reserve was only partly needed, so the simulation is better than the
+    # base case, which spends all of it, by the unspent 5% of the budget.
+    assert _fixed_rehab_overrun(0.10) == pytest.approx(base + 85_000 * 0.05, abs=0.01)
+    assert _fixed_rehab_overrun(0.0) == pytest.approx(base + 85_000 * 0.15, abs=0.01)
+
+
+def test_a_flip_without_a_contingency_takes_the_whole_overrun():
+    simulated = _fixed_rehab_overrun(0.20, contingency=0)
+    assert simulated == pytest.approx(_profit_with_rehab(85_000 * 1.20, 0), abs=0.01)
+    assert simulated < analyze_deal(_flip_deal(0)).metrics["flip_profit"].value

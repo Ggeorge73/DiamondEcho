@@ -17,6 +17,7 @@ jest.mock('axios', () => ({ get: jest.fn(), post: jest.fn() }));
 jest.mock('../lib/dealDecision', () => ({
   RENTAL_EVIDENCE_ITEMS: [],
   LAND_CHECKLIST_ITEMS: [],
+  FLIP_EVIDENCE_ITEMS: [],
   buildDecision: jest.fn(() => null),
 }));
 jest.mock('../lib/dealWorkbook', () => ({ downloadDealWorkbook: jest.fn() }));

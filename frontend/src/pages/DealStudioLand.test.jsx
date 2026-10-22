@@ -123,14 +123,17 @@ describe('land development Go / No-Go', () => {
     expect(text()).toContain('Diligence checklist complete');
   });
 
-  test('the rental tab keeps its decision and fix and flip still has a plain base case', async () => {
+  test('the rental tab keeps its decision and fix and flip has its own', async () => {
     await runBase();
     expect(text()).toContain('RECOMMENDED MAXIMUM');
     expect(text()).not.toContain('MAXIMUM LAND PRICE');
     await click('Fix & flip');
-    expect(button('Base case')).toBeTruthy();
+    expect(button('IC decision')).toBeTruthy();
+    expect(button('Base case')).toBeUndefined();
     await runBase();
-    expect(text()).toContain('Analysis complete');
+    expect(text()).toContain('MAXIMUM OFFER');
+    expect(text()).not.toContain('MAXIMUM LAND PRICE');
+    expect(text()).not.toContain('Analysis complete');
   });
 });
 

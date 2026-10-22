@@ -178,3 +178,123 @@ describe('the fix and flip tab has its own example', () => {
     expect(exampleSwap({ ...FLIP_EXAMPLE_SHARED, purchasePrice: '' }, 'flip', 'rental').purchasePrice).toBeUndefined();
   });
 });
+
+// Items 1 and 3 of the 2026-10-22 review of the Fix & flip tab: the Monte
+// Carlo interest band was hidden on this tab and stayed at the example's
+// 6.75% whatever rate was typed, and the tab had no Go / No-Go decision.
+describe('the fix and flip tab has a decision', () => {
+  // A rural fixer: $93,000 price, hard-money loan at 70% / 11% / interest
+  // only / 2 points, $85,000 rehab with a 15% contingency, $250,000
+  // after-repair value, seven-month hold. The figures were checked by hand.
+  const ruralFixer = {
+    purchasePrice: '93000', closingCosts: '3000', dueDiligenceCosts: '2000', initialCapex: '0', holdMonths: '7',
+    ltv: '70', interestRate: '11', interestOnlyMonths: '7', loanTermYears: '1', originationFee: '2',
+    arv: '250000', rehabCost: '85000', rehabContingency: '15', monthlyHolding: '450', otherProjectCosts: '4000', sellingCosts: '7',
+    rentableSquareFeet: '1655',
+  };
+  const enterFixer = async (changes = {}) => {
+    for (const [name, value] of Object.entries({ ...ruralFixer, ...changes })) await setControl(name, value);
+  };
+  const kpis = () => [...container.querySelectorAll('.studio-decision-kpis article')].map((item) => item.textContent);
+
+  test('the tab offers an IC decision, and the untouched example is a conditional Go', async () => {
+    await click('Fix & flip');
+    expect(button('IC decision')).toBeTruthy();
+    expect(button('Base case')).toBeUndefined();
+    expect(field('flipMinimumProfit').value).toBe('30000');
+    expect(field('flipTargetRoi').value).toBe('20');
+    await runBase();
+    const verdict = container.querySelector('.studio-result__verdict');
+    expect(verdict.className).toContain('studio-result__verdict--amber');
+    expect(verdict.textContent).toContain('CONDITIONAL GO — VERIFY BEFORE CLOSING');
+    expect(verdict.textContent).toContain('At $180,000 the deal is modeled to earn $48,149 (27.79% on cash), which meets your targets. The highest price that still meets them is $192,034.');
+    expect(kpis()[0]).toContain('MAXIMUM OFFER$192,000Exact modeled ceiling $192,034');
+    expect(kpis()[1]).toContain('$12,000 below');
+    expect(kpis()[2]).toContain('PROFIT AT THIS PRICE$48,14927.79% on cash; minimum $30,000');
+    expect(kpis()[3]).toContain('0 of 7 evidence items verified');
+    expect(text()).toContain('BREAK-EVEN AFTER-REPAIR VALUE');
+    expect(text()).toContain('HIGHEST PRICE THAT MEETS EACH TARGET');
+    expect(text()).toContain('70% rule screening figure');
+    expect(text()).toContain('SCREEN');
+    // The transparent model output is still there under the decision.
+    expect(tile('Projected profit').textContent).toContain('$48,149');
+    expect(text()).toContain('diamond-decision-1.2.0');
+  });
+
+  test('a flip priced above its ceiling is a No-Go that names the price that would work', async () => {
+    await click('Fix & flip');
+    await enterFixer();
+    await runBase();
+    const verdict = container.querySelector('.studio-result__verdict');
+    expect(verdict.className).toContain('studio-result__verdict--red');
+    expect(verdict.textContent).toContain('NO-GO AT THIS PRICE — REPRICE OR PASS');
+    expect(verdict.textContent).toContain('At $93,000 the deal is modeled to earn $24,121 (16.83% on cash), short of your $30,000 minimum profit and your 20% return on cash. The highest price that meets your targets is $87,447, which is $5,553 below this price.');
+    expect(kpis()[0]).toContain('MAXIMUM OFFER$87,000Exact modeled ceiling $87,447');
+    expect(kpis()[1]).toContain('$6,000 overPurchase price $93,000 · open at $80,000–$84,000');
+    const ceilings = [...container.querySelectorAll('.studio-ceiling-list > div')].map((row) => row.textContent);
+    expect(ceilings[0]).toContain('$30,000 minimum profit');
+    expect(ceilings[0]).toContain('$87,447BINDING');
+    expect(ceilings[1]).toContain('20% return on cash');
+    expect(ceilings[2]).toContain('70% rule screening figure');
+    expect(ceilings[2]).toContain('$77,250SCREEN');
+    expect(text()).toContain('The price is $15,750 above the 70% rule screening figure of $77,250.');
+    expect(text()).toContain('The downside case loses $2,269.');
+    const rows = [...container.querySelectorAll('.studio-scenario-row')].map((row) => row.textContent);
+    expect(rows[0]).toBe('CaseProfitMarginROIIRR');
+    expect(rows[2]).toContain('Base$24,121');
+    expect(tile('70% screening threshold').textContent).toContain('$77,250');
+  });
+
+  test('at a price that meets the targets with every item verified, the call is Go', async () => {
+    await click('Fix & flip');
+    await enterFixer({ purchasePrice: '77000' });
+    const boxes = [...container.querySelectorAll('.studio-evidence-grid input[type="checkbox"]')];
+    expect(boxes).toHaveLength(7);
+    for (const box of boxes) await act(async () => { box.click(); });
+    await runBase();
+    const verdict = container.querySelector('.studio-result__verdict');
+    expect(verdict.className).toContain('studio-result__verdict--green');
+    expect(verdict.textContent).toContain('GO — MEETS YOUR TARGETS');
+    expect(text()).toContain('7 of 7 evidence items verified');
+  });
+});
+
+describe('the Monte Carlo interest band on the fix and flip tab', () => {
+  const band = () => ['mcInterestMin', 'mcInterestMode', 'mcInterestMax'].map((name) => field(name).value);
+
+  test('the band is on the tab and follows the entered interest rate', async () => {
+    await click('Fix & flip');
+    expect(band()).toEqual(['5.75', '6.75', '8.5']);
+    expect(text()).toContain('follows the interest rate you entered until you change the band yourself');
+    expect(text()).toContain('A rehab overrun drawn here replaces the contingency rather than adding to it');
+    await setControl('interestRate', '11');
+    expect(band()).toEqual(['10', '11', '12.75']);
+    await setControl('interestRate', '0.5');
+    expect(band()).toEqual(['0', '0.5', '2.25']);
+    // The three fields are what the simulation reads, so the simulated loan is at the entered rate.
+    await setControl('interestRate', '11');
+    await click('Rental & commercial');
+    expect(band()).toEqual(['10', '11', '12.75']);
+  });
+
+  test('a band the visitor set stays put when the rate changes again', async () => {
+    await click('Fix & flip');
+    await setControl('mcInterestMode', '9');
+    await setControl('interestRate', '12');
+    expect(band()).toEqual(['5.75', '9', '8.5']);
+  });
+
+  test('the simulation on this tab runs on the entered rate and shows its results', async () => {
+    await click('Fix & flip');
+    await setControl('interestRate', '11');
+    await setControl('mcIterations', '1000');
+    await act(async () => { button('Run Monte Carlo').click(); });
+    for (let wait = 0; wait < 100 && !container.querySelector('.studio-risk-results article'); wait += 1) {
+      await act(async () => { await new Promise((resolve) => { setTimeout(resolve, 20); }); });
+    }
+    const cards = [...container.querySelectorAll('.studio-risk-results article')];
+    expect(cards).toHaveLength(3);
+    for (const card of cards) expect(card.querySelector('small').textContent).toContain('Requested 1,000 · Completed 1,000 · Excluded 0 · Valid for Projected profit 1,000');
+    expect(axios.post).not.toHaveBeenCalled();
+  });
+});
