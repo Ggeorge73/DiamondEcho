@@ -77,6 +77,7 @@ export const buildDealRequest = (form) => {
   }
   return {
     ...common,
+    debt: common.debt.map((loan) => ({ ...loan, rehab_financed_rate: rate(form.rehabFinanced) })),
     flip: {
       after_repair_value: n(form.arv), rehab_cost: n(form.rehabCost),
       rehab_contingency_rate: rate(form.rehabContingency), monthly_holding_costs: n(form.monthlyHolding),

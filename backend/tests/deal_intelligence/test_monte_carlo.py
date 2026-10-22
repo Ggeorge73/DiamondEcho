@@ -390,3 +390,30 @@ def test_a_development_cost_overrun_replaces_the_construction_contingency():
     base = analyze_deal(_land_deal()).metrics["development_profit"].value
     assert _fixed_land_cost_overrun(0.10) == pytest.approx(base - 0.10 * 400_000, abs=0.01)
     assert _fixed_land_cost_overrun(0.0) == pytest.approx(base + 0.10 * 1_800_000, abs=0.01)
+
+
+def _fixed_hold_change(months):
+    request = MonteCarloRequest(
+        deal=_flip_deal(),
+        scenarios=[{
+            "name": "Fixed", "iterations": 250, "seed": 7,
+            "drivers": {"hold_months_change": {"minimum": months, "mode": months, "maximum": months}},
+        }],
+    )
+    summary = run_monte_carlo(request).scenarios[0].summaries["flip_profit"]
+    assert summary.minimum == pytest.approx(summary.maximum)
+    return summary.p50
+
+
+def test_the_hold_period_is_a_simulation_driver_in_whole_months():
+    # Item 5 of the 2026-10-22 review: timeline is what kills a slow flip, and
+    # the simulation could not draw it.
+    deal = _flip_deal()
+    deal.acquisition.hold_months = 10
+    three_months_longer = analyze_deal(deal).metrics["flip_profit"].value
+    assert _fixed_hold_change(3) == pytest.approx(three_months_longer, abs=0.01)
+    assert _fixed_hold_change(3) < analyze_deal(_flip_deal()).metrics["flip_profit"].value
+    # A fractional draw is rounded to whole months, and the hold never drops below one.
+    assert _fixed_hold_change(2.6) == pytest.approx(three_months_longer, abs=0.01)
+    deal.acquisition.hold_months = 1
+    assert _fixed_hold_change(-20) == pytest.approx(analyze_deal(deal).metrics["flip_profit"].value, abs=0.01)

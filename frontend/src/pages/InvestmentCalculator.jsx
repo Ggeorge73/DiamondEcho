@@ -92,7 +92,9 @@ const initialForm = {
   // The fix-and-flip example: one single-family house, bought, renovated and
   // sold in ten months. An illustration like the rest. The figures the flip
   // tab shares with the other two tabs are in FLIP_EXAMPLE_SHARED below.
-  arv: '360000', rehabCost: '65000', rehabContingency: '10', monthlyHolding: '1800',
+  // The loan funds this share of the rehab budget on top of loan-to-value
+  // times the price. 0 keeps the example's figures as documented.
+  arv: '360000', rehabCost: '65000', rehabContingency: '10', rehabFinanced: '0', monthlyHolding: '1800',
   otherProjectCosts: '6000', sellingCosts: '6', discountRate: '10', mcIterations: '2500',
   targetCashOnCash: '8', minimumDscr: '1.2', targetIrr: '15', preliminaryMarketCeiling: '',
   maxImmediateCapex: '', maxAnnualTaxes: '', maxAnnualInsurance: '',
@@ -118,6 +120,8 @@ const initialForm = {
   mcInterestMin: '5.75', mcInterestMode: '6.75', mcInterestMax: '8.5',
   mcArvMin: '-15', mcArvMode: '0', mcArvMax: '10', mcRehabMin: '0',
   mcRehabMode: '10', mcRehabMax: '30',
+  // Months added to the hold period (item 5 of the 2026-10-22 review).
+  mcHoldMin: '0', mcHoldMode: '1', mcHoldMax: '4',
 };
 
 // The simulation's interest-rate band: one point below the entered rate to
@@ -574,14 +578,18 @@ const InvestmentCalculator = () => {
       exit_cap_rate: { minimum: rate(form.mcExitCapMin), mode: rate(n(form.mcExitCapMode) * (downside ? 1.05 : 1)), maximum: rate(n(form.mcExitCapMax) * scale) },
       interest_rate: { minimum: rate(form.mcInterestMin), mode: rate(form.mcInterestMode), maximum: rate(n(form.mcInterestMax) * scale) },
     };
+    // In months; the high end stretches with the case like the other drivers.
+    const holdMonths = { minimum: n(form.mcHoldMin), mode: n(form.mcHoldMode), maximum: Math.round(n(form.mcHoldMax) * scale) };
     if (form.strategy === 'land') return {
       terminal_value_change: { minimum: rate(n(form.mcArvMin) * scale), mode: rate(form.mcArvMode), maximum: rate(form.mcArvMax) },
       development_cost_change: { minimum: rate(form.mcRehabMin), mode: rate(form.mcRehabMode), maximum: rate(n(form.mcRehabMax) * scale) },
+      hold_months_change: holdMonths,
       interest_rate: { minimum: rate(form.mcInterestMin), mode: rate(form.mcInterestMode), maximum: rate(n(form.mcInterestMax) * scale) },
     };
     return {
       after_repair_value_change: { minimum: rate(n(form.mcArvMin) * scale), mode: rate(form.mcArvMode), maximum: rate(form.mcArvMax) },
       rehab_cost_change: { minimum: rate(form.mcRehabMin), mode: rate(form.mcRehabMode), maximum: rate(n(form.mcRehabMax) * scale) },
+      hold_months_change: holdMonths,
       interest_rate: { minimum: rate(form.mcInterestMin), mode: rate(form.mcInterestMode), maximum: rate(n(form.mcInterestMax) * scale) },
     };
   };
@@ -911,9 +919,11 @@ const InvestmentCalculator = () => {
                 <Field label="After-repair value" name="arv" value={form.arv} onChange={update} prefix="$" />
                 <Field label="Rehabilitation budget" name="rehabCost" value={form.rehabCost} onChange={update} prefix="$" />
                 <Field label="Rehab contingency" name="rehabContingency" value={form.rehabContingency} onChange={update} suffix="%" />
+                <Field label="Rehab financed by the loan" name="rehabFinanced" value={form.rehabFinanced} onChange={update} suffix="%" />
                 <Field label="Monthly holding costs" name="monthlyHolding" value={form.monthlyHolding} onChange={update} prefix="$" />
                 <Field label="Other project costs" name="otherProjectCosts" value={form.otherProjectCosts} onChange={update} prefix="$" />
               </div>
+              <p className="studio-provider-note"><ShieldCheck /> The loan is sized on the loan-to-value above times the price, plus this share of the rehabilitation budget. Hard-money lenders commonly fund most of the price and all of the rehab; the contingency stays yours. The whole loan is drawn at purchase and carries interest from the first month.</p>
             </fieldset>
             <fieldset className="studio-mandate">
               <legend><span>04</span> Targets & evidence</legend>
@@ -962,12 +972,15 @@ const InvestmentCalculator = () => {
                 <Field label={`${form.strategy === 'land' ? 'Development cost' : 'Rehab'} overrun · low`} name="mcRehabMin" value={form.mcRehabMin} onChange={update} suffix="%" />
                 <Field label={`${form.strategy === 'land' ? 'Development cost' : 'Rehab'} overrun · mode`} name="mcRehabMode" value={form.mcRehabMode} onChange={update} suffix="%" />
                 <Field label={`${form.strategy === 'land' ? 'Development cost' : 'Rehab'} overrun · high`} name="mcRehabMax" value={form.mcRehabMax} onChange={update} suffix="%" />
+                <Field label="Hold period change · low" name="mcHoldMin" value={form.mcHoldMin} onChange={update} suffix="months" step="1" />
+                <Field label="Hold period change · mode" name="mcHoldMode" value={form.mcHoldMode} onChange={update} suffix="months" step="1" />
+                <Field label="Hold period change · high" name="mcHoldMax" value={form.mcHoldMax} onChange={update} suffix="months" step="1" />
               </>}
               <Field label="Interest rate · low" name="mcInterestMin" value={form.mcInterestMin} onChange={update} suffix="%" />
               <Field label="Interest rate · mode" name="mcInterestMode" value={form.mcInterestMode} onChange={update} suffix="%" />
               <Field label="Interest rate · high" name="mcInterestMax" value={form.mcInterestMax} onChange={update} suffix="%" />
             </div>
-            <p className="studio-case-note">The simulation draws the loan's interest rate from the band above, which follows the interest rate you entered until you change the band yourself. For a loan whose rate is fixed, set low, mode and high to that rate.{form.strategy === 'flip' ? ' A rehab overrun drawn here replaces the contingency rather than adding to it: a draw equal to the contingency is the base case.' : ''}</p>
+            <p className="studio-case-note">The simulation draws the loan's interest rate from the band above, which follows the interest rate you entered until you change the band yourself. For a loan whose rate is fixed, set low, mode and high to that rate.{form.strategy !== 'rental' ? ' The hold period change is in months, added to the hold period you entered and rounded to whole months; the stress cases stretch its high end like the other drivers.' : ''}{form.strategy === 'flip' ? ' A rehab overrun drawn here replaces the contingency rather than adding to it: a draw equal to the contingency is the base case.' : ''}</p>
             <div className="studio-risk-actions">
               <p><TrendingUp /> Reproducible triangular distributions, percentile outcomes, downside probabilities, and excluded-iteration disclosure.</p>
               <button type="button" onClick={runRiskAnalysis} disabled={riskLoading}>{riskLoading ? <><Loader2 className="spin" /> Simulating</> : <>Run Monte Carlo <BarChart3 /></>}</button>

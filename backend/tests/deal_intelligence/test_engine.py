@@ -265,3 +265,42 @@ def test_flood_warnings_follow_the_designation():
     assert "Special Flood Hazard Area" in _flood_warnings("AE")[0] and "AE" in _flood_warnings("AE")[0]
     assert "moderate flood-hazard" in _flood_warnings("X (shaded)")[0]
     assert "has not determined" in _flood_warnings("D")[0]
+
+
+def test_a_flip_loan_can_fund_a_share_of_the_rehab_budget():
+    # Item 4 of the 2026-10-22 review: the loan was sized on the price alone,
+    # so a hard-money flip showed a 32.6% loan-to-cost that no flipper has.
+    def request(rehab_financed_rate):
+        return DealAnalysisRequest(
+            strategy="flip",
+            property={"property_type": "single_family"},
+            acquisition={"purchase_price": 93_000, "closing_costs": 3_000, "due_diligence_costs": 2_000, "hold_months": 7},
+            debt=[{
+                "loan_to_value": 0.70, "annual_interest_rate": 0.11, "amortization_years": 30,
+                "interest_only_months": 7, "term_months": 12, "origination_fee_rate": 0.02,
+                "rehab_financed_rate": rehab_financed_rate,
+            }],
+            flip={"after_repair_value": 250_000, "rehab_cost": 85_000, "rehab_contingency_rate": 0.15,
+                  "monthly_holding_costs": 450, "other_project_costs": 4_000},
+            exit={"selling_cost_rate": 0.07},
+        )
+
+    on_price_only = analyze_deal(request(0))
+    with_rehab = analyze_deal(request(1.0))
+    assert on_price_only.metrics["ltc"].value == pytest.approx(0.326, abs=0.0005)
+    # 70% of $93,000 plus all of the $85,000 budget: $150,100 on $199,750 of cost.
+    assert with_rehab.metrics["ltc"].value == pytest.approx(150_100 / 199_750, abs=1e-6)
+    assert with_rehab.metrics["ltv"].value == pytest.approx(150_100 / 93_000, abs=1e-6)
+    # The extra $85,000 costs 2 points and seven months of 11% interest, and
+    # nothing else changes.
+    extra_cost = 85_000 * (0.02 + 0.11 * 7 / 12)
+    assert with_rehab.metrics["flip_profit"].value == pytest.approx(
+        on_price_only.metrics["flip_profit"].value - extra_cost, abs=0.01
+    )
+    # Less cash in, so the return on cash rises even though the profit falls.
+    assert with_rehab.metrics["flip_roi"].value > on_price_only.metrics["flip_roi"].value
+    # An explicit principal is taken as given.
+    explicit = request(1.0)
+    explicit.debt[0].principal = 100_000
+    explicit.debt[0].loan_to_value = None
+    assert analyze_deal(explicit).metrics["ltv"].value == pytest.approx(100_000 / 93_000, abs=1e-6)

@@ -25,7 +25,10 @@ from .models import (
 # unchanged.
 # 1.3.0 (2026-10-22): the same for a land development simulation's construction
 # contingency and a development-cost overrun. The base analysis is unchanged.
-FORMULA_VERSION = "diamond-underwriting-1.3.0"
+# 1.4.0 (2026-10-22): a flip loan can fund a share of the rehab budget on top of
+# loan-to-value times the price (rehab_financed_rate, 0 by default, so earlier
+# figures are unchanged), and the simulation can draw the hold period.
+FORMULA_VERSION = "diamond-underwriting-1.4.0"
 
 
 # FEMA flood-zone designations. Mirrors ``classifyFloodZone`` in
@@ -84,7 +87,13 @@ def _resolved_debt_and_schedules(
     schedules: List[List[LoanMonth]] = []
     fees = 0.0
     for loan in request.debt:
-        principal = loan.principal or request.acquisition.purchase_price * (loan.loan_to_value or 0)
+        if loan.principal:
+            principal = loan.principal
+        else:
+            # Sized on the price, plus the financed share of a flip's rehab
+            # budget. The contingency stays the investor's.
+            financed_rehab = request.flip.rehab_cost * loan.rehab_financed_rate if request.flip else 0
+            principal = request.acquisition.purchase_price * (loan.loan_to_value or 0) + financed_rehab
         principals.append(principal)
         fees += principal * loan.origination_fee_rate
         schedules.append(

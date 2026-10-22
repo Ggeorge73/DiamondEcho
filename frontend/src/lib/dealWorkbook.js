@@ -144,7 +144,9 @@ const inputRows = ({ form, request }) => {
   add('due_diligence', 'Due diligence costs', request.acquisition.due_diligence_costs, 'USD'); add('initial_capex', 'Initial capital work', request.acquisition.initial_capex, 'USD'); add('hold_months', 'Hold period', request.acquisition.hold_months, 'months');
   rows.push([], [cell('DEBT & DISCOUNTING', 2), null, null, null]);
   const loan = request.debt?.[0];
-  add('loan_amount', 'Initial loan amount', loan ? (loan.principal || request.acquisition.purchase_price * (loan.loan_to_value || 0)) : 0, 'USD');
+  const financedRehab = loan && request.flip ? (request.flip.rehab_cost || 0) * (loan.rehab_financed_rate || 0) : 0;
+  add('loan_amount', 'Initial loan amount', loan ? (loan.principal || request.acquisition.purchase_price * (loan.loan_to_value || 0) + financedRehab) : 0, 'USD');
+  if (request.flip) add('rehab_financed', 'Rehab budget financed by the loan', loan?.rehab_financed_rate || 0, '%');
   add('interest_rate', 'Annual interest rate', loan?.annual_interest_rate || 0, '%'); add('amortization', 'Amortization', loan?.amortization_years || 0, 'years');
   add('interest_only', 'Interest-only period', loan?.interest_only_months || 0, 'months'); add('loan_term', 'Loan term', loan?.term_months || 0, 'months'); add('origination_fee', 'Origination fee', loan?.origination_fee_rate || 0, '%');
   add('selling_costs', 'Selling costs', request.exit.selling_cost_rate || 0, '%'); add('discount_rate', 'Annual discount rate', request.assumptions.annual_discount_rate || 0, '%');

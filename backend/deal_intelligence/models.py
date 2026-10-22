@@ -61,6 +61,11 @@ class DebtInputs(StrictModel):
     interest_only_months: int = Field(default=0, ge=0, le=600)
     term_months: int = Field(default=360, ge=1, le=600)
     origination_fee_rate: float = Field(default=0, ge=0, le=0.25)
+    # Fix and flip only: the share of the rehab budget (before contingency) the
+    # loan funds, on top of loan_to_value times the price. Hard-money lenders
+    # commonly fund most of the price and all of the rehab. Ignored with an
+    # explicit principal, and for strategies without a rehab budget.
+    rehab_financed_rate: float = Field(default=0, ge=0, le=1)
 
     @model_validator(mode="after")
     def exactly_one_principal_source(self) -> "DebtInputs":
@@ -318,6 +323,8 @@ class MonteCarloDriver(str, Enum):
     REHAB_COST_CHANGE = "rehab_cost_change"
     TERMINAL_VALUE_CHANGE = "terminal_value_change"
     DEVELOPMENT_COST_CHANGE = "development_cost_change"
+    # In months, added to the hold period and rounded to whole months.
+    HOLD_MONTHS_CHANGE = "hold_months_change"
 
 
 class TriangularDistribution(StrictModel):

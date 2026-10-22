@@ -1,4 +1,4 @@
-import { analyzeDealLocally, BROWSER_MONTE_CARLO_ITERATION_CAP, lossEquivalentReturn, nextTask, runMonteCarloInBrowser, runMonteCarloLocally } from './dealAnalysis';
+import { analyzeDealLocally, BROWSER_MONTE_CARLO_ITERATION_CAP, FORMULA_VERSION, lossEquivalentReturn, nextTask, runMonteCarloInBrowser, runMonteCarloLocally } from './dealAnalysis';
 import { buildDealRequest } from './dealRequest';
 
 const johnsCreekDeal = {
@@ -324,8 +324,9 @@ describe('the rehab contingency absorbs a simulated overrun instead of multiplyi
     expect(simulatedProfit(0.20, '0')).toBeCloseTo(profitWithRehab(85000 * 1.20, '0'), 2);
   });
 
-  test('the service and browser engines carry the same change in their formula versions', () => {
-    expect(runMonteCarloLocally({ deal: buildDealRequest(ruralFixerForm), scenarios: [{ name: 'Fixed', iterations: 250, seed: 7, drivers: { rehab_cost_change: { minimum: 0, mode: 0, maximum: 0 } } }] }).formula_version).toBe('diamond-underwriting-web-1.4.0');
+  test('a simulation result carries the browser formula version, so it says which rule produced it', () => {
+    expect(FORMULA_VERSION).toMatch(/^diamond-underwriting-web-1\.[5-9]\.\d+$|^diamond-underwriting-web-[2-9]\./);
+    expect(runMonteCarloLocally({ deal: buildDealRequest(ruralFixerForm), scenarios: [{ name: 'Fixed', iterations: 250, seed: 7, drivers: { rehab_cost_change: { minimum: 0, mode: 0, maximum: 0 } } }] }).formula_version).toBe(FORMULA_VERSION);
   });
 });
 
@@ -375,7 +376,51 @@ describe('the construction contingency absorbs a simulated development-cost over
     expect(simulatedProfit(0)).toBeCloseTo(base + 0.10 * 1650000, 2);
   });
 
-  test('the formula version says which rule produced a land simulation', () => {
-    expect(runMonteCarloLocally({ deal: buildDealRequest(landForm), scenarios: [{ name: 'Fixed', iterations: 250, seed: 7, drivers: { development_cost_change: { minimum: 0, mode: 0, maximum: 0 } } }] }).formula_version).toBe('diamond-underwriting-web-1.4.0');
+  test('a land simulation result carries the browser formula version too', () => {
+    expect(runMonteCarloLocally({ deal: buildDealRequest(landForm), scenarios: [{ name: 'Fixed', iterations: 250, seed: 7, drivers: { development_cost_change: { minimum: 0, mode: 0, maximum: 0 } } }] }).formula_version).toBe(FORMULA_VERSION);
+  });
+});
+
+describe('a flip loan can fund a share of the rehab budget', () => {
+  const profitAt = (rehabFinanced) => analyzeDealLocally(buildDealRequest({ ...ruralFixerForm, rehabFinanced })).metrics;
+
+  test('the loan is loan-to-value times the price plus the financed rehab, and costs its points and interest', () => {
+    const onPriceOnly = profitAt('0');
+    const withRehab = profitAt('100');
+    expect(onPriceOnly.ltc.value).toBeCloseTo(0.326, 3);
+    // 70% of $93,000 plus all of the $85,000 budget: $150,100 on $199,750 of cost.
+    expect(withRehab.ltc.value).toBeCloseTo(150100 / 199750, 6);
+    expect(withRehab.ltv.value).toBeCloseTo(150100 / 93000, 6);
+    expect(withRehab.flip_profit.value).toBeCloseTo(onPriceOnly.flip_profit.value - 85000 * (0.02 + 0.11 * 7 / 12), 2);
+    expect(withRehab.flip_roi.value).toBeGreaterThan(onPriceOnly.flip_roi.value);
+  });
+
+  test('the request carries the share, and the workbook sizes the loan the same way', () => {
+    const request = buildDealRequest({ ...ruralFixerForm, rehabFinanced: '100' });
+    expect(request.debt[0].rehab_financed_rate).toBe(1);
+    expect(buildDealRequest({ ...ruralFixerForm, strategy: 'rental', annualRent: '12000', exitCap: '7' }).debt[0].rehab_financed_rate).toBeUndefined();
+  });
+});
+
+describe('the hold period is a simulation driver in whole months', () => {
+  const fixedHold = (months, form = ruralFixerForm) => {
+    const result = runMonteCarloLocally({ deal: buildDealRequest(form), scenarios: [{ name: 'Fixed', iterations: 250, seed: 7, drivers: { hold_months_change: { minimum: months, mode: months, maximum: months } } }] });
+    const summary = result.scenarios[0].summaries.flip_profit;
+    expect(summary.minimum).toBeCloseTo(summary.maximum, 6);
+    return summary.p50;
+  };
+  const profitWithHold = (holdMonths) => analyzeDealLocally(buildDealRequest({ ...ruralFixerForm, holdMonths })).metrics.flip_profit.value;
+
+  test('three months longer is the seven-month deal re-run at ten months', () => {
+    expect(fixedHold(3)).toBeCloseTo(profitWithHold('10'), 2);
+    expect(fixedHold(3)).toBeLessThan(profitWithHold('7'));
+    expect(fixedHold(2.6)).toBeCloseTo(profitWithHold('10'), 2);
+  });
+
+  test('the hold never drops below one month, and the base deal is untouched between iterations', () => {
+    expect(fixedHold(-20)).toBeCloseTo(profitWithHold('1'), 2);
+    const deal = buildDealRequest(ruralFixerForm);
+    runMonteCarloLocally({ deal, scenarios: [{ name: 'Fixed', iterations: 250, seed: 7, drivers: { hold_months_change: { minimum: 3, mode: 3, maximum: 3 } } }] });
+    expect(deal.acquisition.hold_months).toBe(7);
   });
 });

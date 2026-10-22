@@ -298,3 +298,29 @@ describe('the Monte Carlo interest band on the fix and flip tab', () => {
     expect(axios.post).not.toHaveBeenCalled();
   });
 });
+
+describe('rehab financing and the hold-period band on the fix and flip tab', () => {
+  test('the loan can fund a share of the rehab, and loan-to-cost says so', async () => {
+    await click('Fix & flip');
+    expect(field('rehabFinanced').value).toBe('0');
+    expect(text()).toContain('plus this share of the rehabilitation budget');
+    await runBase();
+    expect(tile('Loan-to-cost').textContent).toContain('44.23%');
+    await setControl('rehabFinanced', '100');
+    await runBase();
+    // 65% of $180,000 plus all of the $65,000 budget: $182,000 on $264,500 of cost.
+    expect(tile('Loan-to-cost').textContent).toContain('68.81%');
+    expect(tile('Loan-to-value').textContent).toContain('101.11%');
+    expect(tile('Projected profit').textContent).not.toContain('$48,149');
+  });
+
+  test('the hold-period band is on the tab in months, and the rental tab does not have it', async () => {
+    await click('Fix & flip');
+    expect(['mcHoldMin', 'mcHoldMode', 'mcHoldMax'].map((name) => field(name).value)).toEqual(['0', '1', '4']);
+    expect(text()).toContain('The hold period change is in months');
+    await click('Land development');
+    expect(field('mcHoldMode')).toBeTruthy();
+    await click('Rental & commercial');
+    expect(field('mcHoldMode')).toBeNull();
+  });
+});

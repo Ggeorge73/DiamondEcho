@@ -3,15 +3,17 @@
 On 2026-10-22 an advisor drove the Fix & flip tab as a visitor would, with a
 real rural fixer: a $93,000 house needing $85,000 of work, financed with hard
 money at 11%. The tab's arithmetic matched a hand calculation to the dollar.
-Three of the eight findings were about what the tab does with those figures,
-and this change answers them. The other five (price-history and seller
-signals, loan sizing on rehab, hold period as a risk driver, derived holding
-costs, after-repair-value sanity checks) are not in this change.
+Five of the eight findings were about what the tab does with those figures,
+and the changes below answer them (items 1, 3 and 6 first, then 4 and 5 the
+same day). The other three (price-history and seller signals, derived
+holding costs, after-repair-value sanity checks) are not in these changes.
 
 | # | Finding | What changed |
 | --- | --- | --- |
 | 1 | The simulation drew the loan's interest rate from three boxes shown only on the Rental tab, so a flip typed at 11% was simulated at about 6.75% | The band is on every tab, and it follows the entered rate until the visitor edits it |
 | 3 | No Go / No-Go and no maximum offer for a flip; the 70% warning said "exceeds" but not by how much | The tab has an IC decision: the highest price that earns the minimum profit and the minimum return on cash, and a call |
+| 4 | The loan was sized on the price alone, so the hard-money flip showed a 32.6% loan-to-cost that no flipper borrows at | A "Rehab financed by the loan" box: the loan funds that share of the rehab budget on top of loan-to-value times the price |
+| 5 | The hold period was not a risk driver, though timeline is what kills a slow rural flip | A hold-period band, in months, on the Fix & flip and Land development tabs |
 | 6 | The simulation shocked the rehab budget and then applied the contingency on top, so a 35% overrun with a 15% contingency became 55% | The drawn overrun replaces the contingency reserve; a draw equal to the contingency is the base case |
 
 Everything is calculated from the figures on the form. Nothing is looked up.
@@ -152,6 +154,44 @@ formula versions are `diamond-underwriting-1.2.0` (service) and
 produced it. The land simulation had the same shape of fault and was given
 the same rule the same day (service `1.3.0`, page `1.4.0`); see
 `docs/deal-studio-land-decision.md`.
+
+## Rehab financed by the loan (item 4)
+
+The loan was loan-to-value times the purchase price, nothing else, so on the
+reference deal it was $65,100 on $199,750 of cost: a 32.6% loan-to-cost.
+Hard-money lenders commonly fund most of the price and all of the rehab.
+
+The "Project & disposition" box now has **Rehab financed by the loan**, a
+percentage of the rehabilitation budget (before contingency; the contingency
+stays the investor's). The loan is loan-to-value × price + that share × rehab
+budget, in both engines (`rehab_financed_rate` on the loan, 0 by default so
+every earlier figure, including the page's example, is unchanged). An
+explicit loan principal is taken as given. The whole loan is drawn at
+purchase and carries interest from the first month, as the rest of the
+model already assumed for the rehab; a draw schedule is not modeled.
+
+On the reference deal at 100%: loan $150,100, loan-to-cost 75.1%, and the
+extra $85,000 costs 2 points and seven months of 11% interest, $7,154, so
+profit falls to $16,967 while the return on cash rises, because less cash is
+in. The decision and the maximum offer follow from the same calculation.
+Not done: a choice of loan basis (price, total cost, or after-repair value).
+
+## The hold period as a risk driver (item 5)
+
+The simulation has a new driver, **hold period change**, in months. Three
+boxes on the Fix & flip and Land development tabs (low 0, mode 1, high 4 to
+start); the stress cases stretch the high end like the other drivers (×1.25
+in the downside case, ×1.75 under severe stress). A draw is added to the
+hold period entered and rounded to whole months, never below one. Every
+monthly cost moves with it: holding costs, interest, and the loan's
+amortization or balloon if the hold runs past the interest-only period or
+the term. Both engines carry the driver (`hold_months_change`); a fixed
+draw of three months on the reference deal reproduces the base analysis at
+ten months exactly. The Rental tab does not show the band: a few months on
+a five-year hold is not the risk there.
+
+Formula versions after items 4 and 5: `diamond-underwriting-1.4.0` (service)
+and `diamond-underwriting-web-1.5.0` (page).
 
 ## Tests
 

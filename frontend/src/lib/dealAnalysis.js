@@ -8,7 +8,10 @@ import { floodZoneWarning } from './floodZone';
 // unchanged.
 // 1.4.0 (2026-10-22): the same for a land development simulation's construction
 // contingency and a development-cost overrun. The base analysis is unchanged.
-export const FORMULA_VERSION = 'diamond-underwriting-web-1.4.0';
+// 1.5.0 (2026-10-22): a flip loan can fund a share of the rehab budget on top of
+// loan-to-value times the price (rehab_financed_rate, 0 by default, so earlier
+// figures are unchanged), and the simulation can draw the hold period.
+export const FORMULA_VERSION = 'diamond-underwriting-web-1.5.0';
 
 const clean = (value, digits = 8) => value == null || !Number.isFinite(value) ? null : Number(value.toFixed(digits));
 const ratio = (numerator, denominator) => Math.abs(denominator) < 1e-12 ? null : clean(numerator / denominator);
@@ -21,8 +24,10 @@ const periodicPayment = (principal, periodicRate, periods) => {
   return principal * periodicRate * growth / (growth - 1);
 };
 
-const loanSchedule = (loan, purchasePrice, projectionMonths) => {
-  const principal = loan.principal || purchasePrice * (loan.loan_to_value || 0);
+// financedRehab: the part of a flip's rehab budget the loan funds, on top of
+// loan-to-value times the price. The contingency stays the investor's.
+const loanSchedule = (loan, purchasePrice, projectionMonths, financedRehab = 0) => {
+  const principal = loan.principal || purchasePrice * (loan.loan_to_value || 0) + financedRehab;
   const rate = (loan.annual_interest_rate || 0) / 12;
   const ioMonths = loan.interest_only_months || 0;
   const termMonths = loan.term_months || 360;
@@ -260,7 +265,7 @@ const analyzeLand = (request, schedules, totalDebt, originationFees) => {
 
 export const analyzeDealLocally = (request) => {
   if (!(request.acquisition.purchase_price > 0)) throw new Error('Purchase price must be greater than zero.');
-  const schedules = (request.debt || []).map((loan) => loanSchedule(loan, request.acquisition.purchase_price, request.acquisition.hold_months));
+  const schedules = (request.debt || []).map((loan) => loanSchedule(loan, request.acquisition.purchase_price, request.acquisition.hold_months, request.flip ? (request.flip.rehab_cost || 0) * (loan.rehab_financed_rate || 0) : 0));
   const totalDebt = schedules.reduce((sum, schedule) => sum + schedule.principal, 0);
   const originationFees = schedules.reduce((sum, schedule, index) => sum + schedule.principal * (request.debt[index].origination_fee_rate || 0), 0);
   if (request.strategy === 'rental') return analyzeRental(request, schedules, totalDebt, originationFees);
@@ -312,6 +317,7 @@ export const MONTE_CARLO_STANDARD_WARNINGS = [
 // Copies only the parts a draw changes; every value is a number or a string.
 const copyDeal = (deal) => ({
   ...deal,
+  acquisition: { ...deal.acquisition },
   operating: deal.operating ? { ...deal.operating } : deal.operating,
   flip: deal.flip ? { ...deal.flip } : deal.flip,
   land: deal.land ? { ...deal.land } : deal.land,
@@ -342,6 +348,8 @@ const createScenarioRun = (deal, scenario) => {
         if (driver === 'operating_expense_change') shocked.operating.operating_expenses *= 1 + draw;
         if (driver === 'exit_cap_rate') shocked.exit.exit_cap_rate = draw;
         if (driver === 'interest_rate') shocked.debt.forEach((loan) => { loan.annual_interest_rate = draw; });
+        // Months, rounded; the hold stays within the model's range.
+        if (driver === 'hold_months_change') shocked.acquisition.hold_months = Math.max(1, Math.min(600, Math.round(shocked.acquisition.hold_months + draw)));
         if (driver === 'after_repair_value_change') shocked.flip.after_repair_value *= 1 + draw;
         if (driver === 'rehab_cost_change') {
           // The draw is the overrun that happened, and the contingency is the

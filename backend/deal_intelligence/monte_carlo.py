@@ -98,6 +98,9 @@ def _sample_deal(
             deal.operating.operating_expenses *= 1 + value
         elif driver == MonteCarloDriver.EXIT_CAP_RATE:
             deal.exit.exit_cap_rate = max(0.001, min(value, 0.50))
+        elif driver == MonteCarloDriver.HOLD_MONTHS_CHANGE:
+            # Months, rounded; the hold stays within the model's range.
+            deal.acquisition.hold_months = max(1, min(600, int(round(deal.acquisition.hold_months + value))))
         elif driver == MonteCarloDriver.INTEREST_RATE:
             for debt in deal.debt:
                 debt.annual_interest_rate = max(0, min(value, 1))
