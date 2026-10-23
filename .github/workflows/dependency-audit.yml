@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: '20'
           cache: npm
@@ -85,7 +85,7 @@ jobs:
           cat dependency-audit/summary.md >> "$GITHUB_STEP_SUMMARY"
       - name: Upload audit evidence
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: production-dependency-audit-${{ github.sha }}
           path: dependency-audit/
