@@ -54,7 +54,8 @@ test('the Search action on the not-found page opens the real search and clears t
   expect(window.location.pathname).toBe('/search');
   expect(container.querySelector('iframe[title="Georgia MLS property search"]')).not.toBeNull();
   expect(container.textContent).not.toContain('We can’t find that page.');
-  expect(document.title).toBe('DiamondEcho | Private Real Estate');
+  // The search page's own title (lib/pageMeta.js), not the one left by the page before.
+  expect(document.title).toBe('Homes for Sale & Rent in Metro Atlanta, GA | DiamondEcho');
   expect(document.head.querySelector('meta[name="robots"]')).toBeNull();
 });
 

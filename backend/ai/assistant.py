@@ -11,8 +11,10 @@ from .models import ChatRequest, ChatResponse, Citation, Handoff, Jurisdiction, 
 from .safety import assess_message
 
 
-NET_SHEET = SiteLink(label="Open the Seller Net Sheet", path="/investment-calculator?tool=net-proceeds")
-MORTGAGE_TOOL = SiteLink(label="Open the Mortgage Simulator", path="/investment-calculator?tool=mortgage")
+# The two calculators have addresses of their own (frontend/src/lib/intelligenceTools.js).
+# The older "/investment-calculator?tool=…" form still opens them.
+NET_SHEET = SiteLink(label="Open the Seller Net Sheet", path="/seller-net-sheet")
+MORTGAGE_TOOL = SiteLink(label="Open the Mortgage Simulator", path="/mortgage-calculator")
 DEAL_STUDIO = SiteLink(label="Open Deal Studio", path="/investment-calculator")
 MLS_SEARCH = SiteLink(label="Search Georgia MLS", path="/search")
 MLS_RENTALS = SiteLink(label="Search Georgia MLS rentals", path="/search?status=rent")

@@ -106,3 +106,18 @@ test('concierge action hands focus to assistant and closing returns to its trigg
   await act(async () => container.querySelector('button[aria-label="Close assistant"]').click());
   expect(document.activeElement).toBe(container.querySelector('button[aria-label="Ask DiamondEcho assistant"]'));
 });
+
+// Only the home page has a picture behind the header. The saved HTML of every
+// other page (scripts/prerender.mjs) is drawn before any effect runs, so the
+// solid header has to be there from the first draw.
+test('the header is solid from the first draw on every page but the home page', () => {
+  const { renderToString } = require('react-dom/server');
+  const drawn = (address) => {
+    const holder = document.createElement('div');
+    holder.innerHTML = renderToString(<MemoryRouter initialEntries={[address]}><Navbar /></MemoryRouter>);
+    return holder.querySelector('header').className.trim();
+  };
+  expect(drawn('/')).toBe('mf-nav');
+  expect(drawn('/about')).toBe('mf-nav mf-nav--solid');
+  expect(drawn('/mortgage-calculator')).toBe('mf-nav mf-nav--solid');
+});

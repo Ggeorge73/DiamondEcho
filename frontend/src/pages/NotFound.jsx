@@ -11,7 +11,7 @@ const NotFound = () => {
     const previousTitle = document.title;
     document.title = TITLE;
     // Cloudflare Pages answers an unknown address with 404.html and a 404 status
-    // (public/_redirects, scripts/make-404.mjs). This hint stays for any host
+    // (scripts/prerender.mjs). This hint stays for any host
     // that serves the app shell with a 200 instead, such as the local dev server.
     const robots = document.createElement('meta');
     robots.name = 'robots';
