@@ -30,16 +30,29 @@ import { applyPropertyAutofill, prepareAddressEdit, preparePropertyChange } from
 // processor was about 3,400 of 5,000 iterations per rental case; the browser
 // finishes every choice on this form in a few seconds and reports progress.
 
-// The land residual changed in service formula 1.1.0. Until the service is on
-// it, a land analysis is calculated on this device so the page never shows the
-// older figure beside the Go / No-Go decision.
-const LAND_SERVICE_FORMULA_MINIMUM = [1, 1];
-export const landServiceFormulaIsCurrent = (version) => {
+// The service and this page carry the same formulas, but the service is
+// redeployed by hand and can lag. When it answers with a formula older than a
+// strategy needs, the page calculates on this device instead, so it never
+// shows an older figure beside its decision. Land needs 1.1.0 (the residual
+// land value); fix and flip needs 1.5.0 (the loan amount and its basis).
+const SERVICE_FORMULA_MINIMUM = { land: [1, 1], flip: [1, 5] };
+export const serviceFormulaIsCurrent = (version, minimum) => {
   const match = /(\d+)\.(\d+)\.\d+$/.exec(String(version || ''));
-  if (!match) return true; // not a version this page can read: leave the result alone
+  if (!match || !minimum) return true; // not a version this page can read: leave the result alone
   const [major, minor] = [Number(match[1]), Number(match[2])];
-  return major > LAND_SERVICE_FORMULA_MINIMUM[0] || (major === LAND_SERVICE_FORMULA_MINIMUM[0] && minor >= LAND_SERVICE_FORMULA_MINIMUM[1]);
+  return major > minimum[0] || (major === minimum[0] && minor >= minimum[1]);
 };
+export const landServiceFormulaIsCurrent = (version) => serviceFormulaIsCurrent(version, SERVICE_FORMULA_MINIMUM.land);
+export const flipServiceFormulaIsCurrent = (version) => serviceFormulaIsCurrent(version, SERVICE_FORMULA_MINIMUM.flip);
+// A service that does not know a field yet refuses the whole request with 422
+// and "Extra inputs are not permitted" for that field. That is the service
+// lagging the page, not a bad figure, so the page calculates on the device.
+export const serviceRejectsUnknownFields = (error) => {
+  const detail = error?.response?.data?.detail;
+  return error?.response?.status === 422 && Array.isArray(detail)
+    && detail.some((item) => /extra inputs are not permitted/i.test(String(item?.msg || '')));
+};
+const calculatedHereInstead = (analysis, reason) => ({ ...analysis, warnings: [reason, ...(analysis.warnings || []).filter((warning) => !/^Calculated securely in this browser/.test(warning))] });
 
 const INTELLIGENCE_TOOLS = [
   { key: 'deal', to: TOOL_PATHS.deal, label: 'Deal Studio', audience: 'For investors', icon: BarChart3 },
@@ -571,11 +584,16 @@ const InvestmentCalculator = () => {
       let analysis;
       if (!backendUrl) analysis = analyzeDealLocally(request);
       else {
-        const { data } = await axios.post(`${backendUrl}/api/v1/deals/analyze`, request);
-        // A service still on the older land formula: calculate here instead.
-        analysis = data?.strategy === 'land' && !landServiceFormulaIsCurrent(data.formula_version)
-          ? analyzeDealLocally(request)
-          : data;
+        try {
+          const { data } = await axios.post(`${backendUrl}/api/v1/deals/analyze`, request);
+          // A service still on an older formula for this strategy: calculate here instead.
+          analysis = serviceFormulaIsCurrent(data?.formula_version, SERVICE_FORMULA_MINIMUM[data?.strategy])
+            ? data
+            : calculatedHereInstead(analyzeDealLocally(request), `The analysis service answered with formula ${data.formula_version}, older than this page needs for this strategy, so the figures were calculated on this device with the same conventions.`);
+        } catch (serviceError) {
+          if (!serviceRejectsUnknownFields(serviceError)) throw serviceError;
+          analysis = calculatedHereInstead(analyzeDealLocally(request), 'The analysis service does not yet accept the loan options used here, so the figures were calculated on this device with the same conventions.');
+        }
       }
       if (generation === analysisGeneration.current) {
         setResult(analysis);

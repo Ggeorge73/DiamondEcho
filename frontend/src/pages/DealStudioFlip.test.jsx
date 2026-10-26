@@ -2,7 +2,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import axios from 'axios';
-import InvestmentCalculator, { EXAMPLE_ASSET_TYPES, exampleSwap, FLIP_EXAMPLE_SHARED, LAND_EXAMPLE_SHARED } from './InvestmentCalculator';
+import InvestmentCalculator, { EXAMPLE_ASSET_TYPES, exampleSwap, FLIP_EXAMPLE_SHARED, flipServiceFormulaIsCurrent, LAND_EXAMPLE_SHARED, serviceRejectsUnknownFields } from './InvestmentCalculator';
 import { DECISION_VERSION } from '../lib/dealDecision';
 
 // DE-25. The Fix & flip tab opened on the apartment-building example held for
@@ -407,5 +407,88 @@ describe('the loan basis on the fix and flip tab', () => {
     expect(tile('Loan amount').textContent).toContain('$175,000');
     expect(tile('Loan-to-value').textContent).toContain('188.17%');
     expect(tile('Loan-to-cost').textContent).toContain('87.61%');
+  });
+});
+
+// The service is redeployed by hand and lagged the page after the 2026-10-22
+// changes: it did not know the two new loan fields and refused any flip
+// request that carried them. The page now sends them only when they differ
+// from the defaults, and calculates on the device when the service is older
+// than fix and flip needs or refuses a field it does not know.
+describe('the service and the page agree on fix and flip', () => {
+  const fixer = {
+    purchasePrice: '93000', closingCosts: '3000', dueDiligenceCosts: '2000', initialCapex: '0', holdMonths: '7',
+    ltv: '70', interestRate: '11', interestOnlyMonths: '7', loanTermYears: '1', originationFee: '2',
+    arv: '250000', rehabCost: '85000', rehabContingency: '15', monthlyHolding: '450', otherProjectCosts: '4000', sellingCosts: '7',
+  };
+  const oldService = { strategy: 'flip', formula_version: 'diamond-underwriting-1.1.0', warnings: ['From the service.'], metrics: { flip_profit: { value: 24120.75, unit: 'USD', formula: 'old' }, flip_roi: { value: 0.1683, unit: 'decimal_rate', formula: 'old' } } };
+  const extraInputs = (field) => ({ isAxiosError: true, response: { status: 422, data: { detail: [{ type: 'extra_forbidden', loc: ['body', 'debt', 0, field], msg: 'Extra inputs are not permitted', input: 1 }] } } });
+  const mountWithBackend = async () => {
+    await act(async () => { root.unmount(); });
+    process.env.REACT_APP_BACKEND_URL = 'https://example.test';
+    root = createRoot(container);
+    await act(async () => { root.render(<MemoryRouter><InvestmentCalculator /></MemoryRouter>); });
+  };
+  const enterFixer = async (changes = {}) => {
+    for (const [name, value] of Object.entries({ ...fixer, ...changes })) await setControl(name, value);
+  };
+
+  test('the usual deal carries no new loan fields, and an older service answer is replaced by the device calculation', async () => {
+    await mountWithBackend();
+    axios.post.mockResolvedValueOnce({ data: oldService });
+    await click('Fix & flip');
+    await enterFixer();
+    await runBase();
+    expect(axios.post).toHaveBeenCalledTimes(1);
+    const sent = axios.post.mock.calls[0][1];
+    expect(sent.debt[0]).not.toHaveProperty('rehab_financed_rate');
+    expect(sent.debt[0]).not.toHaveProperty('loan_basis');
+    // The old answer had no loan amount; the device calculation has every figure.
+    expect(tile('Loan amount').textContent).toContain('$65,100');
+    expect(tile('Projected profit').textContent).toContain('$24,121');
+    expect(text()).toContain('The analysis service answered with formula diamond-underwriting-1.1.0, older than this page needs for this strategy, so the figures were calculated on this device with the same conventions.');
+    expect(text()).not.toContain('From the service.');
+    expect(text()).toContain('NO-GO AT THIS PRICE — REPRICE OR PASS');
+  });
+
+  test('a service that refuses a loan option it does not know is answered by the device calculation', async () => {
+    await mountWithBackend();
+    axios.post.mockRejectedValueOnce(extraInputs('loan_basis'));
+    await click('Fix & flip');
+    await enterFixer({ loanBasis: 'after_repair_value' });
+    await runBase();
+    expect(axios.post.mock.calls[0][1].debt[0].loan_basis).toBe('after_repair_value');
+    expect(tile('Loan amount').textContent).toContain('$175,000');
+    expect(text()).toContain('The analysis service does not yet accept the loan options used here, so the figures were calculated on this device with the same conventions.');
+    expect(container.querySelector('.studio-error')).toBeNull();
+  });
+
+  test('a service on the current formula is shown as it answered, and any other rejection is still an error', async () => {
+    await mountWithBackend();
+    axios.post.mockResolvedValueOnce({ data: { ...oldService, formula_version: 'diamond-underwriting-1.5.0', metrics: { ...oldService.metrics, loan_amount: { value: 65100, unit: 'USD', formula: 'from the service' } } } });
+    await click('Fix & flip');
+    await enterFixer();
+    await runBase();
+    expect(text()).toContain('From the service.');
+    expect(tile('Loan amount').textContent).toContain('from the service');
+    axios.post.mockRejectedValueOnce({ isAxiosError: true, response: { status: 422, data: { detail: [{ loc: ['body', 'flip', 'after_repair_value'], msg: 'Input should be greater than 0' }] } } });
+    await setControl('arv', '1');
+    await runBase();
+    expect(container.querySelector('.studio-error').textContent).toContain('flip › after repair value: Input should be greater than 0');
+  });
+
+  test.each([
+    ['diamond-underwriting-1.1.0', false], ['diamond-underwriting-1.4.0', false], ['diamond-underwriting-1.5.0', true],
+    ['diamond-underwriting-1.6.2', true], ['diamond-underwriting-2.0.0', true], ['test', true], [undefined, true],
+  ])('service formula %s is current enough for fix and flip: %s', (version, current) => {
+    expect(flipServiceFormulaIsCurrent(version)).toBe(current);
+  });
+
+  test('only a 422 naming an extra input counts as the service lagging the page', () => {
+    expect(serviceRejectsUnknownFields(extraInputs('rehab_financed_rate'))).toBe(true);
+    expect(serviceRejectsUnknownFields({ response: { status: 422, data: { detail: [{ msg: 'Input should be greater than 0' }] } } })).toBe(false);
+    expect(serviceRejectsUnknownFields({ response: { status: 422, data: { detail: 'Invalid assumptions' } } })).toBe(false);
+    expect(serviceRejectsUnknownFields({ response: { status: 500, data: { detail: [{ msg: 'Extra inputs are not permitted' }] } } })).toBe(false);
+    expect(serviceRejectsUnknownFields(new Error('network'))).toBe(false);
   });
 });

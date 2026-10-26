@@ -18,3 +18,22 @@ test('form-to-request-to-results pipeline reconciles the default rental case', (
   expect(result.metrics.equity_multiple.value).toBeCloseTo(1.58026557, 7);
 });
 
+
+test('the flip loan options are sent only when they differ from their defaults, so an older service still answers', () => {
+  const form = {
+    strategy: 'flip', propertyType: 'single_family', units: '1', rentableSquareFeet: '1655',
+    purchasePrice: '93000', closingCosts: '3000', dueDiligenceCosts: '2000', initialCapex: '0', holdMonths: '7',
+    ltv: '70', interestRate: '11', amortizationYears: '30', interestOnlyMonths: '7', loanTermYears: '1', originationFee: '2',
+    arv: '250000', rehabCost: '85000', rehabContingency: '15', monthlyHolding: '450', otherProjectCosts: '4000',
+    sellingCosts: '7', discountRate: '10', rehabFinanced: '0', loanBasis: 'purchase_price',
+  };
+  const plain = buildDealRequest(form).debt[0];
+  expect(plain).not.toHaveProperty('rehab_financed_rate');
+  expect(plain).not.toHaveProperty('loan_basis');
+  expect(buildDealRequest({ ...form, rehabFinanced: '', loanBasis: '' }).debt[0]).not.toHaveProperty('loan_basis');
+  const chosen = buildDealRequest({ ...form, rehabFinanced: '100', loanBasis: 'after_repair_value' }).debt[0];
+  expect(chosen.rehab_financed_rate).toBe(1);
+  expect(chosen.loan_basis).toBe('after_repair_value');
+  // Left out means the defaults: the browser engine sizes the loan on the price alone.
+  expect(analyzeDealLocally(buildDealRequest(form)).metrics.loan_amount.value).toBe(65100);
+});

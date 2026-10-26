@@ -282,6 +282,29 @@ frame house. Without comparables the reminder is a note.
 Decision version after items 2, 7 and 8: `diamond-decision-1.4.0`. The
 formula versions are unchanged, because the calculation is.
 
+## Until the service is redeployed (2026-10-26)
+
+The service is redeployed by hand from Cloud Shell (see
+`docs/de13-production-setup.md`) and lagged the page after the 22 October
+changes: production stayed on formula `1.1.0`, which does not know the two
+new loan fields and, like every service model, refuses a request carrying a
+field it does not know. For four days "Run base analysis" on the live Fix &
+flip tab answered an error. Two changes make the page work against an older
+service:
+
+- The two loan options (`rehab_financed_rate`, `loan_basis`) are sent only
+  when they differ from their defaults, so the usual deal reaches an older
+  service as it always did.
+- When the service answers a fix and flip with a formula older than `1.5.0`,
+  or refuses a field with "Extra inputs are not permitted", the page
+  calculates on the device, as it already did for land on a service older
+  than `1.1.0`, and says so in the result's notes. The device engine is
+  pinned to the service's figures by test. Any other rejection is still
+  shown as an error.
+
+Redeploying the service from `main` is still the right end state: the
+service then answers every fix and flip itself, with formula `1.5.0`.
+
 ## Tests (items 2, 7 and 8)
 
 - `frontend/src/lib/listingSignals.test.js`: the reference listing's four
