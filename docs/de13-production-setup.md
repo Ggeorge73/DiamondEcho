@@ -49,7 +49,8 @@ Cloud Run: 1 CPU, 1 GiB, concurrency 1, timeout 30 s, minimum 0 and maximum 3 in
 | `diamondecho-api-00003-prh` | `PUBLIC_ORIGIN`, `STAFF_ORIGIN`, `CORS_ORIGINS` moved to the `diamondecho.com` addresses |
 | `diamondecho-api-00004-kiq` | New image from `main` at `50705a5` (formula `diamond-underwriting-1.1.0`). Served all requests from 2026-10-06, shortly before 21:00 UTC, to 2026-10-07 01:05 UTC. Kept as the fallback |
 | `diamondecho-api-00007-deh` | New image from `main` at `f8853da` (assistant topics, continued conversations and fair-housing check; route list switched off). Served all requests from 2026-10-07 01:05 UTC to 01:45 UTC. Kept as the fallback |
-| `diamondecho-api-00010-car` | New image from `main` at `d151b51` (a plain tour request gets the tour request form). Serving all requests since 2026-10-07 01:45 UTC. Numbers 5, 6, 8 and 9 name no revision: the list shows 1, 2, 3, 4, 7 and 10. Each redeploy was followed by two traffic-only changes, and the next revision's number was three higher each time |
+| `diamondecho-api-00010-car` | New image from `main` at `d151b51` (a plain tour request gets the tour request form). Served all requests from 2026-10-07 01:45 UTC to 2026-10-26. Kept as the fallback. Numbers 5, 6, 8 and 9 name no revision: the list shows 1, 2, 3, 4, 7 and 10. Each redeploy was followed by two traffic-only changes, and the next revision's number was three higher each time |
+| `diamondecho-api-00022-zow` | New image from `main` at `3766d16` (formula `diamond-underwriting-1.5.0`: the 2026-10-22 Deal Studio changes, the loan basis, and the dependency updates since). Serving all requests since 2026-10-26, morning UTC |
 
 Always pass `--project diamondecho-prod`. Cloud Shell's default project can be either staging or production, depending on how the session was opened.
 
@@ -206,6 +207,45 @@ Not done: no request was sent through a form, and a return to revision 7 was not
 
 Left in the owner's Cloud Shell home, his to remove: `api-before3.json` and `api-after3.json` (they include the environment variable values), `cmp3.py`, `cmp3.out`, `deploy3.log`, `traffic3.log`, beside the items from the two earlier redeploys. Also `delprot.log` from switching delete protection on.
 
+### API redeploy from `3766d16` (2026-10-26, morning UTC)
+
+The owner's ask in chat, after merging the Fix & flip hotfix (PR #103): "can
+you redploy it for me?", then the steps below run by him in Cloud Shell, with
+the agent reading the output. The exact clock times were not recorded.
+
+**API moved from `d151b51` to `3766d16`.** Nineteen days of `main`: the 22
+October Deal Studio changes (PRs #98, #99, #100: the flip decision, both
+contingency rules, rehab financing, the loan basis and the hold-period
+driver, all in `backend/deal_intelligence`), the Dependabot updates to
+FastAPI, pydantic, uvicorn, tzdata, pytest and the Python 3.14 base image,
+and the assistant test change that came with them. The service formula moves
+from `diamond-underwriting-1.1.0` to `1.5.0`. Why now: since the Cloudflare
+deploy of PR #100 on 2026-10-22 the page had sent two loan fields the old
+service refused, so "Run base analysis" on the live Fix & flip tab answered an
+error for four days; PR #103 made the page tolerate the old service, and this
+redeploy ends the mismatch.
+
+1. A first attempt failed before building: `git clone` refused because the
+   Cloud Shell home already held a `DiamondEcho` clone, so the `cd` never ran
+   and `gcloud` found no `backend` folder. Second attempt from that clone,
+   after `git pull origin main`, at `3766d16` with nothing uncommitted.
+2. `gcloud run deploy diamondecho-api --source backend --project diamondecho-prod --region us-east1 --no-traffic --tag candidate --quiet`. Built with the Dockerfile. Result: `diamondecho-api-00022-zow`, serving 0 percent.
+3. Candidate checks at its temporary address: `/health` answered
+   `{"status":"ok"}`; the reference fix-and-flip request of
+   `docs/deal-studio-flip-decision.md` sent with `loan_basis` set to the
+   after-repair value, which the old service refused with 422, answered
+   `"formula_version":"diamond-underwriting-1.5.0"` and a loan amount of
+   175,000.
+4. `update-traffic --to-latest`, then `--remove-tags candidate`. One entry:
+   latest revision (`diamondecho-api-00022-zow`), 100 percent.
+
+Not done: the settings were not compared before and after as in the earlier
+redeploys; the staff list, route list and assistant answers were not
+re-checked on the candidate; a return to revision 10 was not rehearsed. The
+dependency updates in this image (FastAPI 0.156.1, pydantic 2.14, uvicorn
+0.54, Python 3.14) are serving for the first time; the service's own tests
+passed on `main` before the merge.
+
 ## Proven by the owner
 
 | Date | What Gbenga did | Result |
@@ -243,7 +283,7 @@ State on 2026-10-07, after the owner's decisions of that night (Jira DE-26, DE-1
 ## Undo
 
 - **Close the request slot at once:** `gcloud run services update diamondecho-api --region us-east1 --project diamondecho-prod --update-env-vars INQUIRY_STAFF_QUEUE_ENABLED=false`. The form then answers 503 and stores nothing.
-- **Return the API to the earlier code:** `gcloud run services update-traffic diamondecho-api --to-revisions=diamondecho-api-00007-deh=100 --project diamondecho-prod --region us-east1`. Revision 7 (`f8853da`) is kept for this; the only difference is that a plain tour request gets the assistant's opening menu again. Revision 4 (`50705a5`: the assistant's earlier answers, a public route list, formula `1.1.0`) and revision 3 (`f84c9ea`, formula `1.0.0`) are also still there. Either command pins traffic to the named revision, so a later deploy serves nothing until `--to-latest` is run. Not rehearsed.
+- **Return the API to the earlier code:** `gcloud run services update-traffic diamondecho-api --to-revisions=diamondecho-api-00010-car=100 --project diamondecho-prod --region us-east1`. Revision 10 (`d151b51`) is kept for this. Going back to it gives up the 22 October Deal Studio changes in the service and the dependency updates; the service would then refuse the two loan fields again, which the page tolerates since PR #103 (it calculates a fix and flip on the device when the service refuses or answers with an older formula), so Deal Studio keeps working either way.
 - **Allow the database to be deleted again:** `gcloud firestore databases update --database="(default)" --no-delete-protection --project diamondecho-prod`. Only needed before a deliberate removal, which is the owner's to run.
 - **Silence the alert:** disable the policy; do not remove it.
 - **Move DNS back:** at GoDaddy choose "GoDaddy Nameservers". If GoDaddy does not restore its record list, re-enter the nineteen records in the table above. Then set `PUBLIC_ORIGIN`, `STAFF_ORIGIN` and `CORS_ORIGINS` on the API, and `STAFF_ORIGIN` and `PUBLIC_ORIGIN` on the staff Pages project, back to the `pages.dev` addresses and rebuild the staff site.
