@@ -212,7 +212,7 @@ targets and separate approval.
 
 ```text
 npm ci
-npm run test --workspace frontend -- --watchAll=false --runInBand
+npm run test --workspace frontend
 npm run test:staff
 npm run build
 npm run build:staff

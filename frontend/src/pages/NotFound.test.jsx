@@ -16,7 +16,7 @@ const renderAt = async (path) => {
 
 beforeEach(() => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
-  window.scrollTo = jest.fn();
+  window.scrollTo = vi.fn();
   global.IntersectionObserver = class { observe() {} unobserve() {} disconnect() {} };
   document.title = 'DiamondEcho | Private Real Estate';
 });

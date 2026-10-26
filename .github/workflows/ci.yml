@@ -34,7 +34,7 @@ jobs:
         run: npm ci
 
       - name: Run tests
-        run: npm run test --workspace frontend -- --watchAll=false --runInBand
+        run: npm run test --workspace frontend
         env:
           CI: true
 
