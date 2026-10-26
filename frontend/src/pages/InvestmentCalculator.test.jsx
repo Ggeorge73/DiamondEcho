@@ -18,6 +18,7 @@ vi.mock('axios', () => { const axios = { get: vi.fn(), post: vi.fn() }; return {
 vi.mock('../lib/dealDecision', () => ({
   RENTAL_EVIDENCE_ITEMS: [],
   LAND_CHECKLIST_ITEMS: [],
+  FLIP_EVIDENCE_ITEMS: [],
   buildDecision: vi.fn(() => null),
 }));
 vi.mock('../lib/dealWorkbook', () => ({ downloadDealWorkbook: vi.fn() }));

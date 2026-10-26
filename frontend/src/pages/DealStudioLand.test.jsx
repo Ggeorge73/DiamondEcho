@@ -93,7 +93,11 @@ describe('land development Go / No-Go', () => {
     const rows = [...container.querySelectorAll('.studio-scenario-row')].map((row) => row.textContent);
     expect(rows[0]).toBe('CaseProfitMarginROIIRR');
     expect(rows.slice(1).map((row) => row.split('$')[0].replace('-', ''))).toEqual(['Downside', 'Base', 'Upside']);
-    expect(text()).toContain('The downside case loses $93,752.');
+    // The downside's 10% cost rise replaces the 10% contingency, so this deal
+    // no longer loses money in it (it lost $93,752 when the contingency was
+    // applied on top of the rise).
+    expect(rows[1]).toContain('Downside$106,035');
+    expect(text()).not.toContain('The downside case loses');
   });
 
   test('the residual land value shown beside the decision is the same number as the ceiling', async () => {
@@ -124,14 +128,17 @@ describe('land development Go / No-Go', () => {
     expect(text()).toContain('Diligence checklist complete');
   });
 
-  test('the rental tab keeps its decision and fix and flip still has a plain base case', async () => {
+  test('the rental tab keeps its decision and fix and flip has its own', async () => {
     await runBase();
     expect(text()).toContain('RECOMMENDED MAXIMUM');
     expect(text()).not.toContain('MAXIMUM LAND PRICE');
     await click('Fix & flip');
-    expect(button('Base case')).toBeTruthy();
+    expect(button('IC decision')).toBeTruthy();
+    expect(button('Base case')).toBeUndefined();
     await runBase();
-    expect(text()).toContain('Analysis complete');
+    expect(text()).toContain('MAXIMUM OFFER');
+    expect(text()).not.toContain('MAXIMUM LAND PRICE');
+    expect(text()).not.toContain('Analysis complete');
   });
 });
 

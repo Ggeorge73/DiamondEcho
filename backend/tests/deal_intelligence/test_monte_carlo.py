@@ -1,3 +1,4 @@
+import pytest
 from backend.deal_intelligence.models import DealAnalysisRequest, MonteCarloRequest
 from backend.deal_intelligence.engine import analyze_deal
 from backend.deal_intelligence.monte_carlo import loss_equivalent_return, run_monte_carlo
@@ -112,7 +113,7 @@ def test_losses_without_a_solvable_irr_are_counted_not_dropped():
     assert scenario.summaries["npv"].loss_without_irr_count == 0
 
 
-def _land_deal():
+def _land_deal(contingency_rate=0.1):
     return DealAnalysisRequest(
         strategy="land",
         property={"property_type": "land", "unit_count": 12},
@@ -125,7 +126,7 @@ def _land_deal():
         land={
             "site_acres": 2.5, "planned_units": 12, "development_months": 24,
             "site_work_cost": 300_000, "hard_construction_cost": 1_500_000, "soft_costs": 200_000,
-            "permits_impact_fees": 100_000, "developer_fee": 100_000, "contingency_rate": 0.1,
+            "permits_impact_fees": 100_000, "developer_fee": 100_000, "contingency_rate": contingency_rate,
             "annual_carrying_costs": 30_000, "expected_terminal_value": 7_500_000,
             "target_profit_margin": 0.2,
         },
@@ -158,6 +159,65 @@ def test_land_development_monte_carlo_uses_the_land_drivers():
     # Costs only rise and the terminal value mostly falls in this case, so most
     # outcomes sit below the base profit; some must still be profitable.
     assert 0 < profit.probability_above_zero < 1
+
+
+_LAND_CONTINGENCY_BASIS = 300_000 + 1_500_000  # site work + hard construction
+_LAND_OTHER_COSTS = 200_000 + 100_000 + 0 + 100_000  # soft, permits, remediation, fee
+
+
+def _fixed_development_cost_change(change, contingency=0.1):
+    # A distribution with one value draws that value every time, so the
+    # simulation becomes a deterministic re-run with that cost change.
+    request = MonteCarloRequest(
+        deal=_land_deal(contingency),
+        scenarios=[{
+            "name": "Fixed", "iterations": 250, "seed": 7,
+            "drivers": {"development_cost_change": {"minimum": change, "mode": change, "maximum": change}},
+        }],
+    )
+    summary = run_monte_carlo(request).scenarios[0].summaries["development_profit"]
+    assert summary.minimum == pytest.approx(summary.maximum)
+    return summary.p50
+
+
+def _profit_with_costs_scaled(factor, contingency):
+    deal = _land_deal(contingency)
+    for field in (
+        "site_work_cost", "hard_construction_cost", "soft_costs",
+        "permits_impact_fees", "environmental_remediation", "developer_fee",
+    ):
+        setattr(deal.land, field, getattr(deal.land, field) * factor)
+    return analyze_deal(deal).metrics["development_profit"].value
+
+
+def test_a_development_cost_rise_beyond_the_contingency_adds_only_the_excess():
+    # Same shape of fault as item 6 of the 2026-10-22 flip review: a 30% rise
+    # with a 10% contingency used to cost 1.3 x 1.1 = 43% over budget on site
+    # work and hard construction.
+    simulated = _fixed_development_cost_change(0.30)
+    assert simulated == pytest.approx(_profit_with_costs_scaled(1.30, 0), abs=0.01)
+    compounded = _profit_with_costs_scaled(1.30, 0.10)
+    assert simulated == pytest.approx(compounded + _LAND_CONTINGENCY_BASIS * 1.30 * 0.10, abs=0.01)
+
+
+def test_a_draw_equal_to_the_land_contingency_is_the_base_case_on_the_contingency_basis():
+    base = analyze_deal(_land_deal()).metrics["development_profit"].value
+    # Site work and hard construction come out exactly as in the base case,
+    # which spends the whole reserve. The four costs that carry no contingency
+    # still rise by the draw, so the profit is below the base by that much.
+    assert _fixed_development_cost_change(0.10) == pytest.approx(base - _LAND_OTHER_COSTS * 0.10, abs=0.01)
+    # A smaller draw means the reserve was not all needed: better than the base
+    # case by the unspent share of the basis, less the rise in the other costs.
+    assert _fixed_development_cost_change(0.05) == pytest.approx(
+        base + _LAND_CONTINGENCY_BASIS * 0.05 - _LAND_OTHER_COSTS * 0.05, abs=0.01,
+    )
+    assert _fixed_development_cost_change(0.0) == pytest.approx(base + _LAND_CONTINGENCY_BASIS * 0.10, abs=0.01)
+
+
+def test_a_land_deal_without_a_contingency_takes_the_whole_cost_change():
+    simulated = _fixed_development_cost_change(0.20, contingency=0)
+    assert simulated == pytest.approx(_profit_with_costs_scaled(1.20, 0), abs=0.01)
+    assert simulated < analyze_deal(_land_deal(0)).metrics["development_profit"].value
 
 
 # --- Time budget (DE-33): a run that would overrun stops cleanly and says so ---
@@ -275,3 +335,159 @@ def test_the_route_applies_the_budget(monkeypatch):
         assert scenario["iterations_requested"] == 1000
         assert scenario["iterations_completed"] + scenario["failed_iterations"] == 50
         assert any("simulation capped at 50 iterations" in w for w in scenario["warnings"])
+
+
+def _flip_deal(rehab_contingency_rate=0.15):
+    # A rural fixer underwritten on 2026-10-22: $93,000 price, hard-money loan
+    # at 70% / 11% / interest only / 2 points, $85,000 rehab with a 15%
+    # contingency, $250,000 after-repair value, seven-month hold.
+    return DealAnalysisRequest(
+        strategy="flip",
+        property={"property_type": "single_family"},
+        acquisition={
+            "purchase_price": 93_000, "closing_costs": 3_000,
+            "due_diligence_costs": 2_000, "hold_months": 7,
+        },
+        debt=[{
+            "loan_to_value": 0.70, "annual_interest_rate": 0.11, "amortization_years": 30,
+            "interest_only_months": 7, "term_months": 12, "origination_fee_rate": 0.02,
+        }],
+        flip={
+            "after_repair_value": 250_000, "rehab_cost": 85_000,
+            "rehab_contingency_rate": rehab_contingency_rate,
+            "monthly_holding_costs": 450, "other_project_costs": 4_000,
+        },
+        exit={"selling_cost_rate": 0.07},
+        assumptions={"annual_discount_rate": 0.10},
+    )
+
+
+def test_the_flip_reference_deal_matches_the_figures_checked_by_hand():
+    result = analyze_deal(_flip_deal())
+    assert result.metrics["flip_profit"].value == pytest.approx(24_121, abs=1)
+    assert result.metrics["flip_roi"].value == pytest.approx(0.1683, abs=0.0001)
+    assert result.metrics["irr"].value == pytest.approx(0.3156, abs=0.0001)
+    assert result.metrics["npv"].value == pytest.approx(15_296, abs=1)
+    assert result.metrics["equity_multiple"].value == pytest.approx(1.17, abs=0.005)
+    assert result.metrics["ltc"].value == pytest.approx(0.326, abs=0.0005)
+    assert result.metrics["max_offer_70_rule"].value == pytest.approx(77_250)
+
+
+def _fixed_rehab_overrun(overrun, contingency=0.15):
+    # A distribution with one value draws that value every time, so the
+    # simulation becomes a deterministic re-run with that overrun.
+    request = MonteCarloRequest(
+        deal=_flip_deal(contingency),
+        scenarios=[{
+            "name": "Fixed", "iterations": 250, "seed": 7,
+            "drivers": {"rehab_cost_change": {"minimum": overrun, "mode": overrun, "maximum": overrun}},
+        }],
+    )
+    summary = run_monte_carlo(request).scenarios[0].summaries["flip_profit"]
+    assert summary.minimum == pytest.approx(summary.maximum)
+    return summary.p50
+
+
+def _profit_with_rehab(rehab_cost, contingency):
+    deal = _flip_deal(contingency)
+    deal.flip.rehab_cost = rehab_cost
+    return analyze_deal(deal).metrics["flip_profit"].value
+
+
+def test_a_rehab_overrun_beyond_the_contingency_adds_only_the_excess():
+    # Item 6 of the 2026-10-22 review: a 35% overrun on top of a 15%
+    # contingency used to cost 1.35 x 1.15 = 55% over budget.
+    simulated = _fixed_rehab_overrun(0.35)
+    assert simulated == pytest.approx(_profit_with_rehab(85_000 * 1.35, 0), abs=0.01)
+    compounded = _profit_with_rehab(85_000 * 1.35, 0.15)
+    assert simulated > compounded + 10_000
+
+
+def test_a_draw_equal_to_the_contingency_is_the_base_case_and_a_smaller_one_is_better():
+    base = analyze_deal(_flip_deal()).metrics["flip_profit"].value
+    assert _fixed_rehab_overrun(0.15) == pytest.approx(base, abs=0.01)
+    # The reserve was only partly needed, so the simulation is better than the
+    # base case, which spends all of it, by the unspent 5% of the budget.
+    assert _fixed_rehab_overrun(0.10) == pytest.approx(base + 85_000 * 0.05, abs=0.01)
+    assert _fixed_rehab_overrun(0.0) == pytest.approx(base + 85_000 * 0.15, abs=0.01)
+
+
+def test_a_flip_without_a_contingency_takes_the_whole_overrun():
+    simulated = _fixed_rehab_overrun(0.20, contingency=0)
+    assert simulated == pytest.approx(_profit_with_rehab(85_000 * 1.20, 0), abs=0.01)
+    assert simulated < analyze_deal(_flip_deal(0)).metrics["flip_profit"].value
+
+
+def _fixed_hold_change(months):
+    request = MonteCarloRequest(
+        deal=_flip_deal(),
+        scenarios=[{
+            "name": "Fixed", "iterations": 250, "seed": 7,
+            "drivers": {"hold_months_change": {"minimum": months, "mode": months, "maximum": months}},
+        }],
+    )
+    summary = run_monte_carlo(request).scenarios[0].summaries["flip_profit"]
+    assert summary.minimum == pytest.approx(summary.maximum)
+    return summary.p50
+
+
+def test_the_hold_period_is_a_simulation_driver_in_whole_months():
+    # Item 5 of the 2026-10-22 review: timeline is what kills a slow flip, and
+    # the simulation could not draw it.
+    deal = _flip_deal()
+    deal.acquisition.hold_months = 10
+    three_months_longer = analyze_deal(deal).metrics["flip_profit"].value
+    assert _fixed_hold_change(3) == pytest.approx(three_months_longer, abs=0.01)
+    assert _fixed_hold_change(3) < analyze_deal(_flip_deal()).metrics["flip_profit"].value
+    # A fractional draw is rounded to whole months, and the hold never drops below one.
+    assert _fixed_hold_change(2.6) == pytest.approx(three_months_longer, abs=0.01)
+    deal.acquisition.hold_months = 1
+    assert _fixed_hold_change(-20) == pytest.approx(analyze_deal(deal).metrics["flip_profit"].value, abs=0.01)
+
+
+def test_the_simulation_keeps_a_flip_loan_at_its_base_size():
+    # A lender sizes the loan once, on the underwritten after-repair value; a
+    # draw that lowers the value must not shrink the loan.
+    deal = _flip_deal()
+    deal.debt[0].loan_basis = "after_repair_value"
+    request = MonteCarloRequest(
+        deal=deal,
+        scenarios=[{
+            "name": "Fixed", "iterations": 250, "seed": 7,
+            "drivers": {"after_repair_value_change": {"minimum": -0.1, "mode": -0.1, "maximum": -0.1}},
+        }],
+    )
+    simulated = run_monte_carlo(request).scenarios[0].summaries["flip_profit"].p50
+    kept = _flip_deal()
+    kept.flip.after_repair_value = 225_000
+    kept.debt[0].principal = 175_000
+    kept.debt[0].loan_to_value = None
+    assert simulated == pytest.approx(analyze_deal(kept).metrics["flip_profit"].value, abs=0.01)
+    resized = _flip_deal()
+    resized.flip.after_repair_value = 225_000
+    resized.debt[0].loan_basis = "after_repair_value"
+    assert abs(simulated - analyze_deal(resized).metrics["flip_profit"].value) > 100
+    # The request itself is left as sent.
+    assert deal.debt[0].principal is None
+
+
+def test_a_pinned_loan_never_exceeds_the_project_cost_a_draw_leaves():
+    deal = _flip_deal()
+    deal.acquisition.purchase_price = 70_000
+    deal.debt[0].loan_basis = "after_repair_value"
+    request = MonteCarloRequest(
+        deal=deal,
+        scenarios=[{
+            "name": "Fixed", "iterations": 250, "seed": 7,
+            "drivers": {"rehab_cost_change": {"minimum": 0, "mode": 0, "maximum": 0}},
+        }],
+    )
+    scenario = run_monte_carlo(request).scenarios[0]
+    assert scenario.failed_iterations == 0
+    cost = 70_000 + 3_000 + 2_000 + 85_000 + 4_000
+    capped = _flip_deal()
+    capped.acquisition.purchase_price = 70_000
+    capped.flip.rehab_contingency_rate = 0
+    capped.debt[0].principal = cost
+    capped.debt[0].loan_to_value = None
+    assert scenario.summaries["flip_profit"].p50 == pytest.approx(analyze_deal(capped).metrics["flip_profit"].value, abs=0.01)

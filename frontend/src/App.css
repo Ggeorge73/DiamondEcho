@@ -678,6 +678,10 @@ h1, h2, h3, .display { font-family: 'Sora', 'Inter', sans-serif; }
 .studio-change-notice button svg { width: 13px; }
 .studio-change-notice .studio-change-notice__dismiss { min-width: 44px; padding: 0; justify-content: center; font-size: 18px; letter-spacing: 0; }
 .studio-field__hint { display: block; margin-top: 6px; color: var(--mist); font-size: 10px; line-height: 1.5; }
+.studio-inline-actions { margin: 4px 0 22px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.studio-inline-actions p { margin: 0; flex: 1 1 240px; color: var(--mist); font-size: 11px; line-height: 1.6; }
+.studio-inline-actions button { padding: 10px 14px; border: 1px solid var(--line-strong); background: transparent; color: var(--ice); font-size: 10px; letter-spacing: .04em; cursor: pointer; }
+.studio-inline-actions button:hover { background: var(--panel-raised); }
 .studio-progress { width: min(100%, 320px); height: 4px; margin: 22px auto 0; background: var(--line); }
 .studio-progress span { display: block; height: 100%; background: var(--steel-bright); transition: width .2s linear; }
 .studio-decision-kpis--minor article { min-height: 104px; }

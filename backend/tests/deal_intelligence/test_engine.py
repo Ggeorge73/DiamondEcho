@@ -265,3 +265,99 @@ def test_flood_warnings_follow_the_designation():
     assert "Special Flood Hazard Area" in _flood_warnings("AE")[0] and "AE" in _flood_warnings("AE")[0]
     assert "moderate flood-hazard" in _flood_warnings("X (shaded)")[0]
     assert "has not determined" in _flood_warnings("D")[0]
+
+
+def test_a_flip_loan_can_fund_a_share_of_the_rehab_budget():
+    # Item 4 of the 2026-10-22 review: the loan was sized on the price alone,
+    # so a hard-money flip showed a 32.6% loan-to-cost that no flipper has.
+    def request(rehab_financed_rate):
+        return DealAnalysisRequest(
+            strategy="flip",
+            property={"property_type": "single_family"},
+            acquisition={"purchase_price": 93_000, "closing_costs": 3_000, "due_diligence_costs": 2_000, "hold_months": 7},
+            debt=[{
+                "loan_to_value": 0.70, "annual_interest_rate": 0.11, "amortization_years": 30,
+                "interest_only_months": 7, "term_months": 12, "origination_fee_rate": 0.02,
+                "rehab_financed_rate": rehab_financed_rate,
+            }],
+            flip={"after_repair_value": 250_000, "rehab_cost": 85_000, "rehab_contingency_rate": 0.15,
+                  "monthly_holding_costs": 450, "other_project_costs": 4_000},
+            exit={"selling_cost_rate": 0.07},
+        )
+
+    on_price_only = analyze_deal(request(0))
+    with_rehab = analyze_deal(request(1.0))
+    assert on_price_only.metrics["ltc"].value == pytest.approx(0.326, abs=0.0005)
+    # 70% of $93,000 plus all of the $85,000 budget: $150,100 on $199,750 of cost.
+    assert with_rehab.metrics["ltc"].value == pytest.approx(150_100 / 199_750, abs=1e-6)
+    assert with_rehab.metrics["ltv"].value == pytest.approx(150_100 / 93_000, abs=1e-6)
+    # The extra $85,000 costs 2 points and seven months of 11% interest, and
+    # nothing else changes.
+    extra_cost = 85_000 * (0.02 + 0.11 * 7 / 12)
+    assert with_rehab.metrics["flip_profit"].value == pytest.approx(
+        on_price_only.metrics["flip_profit"].value - extra_cost, abs=0.01
+    )
+    # Less cash in, so the return on cash rises even though the profit falls.
+    assert with_rehab.metrics["flip_roi"].value > on_price_only.metrics["flip_roi"].value
+    # An explicit principal is taken as given.
+    explicit = request(1.0)
+    explicit.debt[0].principal = 100_000
+    explicit.debt[0].loan_to_value = None
+    assert analyze_deal(explicit).metrics["ltv"].value == pytest.approx(100_000 / 93_000, abs=1e-6)
+
+
+def _basis_request(**debt):
+    return DealAnalysisRequest(
+        strategy="flip",
+        property={"property_type": "single_family"},
+        acquisition={"purchase_price": 93_000, "closing_costs": 3_000, "due_diligence_costs": 2_000, "hold_months": 7},
+        debt=[{
+            "loan_to_value": 0.70, "annual_interest_rate": 0.11, "amortization_years": 30,
+            "interest_only_months": 7, "term_months": 12, "origination_fee_rate": 0.02, **debt,
+        }],
+        flip={"after_repair_value": 250_000, "rehab_cost": 85_000, "rehab_contingency_rate": 0.15,
+              "monthly_holding_costs": 450, "other_project_costs": 4_000},
+        exit={"selling_cost_rate": 0.07},
+    )
+
+
+def test_a_loan_can_be_sized_on_the_price_the_total_cost_or_the_after_repair_value():
+    on_price = analyze_deal(_basis_request())
+    assert on_price.metrics["loan_amount"].value == pytest.approx(65_100)
+    assert on_price.metrics["loan_amount"].formula == "loan-to-value x purchase price"
+    on_cost = analyze_deal(_basis_request(loan_basis="total_project_cost"))
+    assert on_cost.metrics["loan_amount"].value == pytest.approx(0.7 * 199_750)
+    assert on_cost.metrics["loan_amount"].components["basis_amount"] == pytest.approx(199_750)
+    on_arv = analyze_deal(_basis_request(loan_basis="after_repair_value"))
+    assert on_arv.metrics["loan_amount"].value == pytest.approx(175_000)
+    assert on_arv.metrics["ltv"].value == pytest.approx(175_000 / 93_000)
+    assert on_arv.metrics["ltc"].value == pytest.approx(175_000 / 199_750)
+    # The financed share of the rehab applies to the price basis only.
+    assert analyze_deal(_basis_request(rehab_financed_rate=1.0)).metrics["loan_amount"].value == pytest.approx(150_100)
+    assert analyze_deal(_basis_request(rehab_financed_rate=1.0)).metrics["loan_amount"].formula == (
+        "loan-to-value x purchase price + financed share of the rehab budget"
+    )
+    assert analyze_deal(_basis_request(rehab_financed_rate=1.0, loan_basis="after_repair_value")).metrics["loan_amount"].value == pytest.approx(175_000)
+    assert analyze_deal(_basis_request(rehab_financed_rate=1.0, loan_basis="total_project_cost")).metrics["loan_amount"].value == pytest.approx(0.7 * 199_750)
+
+
+def test_an_after_repair_value_basis_is_a_flip_idea_only():
+    with pytest.raises(ValidationError, match="after_repair_value loan basis"):
+        DealAnalysisRequest(
+            strategy="rental",
+            property={"property_type": "multifamily", "unit_count": 12},
+            acquisition={"purchase_price": 3_000_000, "hold_months": 60},
+            debt=[{"loan_to_value": 0.65, "annual_interest_rate": 0.0675, "loan_basis": "after_repair_value"}],
+            operating={"gross_scheduled_rent": 360_000, "vacancy_rate": 0.05, "operating_expenses": 126_000},
+            exit={"exit_cap_rate": 0.065},
+        )
+    # Total project cost is fine for a rental: price, closing, diligence and capital work.
+    rental = DealAnalysisRequest(
+        strategy="rental",
+        property={"property_type": "multifamily", "unit_count": 12},
+        acquisition={"purchase_price": 3_000_000, "closing_costs": 75_000, "initial_capex": 125_000, "hold_months": 60},
+        debt=[{"loan_to_value": 0.65, "annual_interest_rate": 0.0675, "loan_basis": "total_project_cost"}],
+        operating={"gross_scheduled_rent": 360_000, "vacancy_rate": 0.05, "operating_expenses": 126_000},
+        exit={"exit_cap_rate": 0.065},
+    )
+    assert analyze_deal(rental).metrics["ltv"].value == pytest.approx(0.65 * 3_200_000 / 3_000_000)
