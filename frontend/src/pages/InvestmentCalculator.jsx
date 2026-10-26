@@ -17,7 +17,7 @@ import { classifyFloodZone } from '../lib/floodZone';
 import { downloadDealWorkbook } from '../lib/dealWorkbook';
 import { buildDealRequest } from '../lib/dealRequest';
 import {
-  MONTE_CARLO_VACANCY_CAP_PERCENT, responseErrorMessage, validateDealForm,
+  FIELD_LABELS, MONTE_CARLO_VACANCY_CAP_PERCENT, responseErrorMessage, validateDealForm,
   validateMonteCarloForm, validateMonteCarloScenarios,
 } from '../lib/dealValidation';
 import { buildMonteCarloScenarios, MONTE_CARLO_CASES } from '../lib/monteCarloCases';
@@ -33,9 +33,10 @@ import { applyPropertyAutofill, prepareAddressEdit, preparePropertyChange } from
 // The service and this page carry the same formulas, but the service is
 // redeployed by hand and can lag. When it answers with a formula older than a
 // strategy needs, the page calculates on this device instead, so it never
-// shows an older figure beside its decision. Land needs 1.1.0 (the residual
-// land value); fix and flip needs 1.5.0 (the loan amount and its basis).
-const SERVICE_FORMULA_MINIMUM = { land: [1, 1], flip: [1, 5] };
+// shows an older figure beside its decision. Fix and flip needs 1.5.0 (the
+// loan amount and its basis); land needs 1.6.0 (the development timetable);
+// rental needs 1.6.0 (the coverage after reserves and TI).
+const SERVICE_FORMULA_MINIMUM = { rental: [1, 6], land: [1, 6], flip: [1, 5] };
 export const serviceFormulaIsCurrent = (version, minimum) => {
   const match = /(\d+)\.(\d+)\.\d+$/.exec(String(version || ''));
   if (!match || !minimum) return true; // not a version this page can read: leave the result alone
@@ -44,6 +45,7 @@ export const serviceFormulaIsCurrent = (version, minimum) => {
 };
 export const landServiceFormulaIsCurrent = (version) => serviceFormulaIsCurrent(version, SERVICE_FORMULA_MINIMUM.land);
 export const flipServiceFormulaIsCurrent = (version) => serviceFormulaIsCurrent(version, SERVICE_FORMULA_MINIMUM.flip);
+export const rentalServiceFormulaIsCurrent = (version) => serviceFormulaIsCurrent(version, SERVICE_FORMULA_MINIMUM.rental);
 // A service that does not know a field yet refuses the whole request with 422
 // and "Extra inputs are not permitted" for that field. That is the service
 // lagging the page, not a bad figure, so the page calculates on the device.
@@ -116,7 +118,7 @@ const initialForm = {
   lastSalePrice: '', lastSaleDate: '', originalListPrice: '', daysOnMarket: '',
   ownerType: '', disclosureStatus: '', saleTerms: '',
   otherProjectCosts: '6000', sellingCosts: '6', discountRate: '10', mcIterations: '2500',
-  targetCashOnCash: '8', minimumDscr: '1.2', targetIrr: '15', preliminaryMarketCeiling: '',
+  targetCashOnCash: '8', minimumDscr: '1.2', dscrBasis: 'noi', targetIrr: '15', preliminaryMarketCeiling: '',
   maxImmediateCapex: '', maxAnnualTaxes: '', maxAnnualInsurance: '',
   // The fix-and-flip targets: the least profit, and the least return on the
   // cash put in, that make the deal worth doing. Both are the visitor's to set.
@@ -150,12 +152,41 @@ const initialForm = {
 // the visitor edits the band it follows the rate they enter, so a flip at 11%
 // is simulated around 11%, not around a figure left over from the example.
 export const MONTE_CARLO_INTEREST_FIELDS = Object.freeze(['mcInterestMin', 'mcInterestMode', 'mcInterestMax']);
+const bandPoint = (value, floor = 0) => String(Number(Math.max(floor, value).toFixed(2)));
+const entered = (text) => (text === '' || text == null || !Number.isFinite(Number(text)) ? null : Number(text));
 export const interestBand = (rateText) => {
-  const entered = Number(rateText);
-  if (rateText === '' || rateText == null || !Number.isFinite(entered)) return null;
-  const point = (value) => String(Number(Math.max(0, value).toFixed(2)));
-  return { mcInterestMin: point(entered - 1), mcInterestMode: point(entered), mcInterestMax: point(entered + 1.75) };
+  const rate = entered(rateText);
+  if (rate === null) return null;
+  return { mcInterestMin: bandPoint(rate - 1), mcInterestMode: bandPoint(rate), mcInterestMax: bandPoint(rate + 1.75) };
 };
+// The rental simulation's vacancy and exit-cap bands follow the entered figures
+// the same way (the 2026-10-26 review found them left at the example's values):
+// vacancy two points below to nine above, with the mode one point above the
+// entered figure; exit cap 0.75 points below to 1.5 above, with the mode 0.25
+// above. These are the offsets of the starting figures (3 / 6 / 14 around 5%,
+// 5.75 / 6.75 / 8 around 6.5%), so the untouched example is unchanged.
+export const MONTE_CARLO_VACANCY_FIELDS = Object.freeze(['mcVacancyMin', 'mcVacancyMode', 'mcVacancyMax']);
+export const MONTE_CARLO_EXIT_CAP_FIELDS = Object.freeze(['mcExitCapMin', 'mcExitCapMode', 'mcExitCapMax']);
+export const vacancyBand = (vacancyText) => {
+  const vacancy = entered(vacancyText);
+  if (vacancy === null) return null;
+  return { mcVacancyMin: bandPoint(vacancy - 2), mcVacancyMode: bandPoint(Math.min(MONTE_CARLO_VACANCY_CAP_PERCENT, vacancy + 1)), mcVacancyMax: bandPoint(Math.min(MONTE_CARLO_VACANCY_CAP_PERCENT, vacancy + 9)) };
+};
+export const exitCapBand = (capText) => {
+  const cap = entered(capText);
+  if (cap === null) return null;
+  return { mcExitCapMin: bandPoint(cap - 0.75, 0.1), mcExitCapMode: bandPoint(cap + 0.25, 0.1), mcExitCapMax: bandPoint(cap + 1.5, 0.1) };
+};
+// Each band, the box it follows and the strategies it is used for.
+export const MONTE_CARLO_BANDS = Object.freeze([
+  { key: 'interest', label: 'Interest-rate band', source: 'interestRate', sourceLabel: 'interest rate', fields: MONTE_CARLO_INTEREST_FIELDS, band: interestBand, strategies: ['rental', 'flip', 'land'] },
+  { key: 'vacancy', label: 'Vacancy band', source: 'vacancy', sourceLabel: 'vacancy', fields: MONTE_CARLO_VACANCY_FIELDS, band: vacancyBand, strategies: ['rental'] },
+  { key: 'exitCap', label: 'Exit-cap band', source: 'exitCap', sourceLabel: 'exit cap rate', fields: MONTE_CARLO_EXIT_CAP_FIELDS, band: exitCapBand, strategies: ['rental'] },
+]);
+// The bands that still follow their boxes, given which boxes the visitor set.
+export const followingBands = (form, enteredFields) => Object.assign({}, ...MONTE_CARLO_BANDS
+  .filter((rule) => !rule.fields.some((field) => enteredFields.has(field)))
+  .map((rule) => rule.band(form[rule.source]) || {}));
 
 // DE-37. The price, closing costs, hold period and loan terms are one set of
 // boxes for all three tabs, and they start as an apartment-building example: a
@@ -183,6 +214,22 @@ export const FLIP_EXAMPLE_SHARED = Object.freeze({
 });
 
 const SHARED_EXAMPLE_FIELDS = Object.keys(FLIP_EXAMPLE_SHARED);
+// Of the shared boxes, these describe the property; the other three (hold
+// period, interest-only period, loan term) describe the strategy.
+const SHARED_PROPERTY_FACTS = ['units', 'rentableSquareFeet', 'purchasePrice', 'closingCosts', 'dueDiligenceCosts', 'initialCapex'];
+// Each tab's own example figures that describe a property. When the visitor
+// has typed a purchase price, a tab opened for the first time must not fill
+// these with the example's: a $360,000 after-repair value beside a typed
+// $3,000,000 price read as a $2.9 million loss (the 2026-10-26 review).
+export const STRATEGY_EXAMPLE_FACTS = Object.freeze({
+  rental: ['annualRent', 'otherIncome', 'vacancy', 'propertyTaxes', 'insurance', 'repairsMaintenance', 'utilities', 'payrollAdmin', 'reserves', 'annualBelowNoiCosts', 'exitCap'],
+  flip: ['arv', 'rehabCost', 'monthlyHolding', 'otherProjectCosts'],
+  land: ['siteAcres', 'siteWorkCost', 'hardConstructionCost', 'softCosts', 'permitsImpactFees', 'developerFee', 'annualCarryingCosts', 'expectedTerminalValue'],
+});
+// The destination tab's example facts still at their example values, to clear.
+export const exampleFactsToClear = (form, toStrategy, held = new Set()) => Object.fromEntries((STRATEGY_EXAMPLE_FACTS[toStrategy] || [])
+  .filter((field) => !held.has(field) && form[field] === initialForm[field] && initialForm[field] !== '' && initialForm[field] !== '0')
+  .map((field) => [field, form[field]]));
 const BUILDING_EXAMPLE_SHARED = Object.fromEntries(SHARED_EXAMPLE_FIELDS.map((field) => [field, initialForm[field]]));
 // Each tab's example, for the boxes the tabs share.
 const SHARED_EXAMPLES = {
@@ -418,12 +465,24 @@ const InvestmentCalculator = () => {
     enteredFields.current.add(name);
     if (name === 'propertyType') assetTypeIsExample.current = false;
     setPropertyProvenance((current) => ({ ...current, [name]: { source: 'Your input', description: 'Entered for this analysis; verify before relying on it' } }));
-    // The simulation's interest-rate band follows the entered rate while the
-    // visitor has not set the band themselves (item 1 of the 2026-10-22 review).
-    const band = name === 'interestRate' && !MONTE_CARLO_INTEREST_FIELDS.some((field) => enteredFields.current.has(field))
-      ? interestBand(value) : null;
+    // The simulation's bands follow the boxes they are about while the visitor
+    // has not set the band themselves (item 1 of the 2026-10-22 review; the
+    // vacancy and exit-cap bands since the 2026-10-26 review).
+    const rule = MONTE_CARLO_BANDS.find((item) => item.source === name && !item.fields.some((field) => enteredFields.current.has(field)));
+    const band = rule ? rule.band(value) : null;
     setForm((current) => ({ ...current, [name]: value, ...(band || {}) }));
   };
+
+  // A band the visitor set goes back to following its box.
+  const followBandAgain = (rule) => {
+    invalidateAnalysis();
+    rule.fields.forEach((field) => enteredFields.current.delete(field));
+    setForm((current) => ({ ...current, ...(rule.band(current[rule.source]) || {}) }));
+  };
+
+  // A rental hold typed in months that reads like years (item 2 of the
+  // 2026-10-26 review: "5" meant five years and gave a five-month hold).
+  const useYears = (years) => applyFields({ holdMonths: String(years * 12) });
 
   // Several boxes filled by one button press. They count as entered, like typing.
   const applyFields = (values) => {
@@ -449,6 +508,11 @@ const InvestmentCalculator = () => {
   const switchStrategy = (strategy, { chosenType } = {}) => {
     if (strategy === form.strategy) return;
     invalidateAnalysis();
+    // A typed purchase price (or one loaded for an address) anchors the other
+    // tabs to this property: the shared facts about it stay, its asset type
+    // stays, and the destination tab's own example facts are cleared instead
+    // of being filled in beside it (the 2026-10-26 review).
+    const priceHeld = enteredFields.current.has('purchasePrice') || 'purchasePrice' in propertyProvenance;
     const previousType = form.propertyType;
     let nextType = previousType;
     // The untouched example asset type moved with the example (rental and flip).
@@ -467,7 +531,7 @@ const InvestmentCalculator = () => {
         ? EXAMPLE_ASSET_TYPES[strategy]
         : lastBuiltType.current || EXAMPLE_ASSET_TYPES[strategy];
       assetTypeIsExample.current = lastBuiltWasExample.current;
-    } else if (assetTypeIsExample.current && previousType === EXAMPLE_ASSET_TYPES[form.strategy]) {
+    } else if (assetTypeIsExample.current && previousType === EXAMPLE_ASSET_TYPES[form.strategy] && !priceHeld) {
       nextType = EXAMPLE_ASSET_TYPES[strategy];
       exampleTypeMoved = nextType !== previousType;
     }
@@ -476,8 +540,12 @@ const InvestmentCalculator = () => {
     }
     // Untouched example figures follow the tab; anything entered, or loaded for
     // an address, stays (DE-37, DE-25).
-    const held = new Set([...enteredFields.current, ...Object.keys(propertyProvenance)]);
+    const held = new Set([...enteredFields.current, ...Object.keys(propertyProvenance), ...(priceHeld ? SHARED_PROPERTY_FACTS : [])]);
     const swapped = exampleSwap(form, form.strategy, strategy, held);
+    const cleared = priceHeld ? exampleFactsToClear(form, strategy, held) : {};
+    const clearedNote = Object.keys(cleared).length
+      ? ` You entered a purchase price, so the ${strategy === 'land' ? 'land' : strategy === 'flip' ? 'fix-and-flip' : 'building'} example figures were not filled in beside it; enter them for this property: ${Object.keys(cleared).map((field) => FIELD_LABELS[field].toLowerCase()).join(', ')}.`
+      : '';
     const swappedNames = [...(exampleTypeMoved ? ['asset type'] : []), ...Object.keys(swapped).map((field) => SHARED_EXAMPLE_LABELS[field])].join(', ');
     const andType = exampleTypeMoved ? ', and the asset type,' : '';
     const swapNote = !swappedNames ? ''
@@ -499,8 +567,12 @@ const InvestmentCalculator = () => {
         ? `Asset type set to ${ASSET_TYPE_LABELS.land} for the ${STRATEGY_LABELS.land} tab. ${lastBuiltWasExample.current ? 'It is set back' : `It returns to ${ASSET_TYPE_LABELS[previousType] || previousType}`} when you leave this tab.`
         : `Asset type set ${nextType === lastBuiltType.current ? 'back to' : 'to'} ${ASSET_TYPE_LABELS[nextType] || nextType}, because ${ASSET_TYPE_LABELS.land} is analysed only on the ${STRATEGY_LABELS.land} tab. Change it in "Asset type" if that is not right.`;
     }
-    if (message || swapNote) setNotice({ text: `${message}${swapNote}`.trim(), restore: null });
-    setForm((current) => ({ ...current, ...swapped, strategy, propertyType: nextType }));
+    if (message || swapNote || clearedNote) setNotice({ text: `${message}${swapNote}${clearedNote}`.trim(), restore: Object.keys(cleared).length ? cleared : null });
+    // The bands the visitor has not set follow their boxes on the new tab too.
+    setForm((current) => {
+      const next = { ...current, ...swapped, ...Object.fromEntries(Object.keys(cleared).map((field) => [field, ''])), strategy, propertyType: nextType };
+      return { ...next, ...followingBands(next, enteredFields.current) };
+    });
   };
 
   useEffect(() => {
@@ -669,7 +741,7 @@ const InvestmentCalculator = () => {
   };
 
   const metricKeys = form.strategy === 'rental'
-    ? ['irr', 'cash_on_cash', 'cap_rate', 'dscr', 'noi', 'npv', 'equity_multiple', 'break_even_occupancy']
+    ? ['irr', 'cash_on_cash', 'cap_rate', 'dscr', 'dscr_after_reserves', 'noi', 'npv', 'equity_multiple', 'break_even_occupancy']
     : form.strategy === 'land'
       ? ['development_profit', 'development_roi', 'irr', 'npv', 'development_margin', 'total_development_cost', 'residual_land_value', 'break_even_terminal_value', 'cost_per_acre', 'cost_per_unit', 'cost_per_buildable_sf', 'ltc']
       : ['flip_profit', 'flip_roi', 'irr', 'npv', 'equity_multiple', 'loan_amount', 'ltv', 'ltc', 'max_offer_70_rule'];
@@ -686,7 +758,7 @@ const InvestmentCalculator = () => {
   };
 
   const labels = {
-    irr: 'Projected IRR', cash_on_cash: 'Cash-on-cash', cap_rate: 'Going-in cap rate', dscr: 'DSCR',
+    irr: 'Projected IRR', cash_on_cash: 'Cash-on-cash', cap_rate: 'Going-in cap rate', dscr: 'DSCR (on NOI)', dscr_after_reserves: 'DSCR after reserves & TI',
     noi: 'Year-one NOI', npv: 'Net present value', equity_multiple: 'Equity multiple',
     break_even_occupancy: 'Break-even occupancy', flip_profit: 'Projected profit', flip_roi: 'Flip ROI',
     ltv: 'Loan-to-value', ltc: 'Loan-to-cost', max_offer_70_rule: '70% screening threshold', loan_amount: 'Loan amount',
@@ -808,8 +880,15 @@ const InvestmentCalculator = () => {
               <Field label="Closing costs" name="closingCosts" value={form.closingCosts} onChange={update} prefix="$" />
               <Field label="Due diligence" name="dueDiligenceCosts" value={form.dueDiligenceCosts} onChange={update} prefix="$" />
               <Field label="Initial capital work" name="initialCapex" value={form.initialCapex} onChange={update} prefix="$" />
-              <Field label="Hold period" name="holdMonths" value={form.holdMonths} onChange={update} suffix="months" step="1" />
+              <Field label="Hold period" name="holdMonths" value={form.holdMonths} onChange={update} suffix="months" step="1" hint={form.strategy === 'rental' && n(form.holdMonths) > 0 ? `${number.format(n(form.holdMonths) / 12)} ${n(form.holdMonths) === 12 ? 'year' : 'years'}. Rentals are usually held for years; this box is in months.` : undefined} />
             </div>
+            {form.strategy === 'rental' && n(form.holdMonths) >= 1 && n(form.holdMonths) < 12 && (
+              <div className="studio-inline-actions studio-inline-actions--warn" role="alert">
+                <AlertCircle />
+                <p>A {n(form.holdMonths)}-month hold is unusual for a rental: year-one figures would be annualized from {n(form.holdMonths)} {n(form.holdMonths) === 1 ? 'month' : 'months'} and the IRR from a very short period. If you meant {n(form.holdMonths)} {n(form.holdMonths) === 1 ? 'year' : 'years'}, use the button.</p>
+                <button type="button" onClick={() => useYears(n(form.holdMonths))}>Use {n(form.holdMonths)} {n(form.holdMonths) === 1 ? 'year' : 'years'} ({n(form.holdMonths) * 12} months)</button>
+              </div>
+            )}
           </fieldset>
 
           <fieldset>
@@ -853,6 +932,9 @@ const InvestmentCalculator = () => {
               <div className="studio-field-grid">
                 <Field label="Target cash-on-cash" name="targetCashOnCash" value={form.targetCashOnCash} onChange={update} suffix="%" />
                 <Field label="Minimum DSCR" name="minimumDscr" value={form.minimumDscr} onChange={update} suffix="×" />
+                <SelectField label="DSCR measured on" name="dscrBasis" value={form.dscrBasis} onChange={update}>
+                  <option value="noi">NOI, before reserves and TI</option><option value="after_reserves">NOI after reserves and TI</option>
+                </SelectField>
                 <Field label="Target levered IRR" name="targetIrr" value={form.targetIrr} onChange={update} suffix="%" />
                 <Field label="Market-value ceiling (optional)" name="preliminaryMarketCeiling" value={form.preliminaryMarketCeiling} onChange={update} prefix="$" />
                 <Field label="Maximum immediate capital work" name="maxImmediateCapex" value={form.maxImmediateCapex} onChange={update} prefix="$" />
@@ -867,7 +949,7 @@ const InvestmentCalculator = () => {
                   </label>
                 ))}
               </div>
-              <p className="studio-provider-note"><ShieldCheck /> Hurdles determine the maximum investment basis. Evidence controls the confidence level; unchecked items remain diligence conditions, not assumed facts.</p>
+              <p className="studio-provider-note"><ShieldCheck /> Hurdles determine the maximum investment basis. Evidence controls the confidence level; unchecked items remain diligence conditions, not assumed facts. DSCR on NOI is the usual quote; many lenders size on NOI after replacement reserves and TI, which this page also reports.</p>
             </fieldset>
             </>
           ) : form.strategy === 'land' ? (
@@ -917,21 +999,21 @@ const InvestmentCalculator = () => {
                 </SelectField>
                 <Field label="FEMA flood zone" name="floodZone" value={form.floodZone} onChange={update} type="text" min={undefined} placeholder="e.g. X or AE; blank if not looked up" hint={floodZoneHint} />
                 <Field label="Wetlands area" name="wetlandsAcres" value={form.wetlandsAcres} onChange={update} suffix="acres" />
-                <Field label="Development schedule" name="developmentMonths" value={form.developmentMonths} onChange={update} suffix="months" step="1" />
-                <Field label="Sales / lease-up absorption" name="absorptionMonths" value={form.absorptionMonths} onChange={update} suffix="months" step="1" />
+                <Field label="Development schedule" name="developmentMonths" value={form.developmentMonths} onChange={update} suffix="months" step="1" hint="The budget is spent evenly over these months from closing, and the facility drawn as it is spent." />
+                <Field label="Sales / lease-up absorption" name="absorptionMonths" value={form.absorptionMonths} onChange={update} suffix="months" step="1" hint="Sales fall evenly in the last months of the hold and repay the facility first. 0 means one sale in the final month." />
                 <Field label="Site work & infrastructure" name="siteWorkCost" value={form.siteWorkCost} onChange={update} prefix="$" />
                 <Field label="Hard construction cost" name="hardConstructionCost" value={form.hardConstructionCost} onChange={update} prefix="$" />
                 <Field label="Soft costs / A&E" name="softCosts" value={form.softCosts} onChange={update} prefix="$" />
                 <Field label="Permits & impact fees" name="permitsImpactFees" value={form.permitsImpactFees} onChange={update} prefix="$" />
                 <Field label="Environmental / remediation" name="environmentalRemediation" value={form.environmentalRemediation} onChange={update} prefix="$" />
                 <Field label="Developer fee" name="developerFee" value={form.developerFee} onChange={update} prefix="$" />
-                <Field label="Construction contingency" name="landContingency" value={form.landContingency} onChange={update} suffix="%" />
+                <Field label="Construction contingency" name="landContingency" value={form.landContingency} onChange={update} suffix="%" hint="On site work and hard construction only; soft costs, permits, remediation and the fee carry none." />
                 <Field label="Annual taxes & carrying" name="annualCarryingCosts" value={form.annualCarryingCosts} onChange={update} prefix="$" />
                 <Field label="Expected gross terminal value" name="expectedTerminalValue" value={form.expectedTerminalValue} onChange={update} prefix="$" />
                 <Field label="Stabilized NOI (alternative)" name="stabilizedNoi" value={form.stabilizedNoi} onChange={update} prefix="$" />
                 <Field label="Stabilized exit cap" name="stabilizedExitCap" value={form.stabilizedExitCap} onChange={update} suffix="%" />
               </div>
-              <p className="studio-provider-note"><ShieldCheck /> Terminal value uses the explicit gross exit value first; otherwise it capitalizes stabilized NOI. Residual land value is the land price at which the deal earns exactly the target development margin.</p>
+              <p className="studio-provider-note"><ShieldCheck /> Terminal value uses the explicit gross exit value first; otherwise it capitalizes stabilized NOI. Residual land value is the land price at which the deal earns exactly the target development margin, on the same timetable. The facility is drawn as the budget is spent, carries interest on the drawn balance, and is repaid from the sales as they close; carrying costs run for the whole hold.</p>
             </fieldset>
             <fieldset className="studio-mandate">
               <legend><span>04</span> Go / no-go targets & evidence</legend>
@@ -1053,7 +1135,13 @@ const InvestmentCalculator = () => {
               <Field label="Interest rate · mode" name="mcInterestMode" value={form.mcInterestMode} onChange={update} suffix="%" />
               <Field label="Interest rate · high" name="mcInterestMax" value={form.mcInterestMax} onChange={update} suffix="%" />
             </div>
-            <p className="studio-case-note">The simulation draws the loan's interest rate from the band above, which follows the interest rate you entered until you change the band yourself. For a loan whose rate is fixed, set low, mode and high to that rate.{form.strategy !== 'rental' ? ' The hold period change is in months, added to the hold period you entered and rounded to whole months; the stress cases stretch its high end like the other drivers.' : ''}{form.strategy === 'flip' ? ' A rehab overrun drawn here replaces the contingency rather than adding to it: a draw equal to the contingency is the base case.' : ''}</p>
+            <ul className="studio-band-state" aria-label="Which bands follow the figures you entered">
+              {MONTE_CARLO_BANDS.filter((rule) => rule.strategies.includes(form.strategy)).map((rule) => {
+                const following = !rule.fields.some((field) => enteredFields.current.has(field));
+                return <li key={rule.key}><strong>{rule.label}:</strong> {following ? `follows the ${rule.sourceLabel} you entered (${form[rule.source] === '' ? 'empty' : `${form[rule.source]}%`}).` : `set by you; the ${rule.sourceLabel} box no longer moves it.`}{!following && <button type="button" onClick={() => followBandAgain(rule)}>Follow the {rule.sourceLabel} again</button>}</li>;
+              })}
+            </ul>
+            <p className="studio-case-note">The simulation draws the loan's interest rate from the band above, which follows the interest rate you entered until you change the band yourself. For a loan whose rate is fixed, set low, mode and high to that rate.{form.strategy === 'rental' ? ' The vacancy and exit-cap bands follow the vacancy and exit cap you entered the same way, with the mode a point above vacancy and a quarter point above the exit cap, so the simulation leans to the downside; the rent and expense bands are illustrations to set to your own view.' : ''}{form.strategy !== 'rental' ? ' The hold period change is in months, added to the hold period you entered and rounded to whole months; the stress cases stretch its high end like the other drivers.' : ''}{form.strategy === 'flip' ? ' A rehab overrun drawn here replaces the contingency rather than adding to it: a draw equal to the contingency is the base case.' : ''}</p>
             <div className="studio-risk-actions">
               <p><TrendingUp /> Reproducible triangular distributions, percentile outcomes, downside probabilities, and excluded-iteration disclosure.</p>
               <button type="button" onClick={runRiskAnalysis} disabled={riskLoading}>{riskLoading ? <><Loader2 className="spin" /> Simulating</> : <>Run Monte Carlo <BarChart3 /></>}</button>
@@ -1108,6 +1196,12 @@ const InvestmentCalculator = () => {
                   <article><small>PROFIT AT THIS PRICE</small><strong className={decision.profitability.profit > 0 ? 'is-positive' : 'is-negative'}>{decision.profitability.profit == null ? '—' : money.format(decision.profitability.profit)}</strong><p>{decision.profitability.roi == null ? 'Return not defined' : `${number.format(decision.profitability.roi * 100)}% on cash`}; minimum {money.format(decision.profitability.targetProfit)}</p></article>
                   <article><small>EVIDENCE CONFIDENCE</small><strong>{decision.confidence}</strong><p>{decision.evidenceVerified} of {decision.evidenceTotal} evidence items verified</p></article>
                 </div>
+                <div className="studio-decision-kpis studio-decision-kpis--minor studio-financing" role="group" aria-label="Financing">
+                  <article><small>LOAN AMOUNT</small><strong>{decision.financing.loanAmount > 0 ? money.format(decision.financing.loanAmount) : 'None'}</strong><p>{decision.financing.sizing}</p></article>
+                  <article><small>CASH REQUIRED AT CLOSING</small><strong>{decision.financing.cashRequired == null ? '—' : money.format(decision.financing.cashRequired)}</strong><p>Price, closing, due diligence, rehab with contingency, other costs and points, less the loan</p></article>
+                  <article><small>ORIGINATION FEE</small><strong>{money.format(decision.financing.originationFee)}</strong><p>{decision.financing.loanAmount > 0 ? `${number.format(decision.financing.originationRate * 100)} ${decision.financing.originationRate * 100 === 1 ? 'point' : 'points'} on the loan` : 'No loan'}</p></article>
+                  <article><small>{decision.financing.interestOnly ? 'MONTHLY INTEREST' : 'MONTHLY PAYMENT'}</small><strong>{money.format(decision.financing.monthlyDebtService)}</strong><p>{decision.financing.loanAmount > 0 ? `${decision.financing.interestOnly ? 'Interest only' : 'Principal and interest'} at ${number.format(decision.financing.interestRate * 100)}%; ${money.format(decision.financing.totalInterest)} of interest over the ${n(form.holdMonths)}-month hold` : 'No loan'}</p></article>
+                </div>
                 <div className="studio-decision-kpis studio-decision-kpis--minor">
                   <article><small>RETURN ON CASH</small><strong>{decision.profitability.roi == null ? '—' : `${number.format(decision.profitability.roi * 100)}%`}</strong><p>{decision.profitability.targetRoi > 0 ? `Profit over the cash you put in; minimum ${number.format(decision.profitability.targetRoi * 100)}%` : 'Profit over the cash you put in'}</p></article>
                   <article><small>LEVERED IRR</small><strong>{decision.profitability.irr == null ? '—' : `${number.format(decision.profitability.irr * 100)}%`}</strong><p>Annualized, on equity</p></article>
@@ -1145,7 +1239,7 @@ const InvestmentCalculator = () => {
                       <div className="studio-scenario-row studio-scenario-row--head"><span>Case</span><span>Profit</span><span>Margin</span><span>ROI</span><span>IRR</span></div>
                       {decision.scenarios.map((scenario) => <div className="studio-scenario-row" key={scenario.name}><strong>{scenario.name}</strong><span>{scenario.metrics.profit == null ? '—' : money.format(scenario.metrics.profit)}</span><span>{scenario.metrics.margin == null ? '—' : `${number.format(scenario.metrics.margin * 100)}%`}</span><span>{scenario.metrics.roi == null ? '—' : `${number.format(scenario.metrics.roi * 100)}%`}</span><span>{scenario.metrics.irr == null ? '—' : `${number.format(scenario.metrics.irr * 100)}%`}</span></div>)}
                     </> : <>
-                      <div className="studio-scenario-row studio-scenario-row--head"><span>Case</span><span>NOI</span><span>CoC</span><span>DSCR</span><span>IRR</span></div>
+                      <div className="studio-scenario-row studio-scenario-row--head"><span>Case</span><span>NOI</span><span>CoC</span><span>{decision.dscrBasis?.label || 'DSCR'}</span><span>IRR</span></div>
                       {decision.scenarios.map((scenario) => <div className="studio-scenario-row" key={scenario.name}><strong>{scenario.name}</strong><span>{money.format(scenario.metrics.noi || 0)}</span><span>{scenario.metrics.cashOnCash == null ? '—' : `${number.format(scenario.metrics.cashOnCash * 100)}%`}</span><span>{scenario.metrics.dscr == null ? '—' : `${number.format(scenario.metrics.dscr)}×`}</span><span>{scenario.metrics.irr == null ? '—' : `${number.format(scenario.metrics.irr * 100)}%`}</span></div>)}
                     </>}
                   </div>

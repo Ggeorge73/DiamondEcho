@@ -97,20 +97,42 @@ describe('the fix and flip tab has its own example', () => {
     expect(notice().textContent).toBe('The example figures you had not changed, and the asset type, are the building example again.×');
   });
 
-  test('a figure the visitor typed is never swapped, in either direction', async () => {
+  test('a figure the visitor typed is never swapped, and a typed price anchors the property facts', async () => {
     await setControl('purchasePrice', '412000');
     await setControl('units', '2');
     await click('Fix & flip');
     expect(field('purchasePrice').value).toBe('412000');
     expect(field('units').value).toBe('2');
-    expect(field('closingCosts').value).toBe('5500');       // untouched, so it followed the tab
-    expect(notice().textContent).toContain('These example figures, which you had not changed, were set for a fix and flip: asset type, square feet, closing costs, due diligence, initial capital work, hold period, interest-only period, loan term.');
+    // A typed price means a real property: the square feet and the closing
+    // figures stay, the asset type stays, the flip's timing follows the tab,
+    // and the flip example's own facts are left empty to enter rather than
+    // filled in beside the typed price (the 2026-10-26 review found a $360,000
+    // example after-repair value beside a typed $3,000,000 price).
+    expect(field('closingCosts').value).toBe('75000');
+    expect(field('rentableSquareFeet').value).toBe('18000');
+    expect(field('propertyType').value).toBe('multifamily');
+    expect(field('holdMonths').value).toBe('10');
+    expect(field('arv').value).toBe('');
+    expect(field('rehabCost').value).toBe('');
+    expect(field('monthlyHolding').value).toBe('');
+    expect(field('otherProjectCosts').value).toBe('');
+    expect(field('rehabContingency').value).toBe('10');     // an assumption, not a fact about a house
+    expect(notice().textContent).toContain('These example figures, which you had not changed, were set for a fix and flip: hold period, interest-only period, loan term. You entered a purchase price, so the fix-and-flip example figures were not filled in beside it; enter them for this property: after-repair value, rehabilitation budget, monthly holding costs, other project costs.');
+    expect(button('Put the example figures back')).toBeTruthy();
+    await runBase();
+    expect(container.querySelector('.studio-error').textContent).toContain('After-repair value must be greater than 0.');
+    expect(text()).not.toContain('-$2,9');
+    // The example figures can be put back with one press; they then count as entered.
+    await click('Put the example figures back');
+    expect(field('arv').value).toBe('360000');
     await setControl('holdMonths', '5');
     await click('Rental & commercial');
     expect(field('purchasePrice').value).toBe('412000');
     expect(field('units').value).toBe('2');
     expect(field('holdMonths').value).toBe('5');
-    expect(field('closingCosts').value).toBe('75000');      // still an example, so it went back
+    expect(field('closingCosts').value).toBe('75000');
+    expect(field('annualRent').value).toBe('');
+    expect(field('managementFee').value).toBe('4');          // a rate, not a fact about a building
   });
 
   test('an asset type the visitor chose stays, and the note does not claim it moved', async () => {

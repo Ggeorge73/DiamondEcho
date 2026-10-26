@@ -16,7 +16,13 @@ import { floodZoneWarning } from './floodZone';
 // the earlier behaviour), the total project cost, or a flip's after-repair value
 // (loan_basis); the simulation and the stressed cases keep the loan at its base
 // size, as a lender does.
-export const FORMULA_VERSION = 'diamond-underwriting-web-1.6.0';
+// 1.7.0 (2026-10-26): a land development spends its budget over the development
+// schedule, draws the facility as it spends and sells over the absorption
+// months, so those two inputs now move the figures; the residual land value is
+// solved against that schedule. A rental also reports its debt service
+// coverage after replacement reserves and TI (dscr_after_reserves), and warns
+// when year-one figures are annualized from a hold shorter than a year.
+export const FORMULA_VERSION = 'diamond-underwriting-web-1.7.0';
 
 const clean = (value, digits = 8) => value == null || !Number.isFinite(value) ? null : Number(value.toFixed(digits));
 const ratio = (numerator, denominator) => Math.abs(denominator) < 1e-12 ? null : clean(numerator / denominator);
@@ -178,6 +184,9 @@ const analyzeRental = (request, schedules, totalDebt, originationFees) => {
     cap_rate: metric(ratio(yearOneNoi, acquisition.purchase_price), 'decimal_rate', 'year-one NOI / purchase price', { noi: yearOneNoi, purchase_price: acquisition.purchase_price }),
     cash_on_cash: metric(ratio(yearOneEquityCash, initialEquity), 'decimal_rate', 'year-one pre-tax equity cash flow / initial equity', { year_one_equity_cash_flow: yearOneEquityCash, initial_equity: initialEquity }),
     dscr: metric(ratio(yearOneNoi, yearOneDebtService), 'ratio', 'year-one NOI / year-one debt service', { noi: yearOneNoi, debt_service: yearOneDebtService }, yearOneDebtService ? null : 'DSCR is undefined because the deal has no debt service.'),
+    // Lenders commonly size on income after the reserves and TI they require,
+    // so both coverages are reported (item 4 of the 2026-10-26 review).
+    dscr_after_reserves: metric(ratio(yearOneNoi - yearOneCapital, yearOneDebtService), 'ratio', '(year-one NOI - replacement reserves - TI, leasing and capital costs) / year-one debt service', { noi: yearOneNoi, reserves_and_capital: yearOneCapital, debt_service: yearOneDebtService }, yearOneDebtService ? null : 'DSCR is undefined because the deal has no debt service.'),
     debt_yield: metric(ratio(yearOneNoi, totalDebt), 'decimal_rate', 'year-one NOI / total initial debt', { noi: yearOneNoi, total_debt: totalDebt }, totalDebt ? null : 'Debt yield is undefined because the deal has no debt.'),
     break_even_occupancy: metric(breakEven, 'decimal_rate', 'required rent collection / gross scheduled rent', { required_egi: requiredEgi, gross_scheduled_rent: grossRent }, grossRent ? null : 'Break-even occupancy is undefined because scheduled rent is zero.'),
     sale_price: metric(salePrice, request.property.currency, 'explicit terminal value or terminal NOI / exit cap rate', { terminal_noi: terminalNoi, exit_cap_rate: exitCap }),
@@ -186,6 +195,8 @@ const analyzeRental = (request, schedules, totalDebt, originationFees) => {
   if (operating.gross_scheduled_rent === 0 && operating.other_income === 0) warnings.push('No operating income was entered, so year-one NOI is $0 before any expenses.');
   if (salePrice === 0) warnings.push('No terminal value can be calculated: enter an expected sale price or a positive exit cap rate with positive terminal NOI. The model therefore assumes $0 disposition proceeds.');
   if (metrics.irr.value == null) warnings.push('IRR is mathematically undefined because the modeled cash flows contain no positive distribution.');
+  // Same sentence as the analysis service, so both paths say it.
+  if (hold < 12) warnings.push('Year-one operating metrics are annualized from a holding period shorter than 12 months.');
   if (request.property.unit_count > 1 && request.property.property_type === 'single_family') warnings.push('Multiple planned homes are treated as one investment; zoning capacity is not proof that units exist or that construction is feasible.');
   return { analysis_id: `browser-${Date.now()}`, schema_version: '1.0', formula_version: FORMULA_VERSION, strategy: 'rental', computed_at: new Date().toISOString(), metrics, cash_flows: cashFlows, calculation_mode: 'browser', assumptions: { timing: 'Monthly operations with disposition after the final month.', taxes: 'Income taxes, depreciation, and entity-level tax effects are not modeled.' }, warnings };
 };
@@ -224,66 +235,142 @@ const analyzeFlip = (request, schedules, totalDebt, originationFees) => {
   return { analysis_id: `browser-${Date.now()}`, schema_version: '1.0', formula_version: FORMULA_VERSION, strategy: 'flip', computed_at: new Date().toISOString(), metrics, cash_flows: cashFlows, calculation_mode: 'browser', assumptions: { timing: 'Holding and debt costs occur monthly; sale occurs after the final month.' }, warnings };
 };
 
-const analyzeLand = (request, schedules, totalDebt, originationFees) => {
+// The timetable of a land development: the acquisition at closing, the budget
+// spent evenly over the development months, the sales taken evenly over the
+// absorption months at the end of the hold (item 3 of the 2026-10-26 review:
+// the two schedule boxes did nothing). Both are kept inside the hold; a zero
+// absorption means one sale in the final month.
+export const landTimetable = (land, holdMonths) => ({
+  development: Math.max(1, Math.min(land.development_months || 1, holdMonths)),
+  absorption: Math.max(1, Math.min(land.absorption_months || 0, holdMonths)),
+});
+
+// The cash flows of a land development at a given price, with the facility's
+// amounts given. Called once for the deal and again by the residual solver
+// at other prices. It never throws; the caller checks the equity.
+const landFigures = (request, purchasePrice, principals) => {
   const { acquisition, land } = request;
-  const acquisitionCost = acquisition.purchase_price + acquisition.closing_costs + acquisition.due_diligence_costs + acquisition.initial_capex;
-  const contingencyBasis = land.site_work_cost + land.hard_construction_cost;
-  const contingency = contingencyBasis * land.contingency_rate;
+  const hold = acquisition.hold_months;
+  const { development, absorption } = landTimetable(land, hold);
+  const acquisitionCost = purchasePrice + acquisition.closing_costs + acquisition.due_diligence_costs + acquisition.initial_capex;
+  const contingency = (land.site_work_cost + land.hard_construction_cost) * land.contingency_rate;
   const developmentCosts = land.site_work_cost + land.hard_construction_cost + land.soft_costs + land.permits_impact_fees + land.environmental_remediation + land.developer_fee + contingency;
   const totalProjectCost = acquisitionCost + developmentCosts;
-  const initialEquity = totalProjectCost + originationFees - totalDebt;
-  if (initialEquity <= 0) throw new Error('Construction financing must leave a positive equity contribution.');
-
-  const monthDebtService = (month) => schedules.reduce((sum, schedule) => sum + schedule.rows[month - 1].debtService, 0);
-  const endingDebt = (month) => schedules.reduce((sum, schedule) => sum + schedule.rows[month - 1].closingBalance, 0);
-  const monthlyCarrying = land.annual_carrying_costs / 12;
-  const cashFlows = [{ month: 0, operating_cash_flow: 0, debt_service: 0, capital_costs: totalProjectCost + originationFees, sale_proceeds: 0, loan_payoff: 0, net_cash_flow: -initialEquity }];
-  for (let month = 1; month <= acquisition.hold_months; month += 1) {
-    const debtService = monthDebtService(month);
-    cashFlows.push({ month, operating_cash_flow: 0, debt_service: clean(debtService), capital_costs: clean(monthlyCarrying), sale_proceeds: 0, loan_payoff: 0, net_cash_flow: clean(-monthlyCarrying - debtService) });
+  // The share of the whole cost spent by the end of each month, from closing.
+  const spent = [];
+  for (let month = 0; month <= hold; month += 1) {
+    spent.push(totalProjectCost > 0 ? (acquisitionCost + developmentCosts * Math.min(month, development) / development) / totalProjectCost : 1);
   }
-
+  const totalDebt = principals.reduce((sum, value) => sum + value, 0);
+  const originationFees = principals.reduce((sum, principal, index) => sum + principal * (request.debt[index].origination_fee_rate || 0), 0);
+  const monthlyCarrying = land.annual_carrying_costs / 12;
   const derivedTerminalValue = land.stabilized_noi > 0 && land.stabilized_exit_cap_rate > 0 ? land.stabilized_noi / land.stabilized_exit_cap_rate : 0;
   const terminalValue = Math.max(0, land.expected_terminal_value || derivedTerminalValue);
   const sellingCosts = terminalValue * request.exit.selling_cost_rate;
-  const loanPayoff = endingDebt(acquisition.hold_months);
-  const last = cashFlows[cashFlows.length - 1];
-  last.sale_proceeds = clean(terminalValue - sellingCosts); last.loan_payoff = clean(loanPayoff);
-  last.net_cash_flow = clean(last.net_cash_flow + terminalValue - sellingCosts - loanPayoff);
-
+  const monthlyProceeds = (terminalValue - sellingCosts) / absorption;
+  // The facility is drawn as the money is spent, so interest runs on the drawn
+  // balance, not on the whole commitment from day one. A draw lands at the end
+  // of its month and bears interest from the next. Sale proceeds pay the
+  // facility down first, as a lender's release terms do; what is left at the
+  // end of the hold is repaid then. The amortizing payment, where there is
+  // one, is set on the whole commitment, as the lender writes it.
+  const loans = (request.debt || []).map((loan, index) => {
+    const rate = (loan.annual_interest_rate || 0) / 12;
+    const ioMonths = loan.interest_only_months || 0;
+    return { rate, ioMonths, termMonths: loan.term_months || 360, principal: principals[index], balance: principals[index] * spent[0], payment: periodicPayment(principals[index], rate, Math.max((loan.amortization_years || 30) * 12 - ioMonths, 1)) };
+  });
+  const cashFlows = [{ month: 0, operating_cash_flow: 0, debt_service: 0, capital_costs: acquisitionCost + originationFees, sale_proceeds: 0, loan_payoff: 0, net_cash_flow: -(acquisitionCost + originationFees - totalDebt * spent[0]) }];
+  let totalInterest = 0;
+  for (let month = 1; month <= hold; month += 1) {
+    const delta = spent[month] - spent[month - 1];
+    const spend = totalProjectCost * delta;
+    const draw = totalDebt * delta;
+    const proceeds = month > hold - absorption ? monthlyProceeds : 0;
+    let debtService = 0; let payoff = 0; let available = proceeds;
+    loans.forEach((loan) => {
+      const interest = loan.balance * loan.rate;
+      const scheduledPrincipal = month <= loan.ioMonths ? 0 : Math.min(loan.balance, Math.max(loan.payment - interest, 0));
+      loan.balance = loan.balance - scheduledPrincipal + loan.principal * delta;
+      const release = Math.min(loan.balance, available);
+      loan.balance -= release; available -= release;
+      const balloon = month === loan.termMonths ? loan.balance : 0;
+      if (balloon) loan.balance = 0;
+      const atEnd = month === hold ? loan.balance : 0;
+      if (atEnd) loan.balance = 0;
+      totalInterest += interest;
+      debtService += interest + scheduledPrincipal + balloon;
+      payoff += release + atEnd;
+    });
+    cashFlows.push({ month, operating_cash_flow: 0, debt_service: clean(debtService), capital_costs: clean(spend + monthlyCarrying), sale_proceeds: clean(proceeds), loan_payoff: clean(payoff), net_cash_flow: clean(-(spend - draw) - monthlyCarrying - debtService + proceeds - payoff) });
+  }
   const values = cashFlows.map((row) => row.net_cash_flow);
   const profit = values.reduce((sum, value) => sum + value, 0);
   const equityContributions = Math.abs(values.reduce((sum, value) => sum + Math.min(value, 0), 0));
-  const totalInterest = schedules.reduce((sum, schedule) => sum + schedule.rows.reduce((rowSum, row) => rowSum + row.interest, 0), 0);
-  const totalCarrying = monthlyCarrying * acquisition.hold_months;
-  const economicCost = totalProjectCost + originationFees + totalInterest + totalCarrying;
-  const breakEvenTerminalValue = request.exit.selling_cost_rate < 1 ? economicCost / (1 - request.exit.selling_cost_rate) : null;
+  const totalCarrying = monthlyCarrying * hold;
+  return {
+    cashFlows, profit, equityContributions, totalInterest, totalCarrying, originationFees, totalDebt,
+    totalProjectCost, acquisitionCost, developmentCosts, contingency, terminalValue, sellingCosts,
+    economicCost: totalProjectCost + originationFees + totalInterest + totalCarrying, development, absorption,
+  };
+};
+
+// The land price at which the development profit is exactly `target`, found by
+// the secant method on the deal's own cash flows. The profit is linear in the
+// price on a normal schedule, so the first step lands on the answer and the
+// second confirms it; a clamp that binds (a balloon, a payment larger than the
+// balance) takes a few more. Mirrored in the analysis service.
+export const solveLandResidual = (profitAt, price, target) => {
+  const f = (candidate) => profitAt(candidate) - target;
+  let a = price; let fa = f(a);
+  let b = price * 1.1 + 10000; let fb = f(b);
+  for (let iteration = 0; iteration < 12; iteration += 1) {
+    if (fb === fa || !Number.isFinite(fa) || !Number.isFinite(fb)) break;
+    const next = b - fb * (b - a) / (fb - fa);
+    if (!Number.isFinite(next)) break;
+    a = b; fa = fb; b = next; fb = f(b);
+    if (Math.abs(fb) < 1e-6) break;
+  }
+  return Number.isFinite(fb) ? b : null;
+};
+
+const analyzeLand = (request, { residual = true } = {}) => {
+  const { acquisition, land } = request;
+  const principals = (request.debt || []).map((loan) => loanPrincipal(request, loan));
+  const base = landFigures(request, acquisition.purchase_price, principals);
+  const { totalProjectCost, originationFees, totalDebt, terminalValue } = base;
+  if (totalProjectCost + originationFees - totalDebt <= 0) throw new Error('Construction financing must leave a positive equity contribution.');
+  const breakEvenTerminalValue = request.exit.selling_cost_rate < 1 ? base.economicCost / (1 - request.exit.selling_cost_rate) : null;
   const nonLandCosts = totalProjectCost - acquisition.purchase_price;
+  const facilityShare = totalProjectCost > 0 ? totalDebt / totalProjectCost : 0;
   // The land price at which development profit is exactly the target margin on
   // gross terminal value, which is how development margin is measured below.
-  // Other costs stay as entered and the financing keeps its modeled share of
-  // project cost, so fees and interest move with the price. Running the deal
-  // again at this price returns the target margin.
-  //   profit(price) = net proceeds - carrying - project cost * (1 + financing load)
-  const financingLoad = totalProjectCost > 0 ? (originationFees + totalInterest) / totalProjectCost : 0;
-  const residualProjectCost = (terminalValue * (1 - request.exit.selling_cost_rate - land.target_profit_margin) - totalCarrying) / (1 + financingLoad);
-  const residualLandValue = residualProjectCost - nonLandCosts;
-  const metrics = commonMetrics(request, cashFlows, totalDebt, totalProjectCost);
+  // Other costs stay as entered, the facility keeps its modeled share of
+  // project cost (so fees and interest move with the price) and the timetable
+  // is the same. Running the deal again at this price returns the target margin.
+  const residualLandValue = residual ? solveLandResidual((price) => {
+    const scale = totalProjectCost > 0 ? (totalProjectCost - acquisition.purchase_price + price) / totalProjectCost : 1;
+    return landFigures(request, price, principals.map((principal) => principal * scale)).profit;
+  }, acquisition.purchase_price, terminalValue * land.target_profit_margin) : null;
+  const metrics = commonMetrics(request, base.cashFlows, totalDebt, totalProjectCost);
   Object.assign(metrics, {
-    development_profit: metric(profit, request.property.currency, 'net disposition proceeds - equity contributions - carrying and financing costs', { terminal_value: terminalValue, selling_costs: sellingCosts, economic_cost: economicCost }),
-    development_roi: metric(ratio(profit, equityContributions), 'decimal_rate', 'development profit / total equity contributions', { profit, equity_contributions: equityContributions }),
-    development_margin: metric(ratio(profit, terminalValue), 'decimal_rate', 'development profit / gross terminal value', { profit, terminal_value: terminalValue }, terminalValue ? null : 'Development margin is undefined without a terminal value.'),
-    total_development_cost: metric(totalProjectCost, request.property.currency, 'land acquisition + transaction + site + hard + soft + entitlement + environmental + developer fee + contingency', { acquisition_cost: acquisitionCost, development_costs: developmentCosts, contingency }),
-    residual_land_value: metric(residualLandValue, request.property.currency, 'land price at which development profit equals the target margin on gross terminal value, with other costs as entered and financing at its modeled share of project cost', { terminal_value: terminalValue, target_profit_margin: land.target_profit_margin, non_land_costs: nonLandCosts, carrying_costs: totalCarrying, financing_cost_per_project_dollar: financingLoad }),
-    break_even_terminal_value: metric(breakEvenTerminalValue, request.property.currency, 'total economic cost / (1 - selling cost rate)', { economic_cost: economicCost, selling_cost_rate: request.exit.selling_cost_rate }),
+    development_profit: metric(base.profit, request.property.currency, 'net disposition proceeds - equity contributions - carrying and financing costs', { terminal_value: terminalValue, selling_costs: base.sellingCosts, economic_cost: base.economicCost }),
+    development_roi: metric(ratio(base.profit, base.equityContributions), 'decimal_rate', 'development profit / total equity contributions', { profit: base.profit, equity_contributions: base.equityContributions }),
+    development_margin: metric(ratio(base.profit, terminalValue), 'decimal_rate', 'development profit / gross terminal value', { profit: base.profit, terminal_value: terminalValue }, terminalValue ? null : 'Development margin is undefined without a terminal value.'),
+    total_development_cost: metric(totalProjectCost, request.property.currency, 'land acquisition + transaction + site + hard + soft + entitlement + environmental + developer fee + contingency', { acquisition_cost: base.acquisitionCost, development_costs: base.developmentCosts, contingency: base.contingency }),
+    break_even_terminal_value: metric(breakEvenTerminalValue, request.property.currency, 'total economic cost / (1 - selling cost rate)', { economic_cost: base.economicCost, selling_cost_rate: request.exit.selling_cost_rate }),
     cost_per_acre: metric(ratio(totalProjectCost, land.site_acres), `${request.property.currency}/acre`, 'total development cost / site acres', { total_project_cost: totalProjectCost, site_acres: land.site_acres }),
     cost_per_unit: metric(ratio(totalProjectCost, land.planned_units), `${request.property.currency}/unit`, 'total development cost / planned units', { total_project_cost: totalProjectCost, planned_units: land.planned_units }),
     cost_per_buildable_sf: metric(ratio(totalProjectCost, land.buildable_square_feet), `${request.property.currency}/sf`, 'total development cost / buildable square feet', { total_project_cost: totalProjectCost, buildable_square_feet: land.buildable_square_feet }),
   });
+  if (residual) {
+    metrics.residual_land_value = metric(residualLandValue, request.property.currency, 'land price at which development profit equals the target margin on gross terminal value, with other costs as entered, the facility at its modeled share of project cost and the same timetable', { terminal_value: terminalValue, target_profit_margin: land.target_profit_margin, non_land_costs: nonLandCosts, carrying_costs: base.totalCarrying, facility_share_of_cost: facilityShare });
+  }
 
   const warnings = ['Calculated securely in this browser; no live analysis service was required.', 'Land-development results depend on zoning, entitlement, utility, environmental, geotechnical, civil, market, and construction assumptions that require professional verification.'];
   if (!terminalValue) warnings.push('No terminal value can be calculated. Enter an expected gross exit value or stabilized NOI with a capitalization rate.');
-  if (land.development_months + (land.absorption_months || 0) > acquisition.hold_months) warnings.push('Development plus sales / lease-up absorption exceeds the modeled hold period.');
+  const schedule = land.development_months + (land.absorption_months || 0);
+  if (schedule > acquisition.hold_months) warnings.push(`Development (${land.development_months} months) plus sales / lease-up absorption (${land.absorption_months || 0} months) is longer than the ${acquisition.hold_months}-month hold, so the model overlaps them: the budget is spent over the first ${base.development} months and the sales fall in the last ${base.absorption} months. Lengthen the hold or shorten the schedule.`);
+  else if (schedule < acquisition.hold_months) warnings.push(`The hold is ${acquisition.hold_months - schedule} months longer than development plus absorption; carrying costs and interest on the drawn facility run for those months too.`);
   if (land.entitlement_status === 'unentitled' || land.entitlement_status === 'rezoning_required') warnings.push('The project carries material entitlement risk; probability, timing, and denial costs are not independently estimated.');
   if (land.utility_status !== 'available') warnings.push('Water, sewer, power, stormwater, and other utility capacity are not confirmed at the site; extensions and off-site upgrades may materially change cost and timing.');
   if (land.access_status !== 'legal_confirmed') warnings.push('Legal and physical access is not confirmed; verify frontage, curb cuts, easements, and emergency access.');
@@ -292,19 +379,21 @@ const analyzeLand = (request, schedules, totalDebt, originationFees) => {
   const floodWarning = floodZoneWarning(land.flood_zone);
   if (floodWarning) warnings.push(floodWarning);
   if ((land.wetlands_acres || 0) > 0) warnings.push('Wetlands were entered; verify delineation, buffers, mitigation, permitting, and the resulting net buildable area.');
-  if (residualLandValue < acquisition.purchase_price) warnings.push('The modeled residual land value is below the proposed purchase price, so the deal misses the selected target margin at this price.');
+  if (residual && residualLandValue !== null && residualLandValue < acquisition.purchase_price) warnings.push('The modeled residual land value is below the proposed purchase price, so the deal misses the selected target margin at this price.');
   if (land.planned_units < 1 && land.buildable_square_feet < 1) warnings.push('Enter planned units or buildable square feet to evaluate density and unit economics.');
 
-  return { analysis_id: `browser-${Date.now()}`, schema_version: '1.0', formula_version: FORMULA_VERSION, strategy: 'land', computed_at: new Date().toISOString(), metrics, cash_flows: cashFlows, calculation_mode: 'browser', assumptions: { cost_timing: 'Development uses are treated as committed at acquisition; carrying costs and debt service occur monthly.', terminal_value: 'Uses explicit exit value first, otherwise stabilized NOI divided by exit cap rate.', taxes: 'Income taxes, depreciation, tax credits, and entity-level tax effects are not modeled.' }, warnings };
+  return { analysis_id: `browser-${Date.now()}`, schema_version: '1.0', formula_version: FORMULA_VERSION, strategy: 'land', computed_at: new Date().toISOString(), metrics, cash_flows: base.cashFlows, calculation_mode: 'browser', assumptions: { cost_timing: 'Acquisition costs fall at closing; the development budget is spent evenly over the development schedule; the facility is drawn as the money is spent, bears interest on the drawn balance and is repaid from sale proceeds first and otherwise at the end of the hold; sales are taken evenly over the absorption months at the end of the hold; carrying costs run monthly for the whole hold. Contingency applies to site work and hard construction only.', terminal_value: 'Uses explicit exit value first, otherwise stabilized NOI divided by exit cap rate.', taxes: 'Income taxes, depreciation, tax credits, and entity-level tax effects are not modeled.' }, warnings };
 };
 
-export const analyzeDealLocally = (request) => {
+// `residual: false` leaves out the land residual, which costs two more passes
+// over the cash flows; the simulation, which does not read it, says so.
+export const analyzeDealLocally = (request, { residual = true } = {}) => {
   if (!(request.acquisition.purchase_price > 0)) throw new Error('Purchase price must be greater than zero.');
+  if (request.strategy === 'land') return analyzeLand(request, { residual });
   const schedules = (request.debt || []).map((loan) => loanSchedule(loan, loanPrincipal(request, loan), request.acquisition.hold_months));
   const totalDebt = schedules.reduce((sum, schedule) => sum + schedule.principal, 0);
   const originationFees = schedules.reduce((sum, schedule, index) => sum + schedule.principal * (request.debt[index].origination_fee_rate || 0), 0);
   if (request.strategy === 'rental') return analyzeRental(request, schedules, totalDebt, originationFees);
-  if (request.strategy === 'land') return analyzeLand(request, schedules, totalDebt, originationFees);
   return analyzeFlip(request, schedules, totalDebt, originationFees);
 };
 
@@ -433,7 +522,7 @@ const createScenarioRun = (baseDeal, scenario) => {
         }
       });
       let analysis;
-      try { analysis = analyzeDealLocally(capPinnedLoans(shocked)); } catch (error) { failures += 1; if (!firstFailure) firstFailure = error; continue; }
+      try { analysis = analyzeDealLocally(capPinnedLoans(shocked), { residual: false }); } catch (error) { failures += 1; if (!firstFailure) firstFailure = error; continue; }
       const lossIrr = lossEquivalentIrr(analysis);
       Object.entries(analysis.metrics).forEach(([key, item]) => {
         if (!values[key]) values[key] = [];

@@ -224,6 +224,17 @@ same way and shares three more boxes (units, square feet, due diligence), so
 moving from the flip tab to the land tab sets those three back to the figures
 the land tab has always shown.
 
+## Changed again on 2026-10-26: the timetable
+
+The figures in this note ($724,062, $574,469, 13.36%, $391,945 and the
+reference deal's $2,315) are those of the model before 2026-10-26, when the
+development budget was committed at closing and the facility drawn in full on
+day one. Since that date the budget is spent over the development months, the
+facility is drawn as the money is spent and repaid from the sales, and the
+residual is solved on that timetable. The new figures, the reasons and the
+tests are in `docs/deal-studio-review-2026-10-26.md`. The rules above (how
+the call is reached, the three cases, the contingency) are unchanged.
+
 ## Not done
 
 - Address suggestions and public-record prefill (finding 7).

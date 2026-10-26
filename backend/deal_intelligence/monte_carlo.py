@@ -195,7 +195,7 @@ class _ScenarioRun:
             try:
                 sampled = _sample_deal(self.base, self.scenario, self.rng)
                 _cap_pinned_loans(sampled, self.pinned)
-                result = analyze_deal(sampled)
+                result = analyze_deal(sampled, include_residual=False)
                 for key in self.target_metrics:
                     metric = result.metrics.get(key)
                     if metric and metric.value is not None:

@@ -1,4 +1,4 @@
-import { responseErrorMessage } from './dealValidation';
+import { FIELD_LABELS, responseErrorMessage, validateDealForm } from './dealValidation';
 
 const apiError = (detail) => ({ isAxiosError: true, response: { status: 422, data: { detail } } });
 
@@ -38,4 +38,38 @@ test('a check made in the browser keeps its own message', () => {
     .toBe('Vacancy must be at least 0 and no more than 100.');
   expect(responseErrorMessage({}, 'fallback')).toBe('fallback');
   expect(responseErrorMessage(apiError([]), 'fallback')).toBe('fallback');
+});
+
+// Item 6 of the 2026-10-26 review: messages named field keys ("rehabCost
+// cannot be negative"), printed the 9007199254740991 upper bound, and said
+// "Rentable square feet" on the land tab, where the box is "Buildable".
+describe('validation messages name the box as the page does', () => {
+  const flip = {
+    strategy: 'flip', units: '1', rentableSquareFeet: '1800', purchasePrice: '180000', closingCosts: '5500',
+    dueDiligenceCosts: '1500', initialCapex: '0', holdMonths: '10', ltv: '65', interestRate: '6.75', amortizationYears: '30',
+    interestOnlyMonths: '10', loanTermYears: '1', originationFee: '1', sellingCosts: '6', discountRate: '10',
+    arv: '360000', rehabCost: '65000', rehabContingency: '10', monthlyHolding: '1800', otherProjectCosts: '6000',
+  };
+  const message = (form) => { try { validateDealForm(form); return ''; } catch (error) { return error.message; } };
+
+  test('no message prints a field key or the safe-integer limit', () => {
+    expect(message({ ...flip, rehabCost: '-1' })).toBe('Rehabilitation budget cannot be negative.');
+    expect(message({ ...flip, monthlyHolding: 'abc' })).toBe('Monthly holding costs must be a number.');
+    expect(message({ ...flip, arv: '0' })).toBe('After-repair value must be greater than 0.');
+    expect(message({ ...flip, purchasePrice: '0' })).toBe('Purchase price must be greater than 0.');
+    expect(message({ ...flip, flipMinimumProfit: '-5' })).toBe('Minimum profit must be 0 or more.');
+    expect(message({ ...flip, units: '0' })).toBe('Units must be at least 1 and no more than 1000000, in whole numbers.');
+  });
+
+  test('the land tab calls the shared boxes by their land names', () => {
+    const land = { ...flip, strategy: 'land', rentableSquareFeet: '0', developmentType: 'finished_lots', dispositionStrategy: 'sell_finished_lots', entitlementStatus: 'unentitled', siteAcres: '6', parcelCount: '1', developmentMonths: '12', expectedTerminalValue: '2280000', landContingency: '10' };
+    expect(message(land)).toBe('Buildable square feet must be greater than 0.');
+    expect(message({ ...land, rentableSquareFeet: '100', units: '0' })).toBe('Planned units / lots must be at least 1 and no more than 1000000, in whole numbers.');
+    expect(message({ ...flip, rentableSquareFeet: '0' })).toBe('Rentable square feet must be greater than 0.');
+  });
+
+  test('every numeric box the form validates has a label', () => {
+    for (const key of Object.keys(FIELD_LABELS)) expect(FIELD_LABELS[key]).toMatch(/^[A-Z]/);
+    expect(FIELD_LABELS.rehabCost).toBe('Rehabilitation budget');
+  });
 });

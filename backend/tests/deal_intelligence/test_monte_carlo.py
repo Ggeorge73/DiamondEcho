@@ -194,24 +194,30 @@ def test_a_development_cost_rise_beyond_the_contingency_adds_only_the_excess():
     # Same shape of fault as item 6 of the 2026-10-22 flip review: a 30% rise
     # with a 10% contingency used to cost 1.3 x 1.1 = 43% over budget on site
     # work and hard construction.
+    # Since 1.6.0 the budget is spent over the development months and the
+    # facility drawn as it is spent, so a cost dollar also moves the draws and
+    # the interest a little: the cases are compared deal for deal, not by
+    # adding the cost dollars to the base profit.
     simulated = _fixed_development_cost_change(0.30)
     assert simulated == pytest.approx(_profit_with_costs_scaled(1.30, 0), abs=0.01)
     compounded = _profit_with_costs_scaled(1.30, 0.10)
-    assert simulated == pytest.approx(compounded + _LAND_CONTINGENCY_BASIS * 1.30 * 0.10, abs=0.01)
+    assert simulated > compounded + _LAND_CONTINGENCY_BASIS * 1.30 * 0.10 * 0.9
+    assert simulated != pytest.approx(compounded, abs=1_000)
 
 
 def test_a_draw_equal_to_the_land_contingency_is_the_base_case_on_the_contingency_basis():
     base = analyze_deal(_land_deal()).metrics["development_profit"].value
     # Site work and hard construction come out exactly as in the base case,
     # which spends the whole reserve. The four costs that carry no contingency
-    # still rise by the draw, so the profit is below the base by that much.
-    assert _fixed_development_cost_change(0.10) == pytest.approx(base - _LAND_OTHER_COSTS * 0.10, abs=0.01)
+    # still rise by the draw, so the profit is below the base.
+    assert _fixed_development_cost_change(0.10) == pytest.approx(_profit_with_costs_scaled(1.10, 0), abs=0.01)
+    assert _fixed_development_cost_change(0.10) == pytest.approx(base - _LAND_OTHER_COSTS * 0.10, abs=_LAND_OTHER_COSTS * 0.10 * 0.1)
     # A smaller draw means the reserve was not all needed: better than the base
-    # case by the unspent share of the basis, less the rise in the other costs.
-    assert _fixed_development_cost_change(0.05) == pytest.approx(
-        base + _LAND_CONTINGENCY_BASIS * 0.05 - _LAND_OTHER_COSTS * 0.05, abs=0.01,
-    )
-    assert _fixed_development_cost_change(0.0) == pytest.approx(base + _LAND_CONTINGENCY_BASIS * 0.10, abs=0.01)
+    # case by about the unspent share of the basis, less the rise in the other costs.
+    assert _fixed_development_cost_change(0.05) == pytest.approx(_profit_with_costs_scaled(1.05, 0), abs=0.01)
+    assert _fixed_development_cost_change(0.05) > _fixed_development_cost_change(0.10)
+    assert _fixed_development_cost_change(0.0) == pytest.approx(_profit_with_costs_scaled(1.0, 0), abs=0.01)
+    assert _fixed_development_cost_change(0.0) > base + _LAND_CONTINGENCY_BASIS * 0.10 * 0.9
 
 
 def test_a_land_deal_without_a_contingency_takes_the_whole_cost_change():

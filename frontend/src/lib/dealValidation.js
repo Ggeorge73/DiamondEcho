@@ -22,18 +22,66 @@ const numericFields = [
   'maxAnnualTaxes', 'maxAnnualInsurance', 'flipMinimumProfit', 'flipTargetRoi',
 ];
 
+// What each box is called on the page, so a message names the box the visitor
+// sees and never a field key (item 6 of the 2026-10-26 review).
+export const FIELD_LABELS = {
+  units: 'Units', rentableSquareFeet: 'Rentable square feet', purchasePrice: 'Purchase price',
+  closingCosts: 'Closing costs', dueDiligenceCosts: 'Due diligence', initialCapex: 'Initial capital work',
+  holdMonths: 'Hold period', ltv: 'Loan-to-value', interestRate: 'Interest rate', amortizationYears: 'Amortization',
+  interestOnlyMonths: 'Interest-only period', loanTermYears: 'Loan term', originationFee: 'Origination fee',
+  sellingCosts: 'Selling costs', discountRate: 'Discount rate', annualRent: 'Annual scheduled rent',
+  otherIncome: 'Other annual income', vacancy: 'Vacancy', propertyTaxes: 'Property taxes', insurance: 'Insurance',
+  repairsMaintenance: 'Repairs and maintenance', utilities: 'Utilities', payrollAdmin: 'Payroll and administration',
+  managementFee: 'Management fee', reserves: 'Replacement reserves', annualBelowNoiCosts: 'TI, leasing and capital costs',
+  incomeGrowth: 'Income growth', expenseGrowth: 'Expense growth', exitCap: 'Exit cap rate',
+  explicitSalePrice: 'Expected sale price', arv: 'After-repair value', rehabCost: 'Rehabilitation budget',
+  rehabContingency: 'Rehab contingency', rehabFinanced: 'Rehab financed by the loan', monthlyHolding: 'Monthly holding costs',
+  flipAnnualTaxes: 'Annual property taxes', flipAnnualInsurance: 'Annual insurance', flipMonthlyUtilities: 'Monthly utilities',
+  compSoldPerSf: 'Renovated comparable sales', lastSalePrice: 'Last sale price', originalListPrice: 'Original list price',
+  daysOnMarket: 'Days on market', otherProjectCosts: 'Other project costs', siteAcres: 'Site area',
+  parcelCount: 'Parcel count', wetlandsAcres: 'Wetlands area', developmentMonths: 'Development schedule',
+  absorptionMonths: 'Sales / lease-up absorption', siteWorkCost: 'Site work and infrastructure',
+  hardConstructionCost: 'Hard construction cost', softCosts: 'Soft costs', permitsImpactFees: 'Permits and impact fees',
+  environmentalRemediation: 'Environmental / remediation', developerFee: 'Developer fee',
+  landContingency: 'Construction contingency', annualCarryingCosts: 'Annual taxes and carrying',
+  expectedTerminalValue: 'Expected gross terminal value', stabilizedNoi: 'Stabilized NOI', stabilizedExitCap: 'Stabilized exit cap',
+  targetProfitMargin: 'Target development margin', mcIterations: 'Iterations per case',
+  mcRentMin: 'Rent change · low', mcRentMode: 'Rent change · mode', mcRentMax: 'Rent change · high',
+  mcVacancyMin: 'Vacancy · low', mcVacancyMode: 'Vacancy · mode', mcVacancyMax: 'Vacancy · high',
+  mcExpenseMin: 'Expense change · low', mcExpenseMode: 'Expense change · mode', mcExpenseMax: 'Expense change · high',
+  mcExitCapMin: 'Exit cap · low', mcExitCapMode: 'Exit cap · mode', mcExitCapMax: 'Exit cap · high',
+  mcInterestMin: 'Interest rate · low', mcInterestMode: 'Interest rate · mode', mcInterestMax: 'Interest rate · high',
+  mcArvMin: 'Value change · low', mcArvMode: 'Value change · mode', mcArvMax: 'Value change · high',
+  mcRehabMin: 'Cost overrun · low', mcRehabMode: 'Cost overrun · mode', mcRehabMax: 'Cost overrun · high',
+  mcHoldMin: 'Hold period change · low', mcHoldMode: 'Hold period change · mode', mcHoldMax: 'Hold period change · high',
+  targetCashOnCash: 'Target cash-on-cash', minimumDscr: 'Minimum DSCR', targetIrr: 'Target levered IRR',
+  preliminaryMarketCeiling: 'Market-value ceiling', maxImmediateCapex: 'Maximum immediate capital work',
+  maxAnnualTaxes: 'Maximum annual taxes', maxAnnualInsurance: 'Maximum annual insurance',
+  flipMinimumProfit: 'Minimum profit', flipTargetRoi: 'Minimum return on cash',
+};
+// The same box is called something else on the land tab.
+const fieldLabel = (form, field) => (form.strategy === 'land' && field === 'rentableSquareFeet' ? 'Buildable square feet'
+  : form.strategy === 'land' && field === 'units' ? 'Planned units / lots'
+    : FIELD_LABELS[field] || field);
+
+// A bound of Number.MAX_SAFE_INTEGER means "no upper limit" and is never
+// shown; the message then says only what the lower bound is.
 const requireRange = (form, field, label, minimum, maximum, { integer = false, exclusive = false } = {}) => {
   const value = Number(form[field]);
   if (!Number.isFinite(value) || (integer && !Number.isInteger(value))
       || (exclusive ? value <= minimum : value < minimum) || value > maximum) {
-    throw new Error(`${label} must be ${exclusive ? 'greater than' : 'at least'} ${minimum} and no more than ${maximum}${integer ? ', in whole numbers' : ''}.`);
+    const whole = integer ? ', in whole numbers' : '';
+    if (maximum >= Number.MAX_SAFE_INTEGER) {
+      throw new Error(exclusive ? `${label} must be greater than ${minimum}${whole}.` : `${label} must be ${minimum} or more${whole}.`);
+    }
+    throw new Error(`${label} must be ${exclusive ? 'greater than' : 'at least'} ${minimum} and no more than ${maximum}${whole}.`);
   }
 };
 
 export const validateDealForm = (form) => {
   for (const field of numericFields) {
     if (form[field] !== undefined && form[field] !== '' && !Number.isFinite(Number(form[field]))) {
-      throw new Error(`${field} must be a valid number.`);
+      throw new Error(`${fieldLabel(form, field)} must be a number.`);
     }
   }
   for (const field of ['closingCosts', 'dueDiligenceCosts', 'initialCapex', 'otherIncome',
@@ -43,7 +91,7 @@ export const validateDealForm = (form) => {
     'softCosts', 'permitsImpactFees', 'environmentalRemediation', 'developerFee',
     'annualCarryingCosts', 'stabilizedNoi', 'flipAnnualTaxes', 'flipAnnualInsurance',
     'flipMonthlyUtilities', 'compSoldPerSf', 'lastSalePrice', 'originalListPrice', 'daysOnMarket']) {
-    if (Number(form[field] || 0) < 0) throw new Error(`${field} cannot be negative.`);
+    if (Number(form[field] || 0) < 0) throw new Error(`${fieldLabel(form, field)} cannot be negative.`);
   }
   const requiredReviewed = [
     ['closingCosts', 'Closing costs'], ['dueDiligenceCosts', 'Due diligence'],
@@ -65,9 +113,9 @@ export const validateDealForm = (form) => {
   const missing = requiredReviewed.find(([field]) => form[field] === '' || form[field] == null);
   if (missing) throw new Error(`${missing[1]} needs review. Enter an explicit value, including 0 where appropriate.`);
   requireRange(form, 'purchasePrice', 'Purchase price', 0, Number.MAX_SAFE_INTEGER, { exclusive: true });
-  requireRange(form, 'units', 'Units', 1, 1000000, { integer: true });
+  requireRange(form, 'units', fieldLabel(form, 'units'), 1, 1000000, { integer: true });
   if (form.rentableSquareFeet !== '' && form.rentableSquareFeet != null) {
-    requireRange(form, 'rentableSquareFeet', 'Rentable square feet', 0, Number.MAX_SAFE_INTEGER, { exclusive: true });
+    requireRange(form, 'rentableSquareFeet', fieldLabel(form, 'rentableSquareFeet'), 0, Number.MAX_SAFE_INTEGER, { exclusive: true });
   }
   requireRange(form, 'holdMonths', 'Hold period', 1, 600, { integer: true });
   requireRange(form, 'ltv', 'Loan-to-value or loan-to-cost', 0, 200);
