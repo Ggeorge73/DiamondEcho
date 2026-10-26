@@ -69,14 +69,32 @@ Figures that moved, same inputs as before:
 The reviewer's check that moved nothing now moves: 12 / 12 months and 6 / 1
 months give $721,413 and $601,406 of profit on the $985,000 deal.
 
+## Second pass, the same day
+
+A second end-to-end run after the merge verified every change above (the new
+flip example recomputed by hand to the dollar, the band following an 8%
+rate as 7 / 8 / 9.75, the DSCR ceiling moving from $3.62M to $2.96M with the
+basis) and found two more things, plus one cosmetic. The service formula is
+now `1.7.0`, the page's `web-1.8.0`, the decision's `1.6.0`.
+
+| # | Reported | Change |
+| --- | --- | --- |
+| 7 | A flip whose hold outran the loan term (13 months on a one-year loan) had the whole $117,000 balance paid from the investor's pocket at maturity, interest stopped, and return on cash fell from 27.8% to 13.3% with no warning. The downside case (three months longer) hit the same trap | In both engines, for every strategy, a loan whose term ends before the hold does is extended to the end of the hold at the same rate: interest runs to the sale and the balance is repaid from it. The result carries a note naming the hold and the term and asking for the extension terms and fee to be confirmed and added to the costs. The flip decision's exception says the same. Three extra months now cost three months of holding and interest, nothing more |
+| 8 | A land hold shorter than build plus sell-out (3 months on 12 + 12) compressed the schedule and read as a conditional Go with a 741,908% IRR | A hard stop in both engines and in the page's validation: "Hold period must be at least the development schedule plus the absorption (24 months). Lengthen the hold or shorten the schedule." A simulation iteration that shortens the hold below the schedule is excluded, not shown. The reverse case (idle months) keeps its warning |
+| 9 | "construction financing must leave a positive equity contribution" reached the page in lower case | The service's three equity sentences start with a capital letter and end with a full stop, and the page capitalizes any plain sentence a service sends |
+
+What moved: only deals whose hold is longer than the loan term, and the
+land Downside case, whose six extra months run past the two-year facility of
+the reviewer's deal (its downside profit is $158,240, not $185,648, because
+the facility now carries interest for those months instead of being paid off
+at maturity with the interest stopping).
+
 ## Until the service is redeployed
 
-Production runs revision 22 of the API, formula `1.5.0`. The page needs
-`1.6.0` for a rental (the coverage after reserves) and for land (the
-timetable), so until the redeploy it calculates those two strategies on the
-device and says so in the result's notes, as it already did for fix and flip
-behind an older service. Fix and flip is unchanged in the service and still
-answered by it. Redeploying from `main` is a production change for Gbenga;
+Production ran revision 22 of the API, formula `1.5.0`, until the second
+redeploy of 2026-10-26 (revision 25, `1.6.0`). The second pass needs `1.7.0`
+for every strategy, so until the next redeploy the page calculates all three
+on the device and says so in the result's notes. Redeploying from `main` is a production change for Gbenga;
 the steps are in `docs/de13-production-setup.md`.
 
 ## Not changed, on purpose

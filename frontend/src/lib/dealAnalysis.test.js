@@ -562,9 +562,16 @@ describe('a land development follows its timetable', () => {
     expect(rows[1].net_cash_flow).toBeCloseTo(-(budget / 18 * 0.35 + 2000 + rows[1].debt_service), 4);
   });
 
-  test('the timetable is kept inside the hold and says so', () => {
-    const overlap = landAt({ developmentMonths: '24', absorptionMonths: '12' });
-    expect(overlap.warnings).toContain('Development (24 months) plus sales / lease-up absorption (12 months) is longer than the 24-month hold, so the model overlaps them: the budget is spent over the first 24 months and the sales fall in the last 12 months. Lengthen the hold or shorten the schedule.');
+  test('a hold shorter than the schedule is refused, and idle months are said', () => {
+    // The second pass of the review: a 3-month hold on a 12 + 12 schedule read as a Go at a 741,908% IRR.
+    expect(() => landAt({ holdMonths: '3', developmentMonths: '12', absorptionMonths: '12' })).toThrow('The 3-month hold is shorter than the development schedule plus the absorption (12 + 12 months). Lengthen the hold or shorten the schedule.');
+    expect(() => landAt({ developmentMonths: '24', absorptionMonths: '12' })).toThrow('The 24-month hold is shorter than');
+    // In a simulation such an iteration is excluded, not shown.
+    const shortened = runMonteCarloLocally({ deal: buildDealRequest(landForm), scenarios: [{ name: 'Short', iterations: 40, seed: 5, drivers: { hold_months_change: { minimum: -3, mode: 0, maximum: 0 } } }] }).scenarios[0];
+    expect(shortened.failed_iterations).toBeGreaterThan(0);
+    expect(shortened.iterations_completed).toBeGreaterThan(0);
+    expect(shortened.failed_iterations + shortened.iterations_completed).toBe(40);
+    expect(() => runMonteCarloLocally({ deal: buildDealRequest(landForm), scenarios: [{ name: 'All short', iterations: 5, seed: 5, drivers: { hold_months_change: { minimum: -12, mode: -12, maximum: -12 } } }] })).toThrow('The 12-month hold is shorter than the development schedule plus the absorption (18 + 6 months)');
     const idle = landAt({ developmentMonths: '6', absorptionMonths: '6' });
     expect(idle.warnings).toContain('The hold is 12 months longer than development plus absorption; carrying costs and interest on the drawn facility run for those months too.');
     expect(landAt().warnings.some((warning) => /longer than/.test(warning))).toBe(false);
@@ -613,4 +620,60 @@ test('a rental reports its debt service coverage before and after reserves and T
   // Item 2: a hold shorter than a year is said, as the service says it.
   const short = analyzeDealLocally({ ...request, acquisition: { ...request.acquisition, hold_months: 5 } });
   expect(short.warnings).toContain('Year-one operating metrics are annualized from a holding period shorter than 12 months.');
+});
+
+// The second pass of the 2026-10-26 review: a flip whose hold outran the loan
+// term had the whole balance paid from the investor's pocket at maturity, with
+// interest stopping, and no warning; the downside case (three months longer)
+// hit the same trap. The loan is now extended to the sale at the same rate.
+describe('a loan whose term ends before the hold is extended, not paid at maturity', () => {
+  const example = {
+    strategy: 'flip', propertyType: 'single_family', market: 'Atlanta, GA', units: '1', rentableSquareFeet: '1800',
+    purchasePrice: '180000', closingCosts: '5500', dueDiligenceCosts: '1500', initialCapex: '0', holdMonths: '10',
+    ltv: '65', interestRate: '6.75', amortizationYears: '30', interestOnlyMonths: '10', loanTermYears: '1', originationFee: '1',
+    arv: '360000', rehabCost: '65000', rehabContingency: '10', monthlyHolding: '1800', otherProjectCosts: '6000',
+    sellingCosts: '6', discountRate: '10',
+  };
+  const flipAt = (changes = {}) => analyzeDealLocally(buildDealRequest({ ...example, ...changes }));
+
+  test('interest runs to the sale, the balance is repaid from the sale, and the result says so', () => {
+    // Interest only through the 12-month term; the thirteenth month amortizes.
+    const thirteen = flipAt({ holdMonths: '13', interestOnlyMonths: '12' });
+    const interest = 117000 * 0.0675 / 12;
+    for (const month of [11, 12]) expect(thirteen.cash_flows[month].debt_service).toBeCloseTo(interest, 6);
+    expect(thirteen.cash_flows[13].debt_service).toBeGreaterThan(interest);
+    expect(thirteen.cash_flows[12].loan_payoff).toBe(0);
+    // The balance is repaid at the sale, less the one scheduled principal payment.
+    expect(thirteen.cash_flows[13].loan_payoff + (thirteen.cash_flows[13].debt_service - interest)).toBeCloseTo(117000, 6);
+    expect(thirteen.warnings).toContain('The 13-month hold is longer than the 12-month loan term, so the loan is modeled as extended to the end of the hold at the same rate. Confirm the extension terms and fee with the lender, and add the fee to the costs.');
+    // Three more months cost three months of holding and interest, nothing more.
+    const ten = flipAt();
+    expect(ten.metrics.flip_profit.value - thirteen.metrics.flip_profit.value).toBeCloseTo(3 * (1800 + interest), 4);
+    expect(thirteen.metrics.flip_roi.value).toBeGreaterThan(0.2);
+    expect(ten.warnings.some((warning) => /loan term/.test(warning))).toBe(false);
+  });
+
+  test('a term equal to the hold, or longer, is unchanged and silent', () => {
+    const twelve = flipAt({ holdMonths: '12', interestOnlyMonths: '12' });
+    expect(twelve.cash_flows[12].loan_payoff).toBeCloseTo(117000, 6);
+    expect(twelve.cash_flows[12].debt_service).toBeCloseTo(117000 * 0.0675 / 12, 6);
+    expect(twelve.warnings.some((warning) => /loan term/.test(warning))).toBe(false);
+  });
+
+  test('a rental and a land deal get the same treatment', () => {
+    const rental = analyzeDealLocally(buildDealRequest({
+      strategy: 'rental', propertyType: 'multifamily', units: '12', rentableSquareFeet: '18000', purchasePrice: '3000000',
+      closingCosts: '75000', dueDiligenceCosts: '25000', initialCapex: '125000', holdMonths: '60', ltv: '65', interestRate: '6.75',
+      amortizationYears: '30', interestOnlyMonths: '0', loanTermYears: '3', originationFee: '1', annualRent: '360000', otherIncome: '18000',
+      vacancy: '5', propertyTaxes: '54000', insurance: '24000', repairsMaintenance: '18000', utilities: '12000', payrollAdmin: '18000',
+      managementFee: '4', reserves: '30000', annualBelowNoiCosts: '10000', incomeGrowth: '3', expenseGrowth: '3', exitCap: '6.5',
+      explicitSalePrice: '', sellingCosts: '6', discountRate: '10',
+    }));
+    expect(rental.cash_flows[36].debt_service).toBeCloseTo(rental.cash_flows[37].debt_service, 6);
+    expect(rental.cash_flows[60].loan_payoff).toBeGreaterThan(1500000);
+    expect(rental.warnings).toContain('The 60-month hold is longer than the 36-month loan term, so the loan is modeled as extended to the end of the hold at the same rate. Confirm the extension terms and fee with the lender, and add the fee to the costs.');
+    const land = landAt({ loanTermYears: '1' });
+    expect(land.warnings.some((warning) => /24-month hold is longer than the 12-month loan term/.test(warning))).toBe(true);
+    expect(land.metrics.development_profit.value).toBeCloseTo(landAt().metrics.development_profit.value, 6);
+  });
 });

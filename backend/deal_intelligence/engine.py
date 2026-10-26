@@ -42,7 +42,12 @@ from .models import (
 # months, so those two inputs now move the figures; the residual land value is
 # solved against that timetable. A rental also reports its debt service
 # coverage after replacement reserves and TI (dscr_after_reserves).
-FORMULA_VERSION = "diamond-underwriting-1.6.0"
+# 1.7.0 (2026-10-26, second pass): a loan whose term ends before the hold does
+# is extended to the end of the hold at the same rate, with a warning, instead
+# of its balance being paid from the investor's pocket at maturity while the
+# property is still held; a land hold shorter than development plus absorption
+# is refused instead of compressed.
+FORMULA_VERSION = "diamond-underwriting-1.7.0"
 
 
 # FEMA flood-zone designations. Mirrors ``classifyFloodZone`` in
@@ -151,11 +156,28 @@ def _resolved_debt_and_schedules(
                 annual_rate=loan.annual_interest_rate,
                 amortization_years=loan.amortization_years,
                 interest_only_months=loan.interest_only_months,
-                term_months=loan.term_months,
+                # A term that ends inside the hold is extended to its end at
+                # the same rate: the balance is repaid at the sale, not from
+                # the investor's pocket at maturity while the property is
+                # still held (the 2026-10-26 review's second pass).
+                term_months=max(loan.term_months, request.acquisition.hold_months + 1),
                 projection_months=request.acquisition.hold_months,
             )
         )
     return principals, schedules, fees
+
+
+def _extended_loan_warning(request: DealAnalysisRequest) -> Optional[str]:
+    """The note added when a loan's term ends before the hold does."""
+    hold = request.acquisition.hold_months
+    terms = [loan.term_months for loan in request.debt if loan.term_months < hold]
+    if not terms:
+        return None
+    return (
+        f"The {hold}-month hold is longer than the {min(terms)}-month loan term, so the loan is modeled as "
+        "extended to the end of the hold at the same rate. Confirm the extension terms and fee with the "
+        "lender, and add the fee to the costs."
+    )
 
 
 def _month_debt_service(schedules: Sequence[Sequence[LoanMonth]], month: int) -> float:
@@ -231,7 +253,7 @@ def _rental_analysis(
     )
     initial_equity = total_project_cost + origination_fees - total_debt
     if initial_equity <= 0:
-        raise ValueError("initial debt and loan proceeds must leave a positive equity contribution")
+        raise ValueError("Initial debt and loan proceeds must leave a positive equity contribution.")
 
     cash_flows: List[PeriodCashFlow] = [
         PeriodCashFlow(month=0, capital_costs=total_project_cost + origination_fees, net_cash_flow=-initial_equity)
@@ -410,6 +432,9 @@ def _rental_analysis(
         warnings.append("Year-one operating metrics are annualized from a holding period shorter than 12 months.")
     if request.exit.explicit_sale_price is not None:
         warnings.append("Exit value uses the user-provided sale price rather than a terminal capitalization calculation.")
+    extended = _extended_loan_warning(request)
+    if extended:
+        warnings.append(extended)
 
     return DealAnalysisResponse(
         analysis_id=str(uuid4()),
@@ -471,7 +496,7 @@ def _flip_analysis(
     )
     initial_equity = total_project_cost + origination_fees - total_debt
     if initial_equity <= 0:
-        raise ValueError("initial debt and loan proceeds must leave a positive equity contribution")
+        raise ValueError("Initial debt and loan proceeds must leave a positive equity contribution.")
 
     cash_flows: List[PeriodCashFlow] = [
         PeriodCashFlow(month=0, capital_costs=total_project_cost + origination_fees, net_cash_flow=-initial_equity)
@@ -565,6 +590,9 @@ def _flip_analysis(
         warnings.append("Purchase price exceeds the modeled 70% rule screening threshold.")
     if request.exit.explicit_sale_price is not None:
         warnings.append("The explicit sale price overrides after-repair value for sale proceeds.")
+    extended = _extended_loan_warning(request)
+    if extended:
+        warnings.append(extended)
 
     return DealAnalysisResponse(
         analysis_id=str(uuid4()),
@@ -655,8 +683,7 @@ def _land_figures(request: DealAnalysisRequest, purchase_price: float, principal
     for principal, loan in zip(principals, request.debt):
         rate = loan.annual_interest_rate / 12
         loans.append({
-            "rate": rate, "io_months": loan.interest_only_months, "term_months": loan.term_months,
-            "principal": principal, "balance": principal * spent[0],
+            "rate": rate, "io_months": loan.interest_only_months, "principal": principal, "balance": principal * spent[0],
             "payment": periodic_payment(principal, rate, max(loan.amortization_years * 12 - loan.interest_only_months, 1)),
         })
     cash_flows: List[PeriodCashFlow] = [
@@ -681,14 +708,11 @@ def _land_figures(request: DealAnalysisRequest, purchase_price: float, principal
             release = min(loan["balance"], available)
             loan["balance"] -= release
             available -= release
-            balloon = loan["balance"] if month == loan["term_months"] else 0
-            if balloon:
-                loan["balance"] = 0
             at_end = loan["balance"] if month == hold else 0
             if at_end:
                 loan["balance"] = 0
             total_interest += interest
-            debt_service += interest + scheduled_principal + balloon
+            debt_service += interest + scheduled_principal
             payoff += release + at_end
         cash_flows.append(
             PeriodCashFlow(
@@ -742,12 +766,29 @@ def solve_land_residual(profit_at: Callable[[float], float], price: float, targe
     return b if isfinite(fb) else None
 
 
+def land_hold_too_short(land, hold_months: int) -> Optional[str]:
+    """A land hold shorter than development plus absorption cannot be
+    modeled: a three-month hold on a twelve-month build read as a Go at a
+    seven-figure IRR (the 2026-10-26 review's second pass). It is refused,
+    not compressed. Mirrors ``landHoldTooShort`` in the browser engine."""
+    schedule = (land.development_months or 1) + (land.absorption_months or 0)
+    if schedule <= hold_months:
+        return None
+    return (
+        f"The {hold_months}-month hold is shorter than the development schedule plus the absorption "
+        f"({land.development_months or 1} + {land.absorption_months or 0} months). Lengthen the hold or shorten the schedule."
+    )
+
+
 def _land_analysis(request: DealAnalysisRequest, include_residual: bool = True) -> DealAnalysisResponse:
     """Ground-up development. Mirrors ``analyzeLand`` in the browser engine
     (frontend/src/lib/dealAnalysis.js); the two must give the same figures."""
     assert request.land is not None
     land = request.land
     acquisition = request.acquisition
+    too_short = land_hold_too_short(land, acquisition.hold_months)
+    if too_short:
+        raise ValueError(too_short)
     currency = request.property.currency
     selling_cost_rate = request.exit.selling_cost_rate
     principals = [loan_principal(request, loan) for loan in request.debt]
@@ -756,7 +797,7 @@ def _land_analysis(request: DealAnalysisRequest, include_residual: bool = True) 
     total_debt = base.total_debt
     terminal_value = base.terminal_value
     if total_project_cost + base.origination_fees - total_debt <= 0:
-        raise ValueError("construction financing must leave a positive equity contribution")
+        raise ValueError("Construction financing must leave a positive equity contribution.")
 
     break_even_terminal_value = base.economic_cost / (1 - selling_cost_rate) if selling_cost_rate < 1 else None
     non_land_costs = total_project_cost - acquisition.purchase_price
@@ -853,18 +894,14 @@ def _land_analysis(request: DealAnalysisRequest, include_residual: bool = True) 
             "capitalization rate."
         )
     schedule = land.development_months + land.absorption_months
-    if schedule > acquisition.hold_months:
-        warnings.append(
-            f"Development ({land.development_months} months) plus sales / lease-up absorption ({land.absorption_months} months) "
-            f"is longer than the {acquisition.hold_months}-month hold, so the model overlaps them: the budget is spent over "
-            f"the first {base.development} months and the sales fall in the last {base.absorption} months. "
-            "Lengthen the hold or shorten the schedule."
-        )
-    elif schedule < acquisition.hold_months:
+    if schedule < acquisition.hold_months:
         warnings.append(
             f"The hold is {acquisition.hold_months - schedule} months longer than development plus absorption; "
             "carrying costs and interest on the drawn facility run for those months too."
         )
+    extended = _extended_loan_warning(request)
+    if extended:
+        warnings.append(extended)
     if land.entitlement_status in ("unentitled", "rezoning_required"):
         warnings.append(
             "The project carries material entitlement risk; probability, timing, and denial costs are not "

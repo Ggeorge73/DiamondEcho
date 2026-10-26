@@ -23,9 +23,10 @@ test('repeated and long lists of rejections stay readable', () => {
   expect(responseErrorMessage(apiError(many), 'fallback')).toBe('a: Field required · b: Field required · c: Field required · and 2 more.');
 });
 
-test('a plain message from the API is shown as written', () => {
+test('a plain message from the API is shown as written, with a capital letter', () => {
   expect(responseErrorMessage(apiError('construction financing must leave a positive equity contribution'), 'fallback'))
-    .toBe('construction financing must leave a positive equity contribution');
+    .toBe('Construction financing must leave a positive equity contribution');
+  expect(responseErrorMessage(apiError('Already capital.'), 'fallback')).toBe('Already capital.');
 });
 
 test('an unreachable service says nothing was calculated', () => {
@@ -66,6 +67,10 @@ describe('validation messages name the box as the page does', () => {
     expect(message(land)).toBe('Buildable square feet must be greater than 0.');
     expect(message({ ...land, rentableSquareFeet: '100', units: '0' })).toBe('Planned units / lots must be at least 1 and no more than 1000000, in whole numbers.');
     expect(message({ ...flip, rentableSquareFeet: '0' })).toBe('Rentable square feet must be greater than 0.');
+    // A land hold shorter than the build plus the sell-out is refused (second pass of the review).
+    expect(message({ ...land, rentableSquareFeet: '100', holdMonths: '3', developmentMonths: '12', absorptionMonths: '12' })).toBe('Hold period must be at least the development schedule plus the absorption (24 months). Lengthen the hold or shorten the schedule.');
+    expect(message({ ...land, rentableSquareFeet: '100', holdMonths: '24', developmentMonths: '12', absorptionMonths: '12' })).toBe('');
+    expect(message({ ...land, rentableSquareFeet: '100', holdMonths: '12', developmentMonths: '12', absorptionMonths: '0' })).toBe('');
   });
 
   test('every numeric box the form validates has a label', () => {

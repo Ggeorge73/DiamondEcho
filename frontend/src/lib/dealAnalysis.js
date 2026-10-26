@@ -22,7 +22,12 @@ import { floodZoneWarning } from './floodZone';
 // solved against that schedule. A rental also reports its debt service
 // coverage after replacement reserves and TI (dscr_after_reserves), and warns
 // when year-one figures are annualized from a hold shorter than a year.
-export const FORMULA_VERSION = 'diamond-underwriting-web-1.7.0';
+// 1.8.0 (2026-10-26, second pass): a loan whose term ends before the hold does
+// is extended to the end of the hold at the same rate, with a warning, instead
+// of its balance being paid from the investor's pocket at maturity while the
+// property is still held; a land hold shorter than development plus absorption
+// is refused instead of compressed.
+export const FORMULA_VERSION = 'diamond-underwriting-web-1.8.0';
 
 const clean = (value, digits = 8) => value == null || !Number.isFinite(value) ? null : Number(value.toFixed(digits));
 const ratio = (numerator, denominator) => Math.abs(denominator) < 1e-12 ? null : clean(numerator / denominator);
@@ -63,10 +68,14 @@ export const loanPrincipal = (request, loan) => {
 const BASIS_WORDS = { purchase_price: 'purchase price', total_project_cost: 'total project cost', after_repair_value: 'after-repair value' };
 const loanSizingFormula = (request) => (request.debt || []).length === 0 ? 'no loan' : request.debt.map((loan) => (loan.principal ? 'loan amount as entered' : `loan-to-value x ${BASIS_WORDS[loan.loan_basis || 'purchase_price']}${request.flip && (loan.loan_basis || 'purchase_price') === 'purchase_price' && loan.rehab_financed_rate ? ' + financed share of the rehab budget' : ''}`)).join('; ');
 
+// A loan whose term ends inside the projection is extended to its end at the
+// same rate: the balance is repaid at the sale, not from the investor's
+// pocket at maturity while the property is still held (the 2026-10-26
+// review's second pass). The analysis says so when it happens.
 const loanSchedule = (loan, principal, projectionMonths) => {
   const rate = (loan.annual_interest_rate || 0) / 12;
   const ioMonths = loan.interest_only_months || 0;
-  const termMonths = loan.term_months || 360;
+  const termMonths = Math.max(loan.term_months || 360, projectionMonths + 1);
   const amortizationMonths = Math.max((loan.amortization_years || 30) * 12 - ioMonths, 1);
   const payment = periodicPayment(principal, rate, amortizationMonths);
   let balance = principal;
@@ -80,6 +89,15 @@ const loanSchedule = (loan, principal, projectionMonths) => {
     rows.push({ debtService: interest + scheduledPrincipal + balloon, interest, scheduledPrincipal, balloon, closingBalance: balance });
   }
   return { principal, rows };
+};
+
+// The note added when a loan's term ends before the hold does.
+const extendedLoanWarning = (request) => {
+  const hold = request.acquisition.hold_months;
+  const terms = (request.debt || []).map((loan) => loan.term_months || 360).filter((term) => term < hold);
+  if (!terms.length) return null;
+  const term = Math.min(...terms);
+  return `The ${hold}-month hold is longer than the ${term}-month loan term, so the loan is modeled as extended to the end of the hold at the same rate. Confirm the extension terms and fee with the lender, and add the fee to the costs.`;
 };
 
 const netPresentValue = (cashFlows, annualRate) => {
@@ -197,6 +215,8 @@ const analyzeRental = (request, schedules, totalDebt, originationFees) => {
   if (metrics.irr.value == null) warnings.push('IRR is mathematically undefined because the modeled cash flows contain no positive distribution.');
   // Same sentence as the analysis service, so both paths say it.
   if (hold < 12) warnings.push('Year-one operating metrics are annualized from a holding period shorter than 12 months.');
+  const extended = extendedLoanWarning(request);
+  if (extended) warnings.push(extended);
   if (request.property.unit_count > 1 && request.property.property_type === 'single_family') warnings.push('Multiple planned homes are treated as one investment; zoning capacity is not proof that units exist or that construction is feasible.');
   return { analysis_id: `browser-${Date.now()}`, schema_version: '1.0', formula_version: FORMULA_VERSION, strategy: 'rental', computed_at: new Date().toISOString(), metrics, cash_flows: cashFlows, calculation_mode: 'browser', assumptions: { timing: 'Monthly operations with disposition after the final month.', taxes: 'Income taxes, depreciation, and entity-level tax effects are not modeled.' }, warnings };
 };
@@ -232,6 +252,8 @@ const analyzeFlip = (request, schedules, totalDebt, originationFees) => {
   });
   const warnings = ['Calculated securely in this browser; no live analysis service was required.', 'After-repair value, construction budget, and timeline are user assumptions and require independent verification.'];
   if (salePrice === 0) warnings.push('No after-repair value was entered, so the model assumes $0 disposition proceeds.');
+  const extended = extendedLoanWarning(request);
+  if (extended) warnings.push(extended);
   return { analysis_id: `browser-${Date.now()}`, schema_version: '1.0', formula_version: FORMULA_VERSION, strategy: 'flip', computed_at: new Date().toISOString(), metrics, cash_flows: cashFlows, calculation_mode: 'browser', assumptions: { timing: 'Holding and debt costs occur monthly; sale occurs after the final month.' }, warnings };
 };
 
@@ -277,7 +299,7 @@ const landFigures = (request, purchasePrice, principals) => {
   const loans = (request.debt || []).map((loan, index) => {
     const rate = (loan.annual_interest_rate || 0) / 12;
     const ioMonths = loan.interest_only_months || 0;
-    return { rate, ioMonths, termMonths: loan.term_months || 360, principal: principals[index], balance: principals[index] * spent[0], payment: periodicPayment(principals[index], rate, Math.max((loan.amortization_years || 30) * 12 - ioMonths, 1)) };
+    return { rate, ioMonths, principal: principals[index], balance: principals[index] * spent[0], payment: periodicPayment(principals[index], rate, Math.max((loan.amortization_years || 30) * 12 - ioMonths, 1)) };
   });
   const cashFlows = [{ month: 0, operating_cash_flow: 0, debt_service: 0, capital_costs: acquisitionCost + originationFees, sale_proceeds: 0, loan_payoff: 0, net_cash_flow: -(acquisitionCost + originationFees - totalDebt * spent[0]) }];
   let totalInterest = 0;
@@ -293,12 +315,10 @@ const landFigures = (request, purchasePrice, principals) => {
       loan.balance = loan.balance - scheduledPrincipal + loan.principal * delta;
       const release = Math.min(loan.balance, available);
       loan.balance -= release; available -= release;
-      const balloon = month === loan.termMonths ? loan.balance : 0;
-      if (balloon) loan.balance = 0;
       const atEnd = month === hold ? loan.balance : 0;
       if (atEnd) loan.balance = 0;
       totalInterest += interest;
-      debtService += interest + scheduledPrincipal + balloon;
+      debtService += interest + scheduledPrincipal;
       payoff += release + atEnd;
     });
     cashFlows.push({ month, operating_cash_flow: 0, debt_service: clean(debtService), capital_costs: clean(spend + monthlyCarrying), sale_proceeds: clean(proceeds), loan_payoff: clean(payoff), net_cash_flow: clean(-(spend - draw) - monthlyCarrying - debtService + proceeds - payoff) });
@@ -333,8 +353,20 @@ export const solveLandResidual = (profitAt, price, target) => {
   return Number.isFinite(fb) ? b : null;
 };
 
+// A land hold shorter than development plus absorption cannot be modeled: a
+// three-month hold on a twelve-month build read as a Go at a seven-figure
+// IRR (the 2026-10-26 review's second pass). It is refused, not compressed.
+export const landHoldTooShort = (land, holdMonths) => {
+  const schedule = (land.development_months || 1) + (land.absorption_months || 0);
+  return schedule > holdMonths
+    ? `The ${holdMonths}-month hold is shorter than the development schedule plus the absorption (${land.development_months || 1} + ${land.absorption_months || 0} months). Lengthen the hold or shorten the schedule.`
+    : null;
+};
+
 const analyzeLand = (request, { residual = true } = {}) => {
   const { acquisition, land } = request;
+  const tooShort = landHoldTooShort(land, acquisition.hold_months);
+  if (tooShort) throw new Error(tooShort);
   const principals = (request.debt || []).map((loan) => loanPrincipal(request, loan));
   const base = landFigures(request, acquisition.purchase_price, principals);
   const { totalProjectCost, originationFees, totalDebt, terminalValue } = base;
@@ -369,8 +401,9 @@ const analyzeLand = (request, { residual = true } = {}) => {
   const warnings = ['Calculated securely in this browser; no live analysis service was required.', 'Land-development results depend on zoning, entitlement, utility, environmental, geotechnical, civil, market, and construction assumptions that require professional verification.'];
   if (!terminalValue) warnings.push('No terminal value can be calculated. Enter an expected gross exit value or stabilized NOI with a capitalization rate.');
   const schedule = land.development_months + (land.absorption_months || 0);
-  if (schedule > acquisition.hold_months) warnings.push(`Development (${land.development_months} months) plus sales / lease-up absorption (${land.absorption_months || 0} months) is longer than the ${acquisition.hold_months}-month hold, so the model overlaps them: the budget is spent over the first ${base.development} months and the sales fall in the last ${base.absorption} months. Lengthen the hold or shorten the schedule.`);
-  else if (schedule < acquisition.hold_months) warnings.push(`The hold is ${acquisition.hold_months - schedule} months longer than development plus absorption; carrying costs and interest on the drawn facility run for those months too.`);
+  if (schedule < acquisition.hold_months) warnings.push(`The hold is ${acquisition.hold_months - schedule} months longer than development plus absorption; carrying costs and interest on the drawn facility run for those months too.`);
+  const extended = extendedLoanWarning(request);
+  if (extended) warnings.push(extended);
   if (land.entitlement_status === 'unentitled' || land.entitlement_status === 'rezoning_required') warnings.push('The project carries material entitlement risk; probability, timing, and denial costs are not independently estimated.');
   if (land.utility_status !== 'available') warnings.push('Water, sewer, power, stormwater, and other utility capacity are not confirmed at the site; extensions and off-site upgrades may materially change cost and timing.');
   if (land.access_status !== 'legal_confirmed') warnings.push('Legal and physical access is not confirmed; verify frontage, curb cuts, easements, and emergency access.');

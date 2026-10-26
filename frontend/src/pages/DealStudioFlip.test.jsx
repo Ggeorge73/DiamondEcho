@@ -487,7 +487,7 @@ describe('the service and the page agree on fix and flip', () => {
 
   test('a service on the current formula is shown as it answered, and any other rejection is still an error', async () => {
     await mountWithBackend();
-    axios.post.mockResolvedValueOnce({ data: { ...oldService, formula_version: 'diamond-underwriting-1.5.0', metrics: { ...oldService.metrics, loan_amount: { value: 65100, unit: 'USD', formula: 'from the service' } } } });
+    axios.post.mockResolvedValueOnce({ data: { ...oldService, formula_version: 'diamond-underwriting-1.7.0', metrics: { ...oldService.metrics, loan_amount: { value: 65100, unit: 'USD', formula: 'from the service' } } } });
     await click('Fix & flip');
     await enterFixer();
     await runBase();
@@ -500,8 +500,8 @@ describe('the service and the page agree on fix and flip', () => {
   });
 
   test.each([
-    ['diamond-underwriting-1.1.0', false], ['diamond-underwriting-1.4.0', false], ['diamond-underwriting-1.5.0', true],
-    ['diamond-underwriting-1.6.2', true], ['diamond-underwriting-2.0.0', true], ['test', true], [undefined, true],
+    ['diamond-underwriting-1.1.0', false], ['diamond-underwriting-1.5.0', false], ['diamond-underwriting-1.6.2', false],
+    ['diamond-underwriting-1.7.0', true], ['diamond-underwriting-2.0.0', true], ['test', true], [undefined, true],
   ])('service formula %s is current enough for fix and flip: %s', (version, current) => {
     expect(flipServiceFormulaIsCurrent(version)).toBe(current);
   });
