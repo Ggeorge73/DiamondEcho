@@ -77,7 +77,13 @@ export const buildDealRequest = (form) => {
   }
   return {
     ...common,
-    debt: common.debt.map((loan) => ({ ...loan, rehab_financed_rate: rate(form.rehabFinanced), loan_basis: form.loanBasis || 'purchase_price' })),
+    // The two loan options are sent only when they differ from their defaults,
+    // so a service that does not know them yet still answers the usual deal.
+    debt: common.debt.map((loan) => ({
+      ...loan,
+      ...(rate(form.rehabFinanced) > 0 ? { rehab_financed_rate: rate(form.rehabFinanced) } : {}),
+      ...(form.loanBasis && form.loanBasis !== 'purchase_price' ? { loan_basis: form.loanBasis } : {}),
+    })),
     flip: {
       after_repair_value: n(form.arv), rehab_cost: n(form.rehabCost),
       rehab_contingency_rate: rate(form.rehabContingency), monthly_holding_costs: n(form.monthlyHolding),
