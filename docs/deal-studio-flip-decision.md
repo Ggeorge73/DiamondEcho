@@ -305,6 +305,15 @@ service:
 Redeploying the service from `main` is still the right end state: the
 service then answers every fix and flip itself, with formula `1.5.0`.
 
+## Changed again on 2026-10-26
+
+The end-to-end review of that day added a Financing row to the decision
+(loan, cash required, points, monthly interest), changed what a tab switch
+does when a purchase price has been typed, made the Monte Carlo bands show
+whether they follow their boxes, and polished the messages. See
+`docs/deal-studio-review-2026-10-26.md`. The flip figures in this note are
+unchanged.
+
 ## Tests (items 2, 7 and 8)
 
 - `frontend/src/lib/listingSignals.test.js`: the reference listing's four
