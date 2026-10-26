@@ -9,7 +9,7 @@ let container;
 let root;
 
 const savedBackend = process.env.REACT_APP_BACKEND_URL;
-const shell = fs.readFileSync(path.resolve(__dirname, '../../public/index.html'), 'utf8').toLowerCase();
+const shell = fs.readFileSync(path.resolve(__dirname, '../../index.html'), 'utf8').toLowerCase();
 
 beforeEach(() => {
   global.IS_REACT_ACT_ENVIRONMENT = true;

@@ -8,8 +8,9 @@ import { Site } from '../App';
 
 // DE-39. The Intelligence page with the real router: three tools, one open at a
 // time, chosen by the address.
-jest.mock('axios', () => ({ get: jest.fn(), post: jest.fn() }));
-jest.mock('../lib/dealWorkbook', () => ({ downloadDealWorkbook: jest.fn() }));
+// The page imports axios as a default export.
+vi.mock('axios', () => { const axios = { get: vi.fn(), post: vi.fn() }; return { default: axios, ...axios }; });
+vi.mock('../lib/dealWorkbook', () => ({ downloadDealWorkbook: vi.fn() }));
 
 let container;
 let root;
@@ -129,7 +130,7 @@ describe('through the site\u2019s own routes', () => {
     await act(async () => { root.render(<MemoryRouter initialEntries={[address]}><Site /><Probe /></MemoryRouter>); });
   };
   beforeEach(() => {
-    window.scrollTo = jest.fn();
+    window.scrollTo = vi.fn();
     global.IntersectionObserver = class { observe() {} unobserve() {} disconnect() {} };
   });
   afterEach(() => { global.IntersectionObserver = originalObserver; });

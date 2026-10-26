@@ -13,7 +13,7 @@ beforeEach(() => {
   root = createRoot(container);
 });
 afterEach(async () => {
-  jest.restoreAllMocks();
+  vi.restoreAllMocks();
   await act(async () => root.unmount());
   container.remove();
 });
@@ -142,8 +142,8 @@ test('for-sale and rentals each keep their own frame; moving between them shows 
   // history: Back showed for-sale results under the rentals note. One frame
   // replaced by another left steps in the history with no frame to go to: Back
   // presses that did nothing. So neither frame is ever re-pointed or removed.
-  const assigned = jest.spyOn(HTMLIFrameElement.prototype, 'src', 'set');
-  const attributes = jest.spyOn(Element.prototype, 'setAttribute');
+  const assigned = vi.spyOn(HTMLIFrameElement.prototype, 'src', 'set');
+  const attributes = vi.spyOn(Element.prototype, 'setAttribute');
   const srcWrites = () => attributes.mock.calls
     .filter((call, index) => attributes.mock.instances[index].tagName === 'IFRAME' && call[0] === 'src')
     .map((call) => call[1]);
@@ -213,11 +213,11 @@ test('"Show homes for sale instead" keeps the note about the older link', async 
   expect(container.textContent).toContain('“Atlanta”');
 });
 test('"Start a new search" sends the visible search back to its form, keeps the frame, and says so for a while', async () => {
-  jest.useFakeTimers();
+  vi.useFakeTimers();
   try {
     await render('/search?status=rent');
     const before = frame();
-    const assigned = jest.spyOn(HTMLIFrameElement.prototype, 'src', 'set');
+    const assigned = vi.spyOn(HTMLIFrameElement.prototype, 'src', 'set');
     expect(container.querySelector('.de-idx__status').textContent).toBe('');
     await click([...container.querySelectorAll('button')].find((b) => b.textContent === 'Start a new search'));
     // Same frame, sent to its starting address again: an ordinary step that Back can undo.
@@ -225,11 +225,11 @@ test('"Start a new search" sends the visible search back to its form, keeps the 
     expect(assigned.mock.calls.map(([value]) => value)).toEqual([GAMLS_RENTAL_SEARCH_URL]);
     expect(address()).toBe('/search?status=rent');
     expect(container.querySelector('.de-idx__status').textContent).toBe('The search form has been reloaded.');
-    await act(async () => { jest.advanceTimersByTime(RELOADED_NOTE_MS + 1); });
+    await act(async () => { vi.advanceTimersByTime(RELOADED_NOTE_MS + 1); });
     expect(container.querySelector('.de-idx__status').textContent).toBe('');
     assigned.mockRestore();
   } finally {
-    jest.useRealTimers();
+    vi.useRealTimers();
   }
 });
 test('the reload message does not follow the visitor to the other search', async () => {

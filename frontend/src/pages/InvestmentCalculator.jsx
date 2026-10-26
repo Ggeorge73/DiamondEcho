@@ -11,7 +11,8 @@ import SellerNetSheet from '../components/calculators/SellerNetSheet';
 import '../components/calculators/calculators.css';
 import { analyzeDealLocally, BROWSER_MONTE_CARLO_ITERATION_CAP, runMonteCarloInBrowser } from '../lib/dealAnalysis';
 import { scenarioDisclosure, splitWarnings } from '../lib/monteCarloDisclosure';
-import { buildDecision, LAND_CHECKLIST_ITEMS, RENTAL_EVIDENCE_ITEMS } from '../lib/dealDecision';
+import { buildDecision, FLIP_EVIDENCE_ITEMS, LAND_CHECKLIST_ITEMS, RENTAL_EVIDENCE_ITEMS } from '../lib/dealDecision';
+import { DISCLOSURE_STATUSES, estimateHoldingCosts, holdingCostParts, OWNER_TYPES, SALE_TERMS } from '../lib/listingSignals';
 import { classifyFloodZone } from '../lib/floodZone';
 import { downloadDealWorkbook } from '../lib/dealWorkbook';
 import { buildDealRequest } from '../lib/dealRequest';
@@ -92,10 +93,21 @@ const initialForm = {
   // The fix-and-flip example: one single-family house, bought, renovated and
   // sold in ten months. An illustration like the rest. The figures the flip
   // tab shares with the other two tabs are in FLIP_EXAMPLE_SHARED below.
-  arv: '360000', rehabCost: '65000', rehabContingency: '10', monthlyHolding: '1800',
+  // The loan funds this share of the rehab budget on top of loan-to-value
+  // times the price. 0 keeps the example's figures as documented.
+  arv: '360000', rehabCost: '65000', rehabContingency: '10', rehabFinanced: '0', loanBasis: 'purchase_price', monthlyHolding: '1800',
+  // The parts of the holding cost, the listing's history and the seller's
+  // posture are facts about one property: they start empty, and typing an
+  // address clears them.
+  flipAnnualTaxes: '', flipAnnualInsurance: '', flipMonthlyUtilities: '', compSoldPerSf: '',
+  lastSalePrice: '', lastSaleDate: '', originalListPrice: '', daysOnMarket: '',
+  ownerType: '', disclosureStatus: '', saleTerms: '',
   otherProjectCosts: '6000', sellingCosts: '6', discountRate: '10', mcIterations: '2500',
   targetCashOnCash: '8', minimumDscr: '1.2', targetIrr: '15', preliminaryMarketCeiling: '',
   maxImmediateCapex: '', maxAnnualTaxes: '', maxAnnualInsurance: '',
+  // The fix-and-flip targets: the least profit, and the least return on the
+  // cash put in, that make the deal worth doing. Both are the visitor's to set.
+  flipMinimumProfit: '30000', flipTargetRoi: '20',
   // The land example: twelve finished lots on six acres, sold as lots. Like
   // every starting figure on this page it is an illustration, and the page
   // says so. The figures the land tab shares with the other two tabs are in
@@ -115,6 +127,21 @@ const initialForm = {
   mcInterestMin: '5.75', mcInterestMode: '6.75', mcInterestMax: '8.5',
   mcArvMin: '-15', mcArvMode: '0', mcArvMax: '10', mcRehabMin: '0',
   mcRehabMode: '10', mcRehabMax: '30',
+  // Months added to the hold period (item 5 of the 2026-10-22 review).
+  mcHoldMin: '0', mcHoldMode: '1', mcHoldMax: '4',
+};
+
+// The simulation's interest-rate band: one point below the entered rate to
+// 1.75 points above it, with the entered rate as the mode. These are the
+// offsets of the starting figures (5.75% / 6.75% / 8.5% around 6.75%). Until
+// the visitor edits the band it follows the rate they enter, so a flip at 11%
+// is simulated around 11%, not around a figure left over from the example.
+export const MONTE_CARLO_INTEREST_FIELDS = Object.freeze(['mcInterestMin', 'mcInterestMode', 'mcInterestMax']);
+export const interestBand = (rateText) => {
+  const entered = Number(rateText);
+  if (rateText === '' || rateText == null || !Number.isFinite(entered)) return null;
+  const point = (value) => String(Number(Math.max(0, value).toFixed(2)));
+  return { mcInterestMin: point(entered - 1), mcInterestMode: point(entered), mcInterestMax: point(entered + 1.75) };
 };
 
 // DE-37. The price, closing costs, hold period and loan terms are one set of
@@ -233,7 +260,7 @@ const InvestmentCalculator = () => {
   const [result, setResult] = useState(null);
   const [analysisSnapshot, setAnalysisSnapshot] = useState(null);
   const [decision, setDecision] = useState(null);
-  const [evidence, setEvidence] = useState(() => Object.fromEntries([...RENTAL_EVIDENCE_ITEMS, ...LAND_CHECKLIST_ITEMS].map((item) => [item.key, false])));
+  const [evidence, setEvidence] = useState(() => Object.fromEntries([...RENTAL_EVIDENCE_ITEMS, ...LAND_CHECKLIST_ITEMS, ...FLIP_EVIDENCE_ITEMS].map((item) => [item.key, false])));
   const [monteCarlo, setMonteCarlo] = useState(null);
   const [riskProgress, setRiskProgress] = useState(null);
   // Says what the page changed on the visitor's behalf, so nothing changes silently.
@@ -378,7 +405,19 @@ const InvestmentCalculator = () => {
     enteredFields.current.add(name);
     if (name === 'propertyType') assetTypeIsExample.current = false;
     setPropertyProvenance((current) => ({ ...current, [name]: { source: 'Your input', description: 'Entered for this analysis; verify before relying on it' } }));
-    setForm((current) => ({ ...current, [name]: value }));
+    // The simulation's interest-rate band follows the entered rate while the
+    // visitor has not set the band themselves (item 1 of the 2026-10-22 review).
+    const band = name === 'interestRate' && !MONTE_CARLO_INTEREST_FIELDS.some((field) => enteredFields.current.has(field))
+      ? interestBand(value) : null;
+    setForm((current) => ({ ...current, [name]: value, ...(band || {}) }));
+  };
+
+  // Several boxes filled by one button press. They count as entered, like typing.
+  const applyFields = (values) => {
+    invalidateAnalysis();
+    Object.keys(values).forEach((field) => enteredFields.current.add(field));
+    setPropertyProvenance((current) => ({ ...current, ...Object.fromEntries(Object.keys(values).map((field) => [field, { source: 'Your input', description: 'Entered for this analysis; verify before relying on it' }])) }));
+    setForm((current) => ({ ...current, ...values }));
   };
 
   const restoreCleared = () => {
@@ -561,14 +600,18 @@ const InvestmentCalculator = () => {
       exit_cap_rate: { minimum: rate(form.mcExitCapMin), mode: rate(n(form.mcExitCapMode) * (downside ? 1.05 : 1)), maximum: rate(n(form.mcExitCapMax) * scale) },
       interest_rate: { minimum: rate(form.mcInterestMin), mode: rate(form.mcInterestMode), maximum: rate(n(form.mcInterestMax) * scale) },
     };
+    // In months; the high end stretches with the case like the other drivers.
+    const holdMonths = { minimum: n(form.mcHoldMin), mode: n(form.mcHoldMode), maximum: Math.round(n(form.mcHoldMax) * scale) };
     if (form.strategy === 'land') return {
       terminal_value_change: { minimum: rate(n(form.mcArvMin) * scale), mode: rate(form.mcArvMode), maximum: rate(form.mcArvMax) },
       development_cost_change: { minimum: rate(form.mcRehabMin), mode: rate(form.mcRehabMode), maximum: rate(n(form.mcRehabMax) * scale) },
+      hold_months_change: holdMonths,
       interest_rate: { minimum: rate(form.mcInterestMin), mode: rate(form.mcInterestMode), maximum: rate(n(form.mcInterestMax) * scale) },
     };
     return {
       after_repair_value_change: { minimum: rate(n(form.mcArvMin) * scale), mode: rate(form.mcArvMode), maximum: rate(form.mcArvMax) },
       rehab_cost_change: { minimum: rate(form.mcRehabMin), mode: rate(form.mcRehabMode), maximum: rate(n(form.mcRehabMax) * scale) },
+      hold_months_change: holdMonths,
       interest_rate: { minimum: rate(form.mcInterestMin), mode: rate(form.mcInterestMode), maximum: rate(n(form.mcInterestMax) * scale) },
     };
   };
@@ -611,7 +654,7 @@ const InvestmentCalculator = () => {
     ? ['irr', 'cash_on_cash', 'cap_rate', 'dscr', 'noi', 'npv', 'equity_multiple', 'break_even_occupancy']
     : form.strategy === 'land'
       ? ['development_profit', 'development_roi', 'irr', 'npv', 'development_margin', 'total_development_cost', 'residual_land_value', 'break_even_terminal_value', 'cost_per_acre', 'cost_per_unit', 'cost_per_buildable_sf', 'ltc']
-      : ['flip_profit', 'flip_roi', 'irr', 'npv', 'equity_multiple', 'ltv', 'ltc', 'max_offer_70_rule'];
+      : ['flip_profit', 'flip_roi', 'irr', 'npv', 'equity_multiple', 'loan_amount', 'ltv', 'ltc', 'max_offer_70_rule'];
 
   const displayMetric = (metric) => {
     if (!metric || metric.value === null) return '—';
@@ -628,7 +671,7 @@ const InvestmentCalculator = () => {
     irr: 'Projected IRR', cash_on_cash: 'Cash-on-cash', cap_rate: 'Going-in cap rate', dscr: 'DSCR',
     noi: 'Year-one NOI', npv: 'Net present value', equity_multiple: 'Equity multiple',
     break_even_occupancy: 'Break-even occupancy', flip_profit: 'Projected profit', flip_roi: 'Flip ROI',
-    ltv: 'Loan-to-value', ltc: 'Loan-to-cost', max_offer_70_rule: '70% screening threshold',
+    ltv: 'Loan-to-value', ltc: 'Loan-to-cost', max_offer_70_rule: '70% screening threshold', loan_amount: 'Loan amount',
     development_profit: 'Development profit', development_roi: 'Development ROI',
     development_margin: 'Development margin', total_development_cost: 'Total development cost',
     residual_land_value: 'Residual land value', break_even_terminal_value: 'Break-even terminal value',
@@ -640,6 +683,10 @@ const InvestmentCalculator = () => {
     ? 'This analysis result does not match the current strategy or is incomplete. Run the base analysis again.'
     : '';
   const riskSummaryKey = form.strategy === 'rental' ? 'irr' : form.strategy === 'land' ? 'development_profit' : 'flip_profit';
+  // The land and flip decisions share one layout: a Go / No-Go call, the
+  // highest price that meets the targets, and profit scenarios. The rental
+  // decision, which carries no strategy field, keeps its own.
+  const priceDecision = decision?.strategy === 'land' || decision?.strategy === 'flip';
   const riskWarnings = splitWarnings(Array.isArray(monteCarlo?.scenarios) ? monteCarlo.scenarios : []);
   // The stress cases scale the entered high vacancy; say so when the cap stops them.
   const stressCapNotes = (caseName) => {
@@ -750,7 +797,7 @@ const InvestmentCalculator = () => {
           <fieldset>
             <legend><span>02</span> Capital structure</legend>
             <div className="studio-field-grid">
-              <Field label={form.strategy === 'land' ? 'Construction loan-to-cost' : 'Loan-to-value'} name="ltv" value={form.ltv} onChange={update} suffix="%" />
+              <Field label={form.strategy === 'land' ? 'Construction loan-to-cost' : form.strategy === 'flip' && form.loanBasis === 'total_project_cost' ? 'Loan-to-cost' : form.strategy === 'flip' && form.loanBasis === 'after_repair_value' ? 'Loan-to-after-repair value' : 'Loan-to-value'} name="ltv" value={form.ltv} onChange={update} suffix="%" />
               <Field label="Interest rate" name="interestRate" value={form.interestRate} onChange={update} suffix="%" />
               <Field label="Amortization" name="amortizationYears" value={form.amortizationYears} onChange={update} suffix="years" step="1" />
               <Field label="Interest-only period" name="interestOnlyMonths" value={form.interestOnlyMonths} onChange={update} suffix="months" step="1" />
@@ -887,20 +934,73 @@ const InvestmentCalculator = () => {
             </fieldset>
             </>
           ) : (
+            <>
             <fieldset>
               <legend><span>03</span> Project & disposition</legend>
               <div className="studio-field-grid">
                 <Field label="After-repair value" name="arv" value={form.arv} onChange={update} prefix="$" />
                 <Field label="Rehabilitation budget" name="rehabCost" value={form.rehabCost} onChange={update} prefix="$" />
                 <Field label="Rehab contingency" name="rehabContingency" value={form.rehabContingency} onChange={update} suffix="%" />
+                <SelectField label="Loan sized on" name="loanBasis" value={form.loanBasis} onChange={update}><option value="purchase_price">Purchase price</option><option value="total_project_cost">Total project cost</option><option value="after_repair_value">After-repair value</option></SelectField>
+                {form.loanBasis === 'purchase_price'
+                  ? <Field label="Rehab financed by the loan" name="rehabFinanced" value={form.rehabFinanced} onChange={update} suffix="%" />
+                  : <Field label="Rehab financed by the loan" name="rehabFinancedUnused" value="" onChange={() => {}} suffix="%" placeholder="in the basis" hint="The rehab is already inside this loan basis." />}
                 <Field label="Monthly holding costs" name="monthlyHolding" value={form.monthlyHolding} onChange={update} prefix="$" />
                 <Field label="Other project costs" name="otherProjectCosts" value={form.otherProjectCosts} onChange={update} prefix="$" />
+                <Field label="Renovated comparable sales (optional)" name="compSoldPerSf" value={form.compSoldPerSf} onChange={update} prefix="$" suffix="/sf" hint="Sold price per square foot of renovated houses of the same kind, size, age and setting." />
               </div>
+              <p className="studio-provider-note"><ShieldCheck /> The loan is the percentage above times what it is sized on: the purchase price (plus the financed share of the rehabilitation budget), the total project cost, or the after-repair value. Hard-money lenders commonly fund most of the price and all of the rehab, or a share of the after-repair value; the contingency stays yours. The whole loan is drawn at purchase and carries interest from the first month, and it keeps its size in the risk run and the stressed cases, as a lender's does.</p>
+              <div className="studio-field-grid">
+                <Field label="Annual property taxes" name="flipAnnualTaxes" value={form.flipAnnualTaxes} onChange={update} prefix="$" hint="A public figure: the current bill." />
+                <Field label="Annual insurance" name="flipAnnualInsurance" value={form.flipAnnualInsurance} onChange={update} prefix="$" hint="Vacant-property or builder's-risk cover." />
+                <Field label="Monthly utilities" name="flipMonthlyUtilities" value={form.flipMonthlyUtilities} onChange={update} prefix="$" />
+              </div>
+              {(() => {
+                const parts = holdingCostParts(form);
+                const estimate = estimateHoldingCosts(form.rentableSquareFeet);
+                return (
+                  <div className="studio-inline-actions" role="group" aria-label="Holding costs from their parts">
+                    <p>{parts.entered ? `Taxes, insurance and utilities add up to ${money.format(parts.total)} a month.` : 'Build the monthly holding cost from its parts, or estimate the two that follow from the size of the house.'}</p>
+                    {estimate && <button type="button" onClick={() => applyFields(estimate)}>Estimate insurance and utilities from {Number(form.rentableSquareFeet).toLocaleString('en-US')} sf</button>}
+                    {parts.entered && parts.total > 0 && <button type="button" onClick={() => applyFields({ monthlyHolding: String(parts.total) })}>Use {money.format(parts.total)} as the monthly holding cost</button>}
+                  </div>
+                );
+              })()}
             </fieldset>
+            <fieldset>
+              <legend><span>04</span> Listing history & seller</legend>
+              <div className="studio-field-grid">
+                <Field label="Last sale price" name="lastSalePrice" value={form.lastSalePrice} onChange={update} prefix="$" />
+                <Field label="Last sale date" name="lastSaleDate" value={form.lastSaleDate} onChange={update} type="month" min={undefined} step={undefined} />
+                <Field label="Original list price" name="originalListPrice" value={form.originalListPrice} onChange={update} prefix="$" hint="The first asking price of this listing." />
+                <Field label="Days on market" name="daysOnMarket" value={form.daysOnMarket} onChange={update} suffix="days" step="1" />
+                <SelectField label="Seller" name="ownerType" value={form.ownerType} onChange={update}>{OWNER_TYPES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</SelectField>
+                <SelectField label="Seller disclosure" name="disclosureStatus" value={form.disclosureStatus} onChange={update}>{DISCLOSURE_STATUSES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</SelectField>
+                <SelectField label="Sale terms" name="saleTerms" value={form.saleTerms} onChange={update}>{SALE_TERMS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</SelectField>
+              </div>
+              <p className="studio-provider-note"><ShieldCheck /> This site does not look up sale history or ownership. Enter what the listing and the public record show; the decision says what those facts usually mean, and typing a different address clears them.</p>
+            </fieldset>
+            <fieldset className="studio-mandate">
+              <legend><span>05</span> Targets & evidence</legend>
+              <div className="studio-field-grid">
+                <Field label="Minimum profit" name="flipMinimumProfit" value={form.flipMinimumProfit} onChange={update} prefix="$" />
+                <Field label="Minimum return on cash" name="flipTargetRoi" value={form.flipTargetRoi} onChange={update} suffix="%" />
+              </div>
+              <div className="studio-evidence-grid">
+                {FLIP_EVIDENCE_ITEMS.map((item) => (
+                  <label key={item.key} className={evidence[item.key] ? 'is-verified' : ''}>
+                    <input type="checkbox" checked={Boolean(evidence[item.key])} onChange={(event) => { invalidateAnalysis(); setEvidence((current) => ({ ...current, [item.key]: event.target.checked })); }} />
+                    <span>{evidence[item.key] ? <CheckCircle2 /> : <AlertCircle />}{item.label}</span>
+                  </label>
+                ))}
+              </div>
+              <p className="studio-provider-note"><ShieldCheck /> The decision finds the highest purchase price that still earns the minimum profit and the minimum return on cash, and compares it with the price entered. The 70% rule figure is shown beside it as a screen, not a target. Unchecked items stay diligence conditions, not assumed facts.</p>
+            </fieldset>
+            </>
           )}
 
           <fieldset className="studio-monte-carlo">
-            <legend><span>{form.strategy === 'flip' ? '04' : '05'}</span> Monte Carlo risk laboratory</legend>
+            <legend><span>{form.strategy === 'flip' ? '06' : '05'}</span> Monte Carlo risk laboratory</legend>
             <div className="studio-case-picker">
               {MONTE_CARLO_CASES.map((caseName) => (
                 <div key={caseName} className="is-active"><CheckCircle2 /> {caseName}</div>
@@ -927,8 +1027,15 @@ const InvestmentCalculator = () => {
                 <Field label={`${form.strategy === 'land' ? 'Development cost' : 'Rehab'} overrun · low`} name="mcRehabMin" value={form.mcRehabMin} onChange={update} suffix="%" />
                 <Field label={`${form.strategy === 'land' ? 'Development cost' : 'Rehab'} overrun · mode`} name="mcRehabMode" value={form.mcRehabMode} onChange={update} suffix="%" />
                 <Field label={`${form.strategy === 'land' ? 'Development cost' : 'Rehab'} overrun · high`} name="mcRehabMax" value={form.mcRehabMax} onChange={update} suffix="%" />
+                <Field label="Hold period change · low" name="mcHoldMin" value={form.mcHoldMin} onChange={update} suffix="months" step="1" />
+                <Field label="Hold period change · mode" name="mcHoldMode" value={form.mcHoldMode} onChange={update} suffix="months" step="1" />
+                <Field label="Hold period change · high" name="mcHoldMax" value={form.mcHoldMax} onChange={update} suffix="months" step="1" />
               </>}
+              <Field label="Interest rate · low" name="mcInterestMin" value={form.mcInterestMin} onChange={update} suffix="%" />
+              <Field label="Interest rate · mode" name="mcInterestMode" value={form.mcInterestMode} onChange={update} suffix="%" />
+              <Field label="Interest rate · high" name="mcInterestMax" value={form.mcInterestMax} onChange={update} suffix="%" />
             </div>
+            <p className="studio-case-note">The simulation draws the loan's interest rate from the band above, which follows the interest rate you entered until you change the band yourself. For a loan whose rate is fixed, set low, mode and high to that rate.{form.strategy !== 'rental' ? ' The hold period change is in months, added to the hold period you entered and rounded to whole months; the stress cases stretch its high end like the other drivers.' : ''}{form.strategy === 'flip' ? ' A rehab overrun drawn here replaces the contingency rather than adding to it: a draw equal to the contingency is the base case.' : ''}</p>
             <div className="studio-risk-actions">
               <p><TrendingUp /> Reproducible triangular distributions, percentile outcomes, downside probabilities, and excluded-iteration disclosure.</p>
               <button type="button" onClick={runRiskAnalysis} disabled={riskLoading}>{riskLoading ? <><Loader2 className="spin" /> Simulating</> : <>Run Monte Carlo <BarChart3 /></>}</button>
@@ -946,7 +1053,7 @@ const InvestmentCalculator = () => {
 
         <aside className="deal-studio-results" ref={resultsRef} tabIndex={-1} aria-label="Analysis results">
           <div className="deal-studio-results__head"><span><Sparkles /> INVESTMENT COMMITTEE OUTPUT</span>{result && <small>{decision?.version || result.formula_version}</small>}</div>
-          <div className="studio-result-tabs"><button className={resultMode === 'base' ? 'is-active' : ''} onClick={() => setResultMode('base')}>{form.strategy === 'flip' ? 'Base case' : 'IC decision'}</button><button className={resultMode === 'risk' ? 'is-active' : ''} onClick={() => setResultMode('risk')}>Monte Carlo</button></div>
+          <div className="studio-result-tabs"><button className={resultMode === 'base' ? 'is-active' : ''} onClick={() => setResultMode('base')}>IC decision</button><button className={resultMode === 'risk' ? 'is-active' : ''} onClick={() => setResultMode('risk')}>Monte Carlo</button></div>
           {resultMode === 'base' && loading && (
             <div className="studio-empty studio-running" role="status"><Loader2 className="spin" /><h2>Calculating…</h2><p>Working through the figures you entered.</p></div>
           )}
@@ -976,6 +1083,19 @@ const InvestmentCalculator = () => {
                   <article><small>BREAK-EVEN EXIT VALUE</small><strong>{decision.profitability.breakEvenTerminalValue == null ? '—' : money.format(decision.profitability.breakEvenTerminalValue)}</strong><p>Exit value entered: {money.format(decision.profitability.terminalValue)}</p></article>
                   <article><small>SAFETY CUSHION</small><strong className={decision.profitability.cushion > 0 ? 'is-positive' : 'is-negative'}>{decision.profitability.cushion == null ? '—' : `${number.format(decision.profitability.cushion * 100)}%`}</strong><p>{decision.profitability.cushion > 0 ? 'The exit value can fall this far before the deal stops making money' : 'The exit value is below break-even'}</p></article>
                 </div>
+                </> : decision.strategy === 'flip' ? <>
+                <div className="studio-decision-kpis">
+                  <article><small>MAXIMUM OFFER</small><strong>{decision.recommendedMaximum ? money.format(decision.recommendedMaximum) : 'None'}</strong><p>{decision.exactMaximum ? `Exact modeled ceiling ${money.format(decision.exactMaximum)}` : 'No price meets every target'}</p></article>
+                  <article><small>PRICE AGAINST THE CEILING</small><strong className={decision.gapToAsk > 0 ? 'is-negative' : 'is-positive'}>{decision.gapToAsk == null ? '—' : decision.gapToAsk > 0 ? `${money.format(decision.gapToAsk)} over` : `${money.format(Math.abs(decision.gapToAsk))} below`}</strong><p>Purchase price {money.format(decision.askingPrice)}{decision.openingRange ? ` · open at ${money.format(decision.openingRange[0])}–${money.format(decision.openingRange[1])}` : ''}</p></article>
+                  <article><small>PROFIT AT THIS PRICE</small><strong className={decision.profitability.profit > 0 ? 'is-positive' : 'is-negative'}>{decision.profitability.profit == null ? '—' : money.format(decision.profitability.profit)}</strong><p>{decision.profitability.roi == null ? 'Return not defined' : `${number.format(decision.profitability.roi * 100)}% on cash`}; minimum {money.format(decision.profitability.targetProfit)}</p></article>
+                  <article><small>EVIDENCE CONFIDENCE</small><strong>{decision.confidence}</strong><p>{decision.evidenceVerified} of {decision.evidenceTotal} evidence items verified</p></article>
+                </div>
+                <div className="studio-decision-kpis studio-decision-kpis--minor">
+                  <article><small>RETURN ON CASH</small><strong>{decision.profitability.roi == null ? '—' : `${number.format(decision.profitability.roi * 100)}%`}</strong><p>{decision.profitability.targetRoi > 0 ? `Profit over the cash you put in; minimum ${number.format(decision.profitability.targetRoi * 100)}%` : 'Profit over the cash you put in'}</p></article>
+                  <article><small>LEVERED IRR</small><strong>{decision.profitability.irr == null ? '—' : `${number.format(decision.profitability.irr * 100)}%`}</strong><p>Annualized, on equity</p></article>
+                  <article><small>BREAK-EVEN AFTER-REPAIR VALUE</small><strong>{decision.profitability.breakEvenArv == null ? '—' : money.format(decision.profitability.breakEvenArv)}</strong><p>After-repair value entered: {money.format(decision.profitability.arv)}</p></article>
+                  <article><small>SAFETY CUSHION</small><strong className={decision.profitability.cushion > 0 ? 'is-positive' : 'is-negative'}>{decision.profitability.cushion == null ? '—' : `${number.format(decision.profitability.cushion * 100)}%`}</strong><p>{decision.profitability.cushion > 0 ? `The after-repair value can fall this far before the deal stops making money${decision.profitability.rehabCushion > 0 ? `; a further ${number.format(decision.profitability.rehabCushion * 100)}% rehab overrun beyond the contingency does the same` : ''}` : 'The after-repair value is below break-even'}</p></article>
+                </div>
                 </> : (
                 <div className="studio-decision-kpis">
                   <article><small>RECOMMENDED MAXIMUM</small><strong>{decision.recommendedMaximum ? money.format(decision.recommendedMaximum) : 'Not established'}</strong><p>{decision.exactMaximum ? `Exact modeled ceiling ${money.format(decision.exactMaximum)}` : 'Review return hurdles'}</p></article>
@@ -986,9 +1106,9 @@ const InvestmentCalculator = () => {
                 )}
 
                 <section className="studio-decision-section">
-                  <div className="studio-decision-section__head"><span>{decision.strategy === 'land' ? 'HIGHEST LAND PRICE THAT MEETS EACH TARGET' : 'RETURN-CONSTRAINED PRICE CEILINGS'}</span><small>{decision.strategy === 'land' ? 'The lowest one controls' : 'Lowest verified ceiling controls'}</small></div>
+                  <div className="studio-decision-section__head"><span>{decision.strategy === 'land' ? 'HIGHEST LAND PRICE THAT MEETS EACH TARGET' : decision.strategy === 'flip' ? 'HIGHEST PRICE THAT MEETS EACH TARGET' : 'RETURN-CONSTRAINED PRICE CEILINGS'}</span><small>{decision.strategy === 'land' ? 'The lowest one controls' : decision.strategy === 'flip' ? 'The lowest target controls; the 70% figure is a screen' : 'Lowest verified ceiling controls'}</small></div>
                   <div className="studio-ceiling-list">
-                    {decision.ceilings.map((ceiling) => <div key={ceiling.key} className={ceiling.binding ? 'is-binding' : ''}><span>{ceiling.label}<small>{ceiling.source}</small></span><strong>{ceiling.value > 0 ? money.format(ceiling.value) : decision.strategy === 'land' ? 'No price works' : 'Not solved'}{ceiling.binding && <em>BINDING</em>}</strong></div>)}
+                    {decision.ceilings.map((ceiling) => <div key={ceiling.key} className={ceiling.binding ? 'is-binding' : ''}><span>{ceiling.label}<small>{ceiling.source}</small></span><strong>{ceiling.value > 0 ? money.format(ceiling.value) : priceDecision ? 'No price works' : 'Not solved'}{ceiling.binding && <em>BINDING</em>}{ceiling.screen && <em>SCREEN</em>}</strong></div>)}
                   </div>
                   <p className="studio-valuation-notice"><ShieldCheck /> {decision.valuationNotice}</p>
                 </section>
@@ -996,14 +1116,14 @@ const InvestmentCalculator = () => {
                 <section className="studio-decision-section">
                   <div className="studio-decision-section__head"><span>{decision.strategy === 'land' ? 'TARGETS AT THIS PRICE' : 'HURDLE TEST AT CURRENT PRICE'}</span><small>Pass / fail at stated assumptions</small></div>
                   <div className="studio-hurdle-grid">
-                    {decision.hurdleResults.map((hurdle) => <article key={hurdle.label} className={hurdle.pass ? 'is-pass' : 'is-fail'}><span>{hurdle.pass ? <CheckCircle2 /> : <AlertCircle />}{hurdle.label}</span><strong>{hurdle.actual == null ? '—' : hurdle.format === 'multiple' ? `${number.format(hurdle.actual)}×` : `${number.format(hurdle.actual * 100)}%`}</strong><small>Minimum {hurdle.format === 'multiple' ? `${number.format(hurdle.target)}×` : `${number.format(hurdle.target * 100)}%`}</small></article>)}
+                    {decision.hurdleResults.map((hurdle) => <article key={hurdle.label} className={hurdle.pass ? 'is-pass' : 'is-fail'}><span>{hurdle.pass ? <CheckCircle2 /> : <AlertCircle />}{hurdle.label}</span><strong>{hurdle.actual == null ? '—' : hurdle.format === 'multiple' ? `${number.format(hurdle.actual)}×` : hurdle.format === 'money' ? money.format(hurdle.actual) : `${number.format(hurdle.actual * 100)}%`}</strong><small>Minimum {hurdle.format === 'multiple' ? `${number.format(hurdle.target)}×` : hurdle.format === 'money' ? money.format(hurdle.target) : `${number.format(hurdle.target * 100)}%`}</small></article>)}
                   </div>
                 </section>
 
                 <section className="studio-decision-section">
                   <div className="studio-decision-section__head"><span>DETERMINISTIC SCENARIOS</span><small>At the current purchase price</small></div>
                   <div className="studio-scenario-table" role="region" aria-label="Deterministic scenarios" tabIndex={0}>
-                    {decision.strategy === 'land' ? <>
+                    {priceDecision ? <>
                       <div className="studio-scenario-row studio-scenario-row--head"><span>Case</span><span>Profit</span><span>Margin</span><span>ROI</span><span>IRR</span></div>
                       {decision.scenarios.map((scenario) => <div className="studio-scenario-row" key={scenario.name}><strong>{scenario.name}</strong><span>{scenario.metrics.profit == null ? '—' : money.format(scenario.metrics.profit)}</span><span>{scenario.metrics.margin == null ? '—' : `${number.format(scenario.metrics.margin * 100)}%`}</span><span>{scenario.metrics.roi == null ? '—' : `${number.format(scenario.metrics.roi * 100)}%`}</span><span>{scenario.metrics.irr == null ? '—' : `${number.format(scenario.metrics.irr * 100)}%`}</span></div>)}
                     </> : <>
@@ -1014,10 +1134,20 @@ const InvestmentCalculator = () => {
                   {decision.scenarioNote && <p className="studio-valuation-notice">{decision.scenarioNote}</p>}
                 </section>
 
+                {decision.intelligence && (
+                  <section className="studio-decision-section">
+                    <div className="studio-decision-section__head"><span>PROPERTY INTELLIGENCE</span><small>What the listing, the seller and the figures say</small></div>
+                    {decision.intelligence.facts.length > 0 && <div className="studio-ceiling-list">
+                      {decision.intelligence.facts.map((fact) => <div key={fact.key}><span>{fact.label}<small>{fact.detail}</small></span><strong>{fact.value}</strong></div>)}
+                    </div>}
+                    {decision.intelligence.notes.length > 0 && <ul className="studio-risk-notes" aria-label="Property intelligence notes">{decision.intelligence.notes.map((note) => <li key={note}>{note}</li>)}</ul>}
+                  </section>
+                )}
+
                 <section className="studio-decision-section studio-diligence">
                   <div className="studio-decision-section__head"><span>DILIGENCE CONDITIONS & WALK-AWAY TESTS</span><small>{decision.evidenceGaps.length} evidence gaps</small></div>
-                  {decision.evidenceGaps.length > 0 ? decision.evidenceGaps.map((item) => <div key={item.key}><AlertCircle /><p><strong>{item.label}</strong>{item.action}</p></div>) : <div className="is-cleared"><CheckCircle2 /><p><strong>{decision.strategy === 'land' ? 'Diligence checklist complete' : 'Core evidence checklist complete'}</strong>Maintain contract protections and confirm no material change before closing.</p></div>}
-                  {decision.walkAwaySignals.map((signal) => <div className="is-walk" key={signal}><AlertCircle /><p><strong>{decision.strategy === 'land' ? 'Exception to resolve' : 'Exception triggered'}</strong>{signal}</p></div>)}
+                  {decision.evidenceGaps.length > 0 ? decision.evidenceGaps.map((item) => <div key={item.key}><AlertCircle /><p><strong>{item.label}</strong>{item.action}</p></div>) : <div className="is-cleared"><CheckCircle2 /><p><strong>{priceDecision ? 'Diligence checklist complete' : 'Core evidence checklist complete'}</strong>Maintain contract protections and confirm no material change before closing.</p></div>}
+                  {decision.walkAwaySignals.map((signal) => <div className="is-walk" key={signal}><AlertCircle /><p><strong>{priceDecision ? 'Exception to resolve' : 'Exception triggered'}</strong>{signal}</p></div>)}
                 </section>
               </> : <div className="studio-result__verdict"><span>MODEL STATUS</span><strong>Analysis complete</strong><p>{result.calculation_mode === 'browser' ? 'Calculated on this device with the same transparent underwriting conventions.' : 'Acquisition, project, holding, and disposition costs have been modeled.'}</p></div>}
               <div className="studio-metric-heading"><span>TRANSPARENT MODEL OUTPUT</span><small>Formula-level detail</small></div>

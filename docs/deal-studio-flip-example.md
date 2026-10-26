@@ -115,7 +115,8 @@ errors. Not checked: a screen reader, and a real phone.
 
 ## Not done
 
-- A Go / No-Go decision for fix and flip. The tab still shows a plain base
-  case, as before.
+- ~~A Go / No-Go decision for fix and flip.~~ Added on 2026-10-22; see
+  `docs/deal-studio-flip-decision.md`. On the untouched example it reads
+  "CONDITIONAL GO — VERIFY BEFORE CLOSING", with a maximum offer of $192,000.
 - Nobody with a flipping business has reviewed the example figures. They are
   placeholders chosen to be plausible, and are Gbenga's to change.

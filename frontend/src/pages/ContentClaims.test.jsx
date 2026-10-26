@@ -1,8 +1,9 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import About from './About';
 import Agents from './Agents';
+import Home from './Home';
 
 let container;
 let root;
@@ -90,8 +91,6 @@ describe('claims that need the owner’s approval stay off the site', () => {
 });
 
 describe('home page investment items describe Deal Studio and open it', () => {
-  const { useLocation } = require('react-router-dom');
-  const Home = require('./Home').default;
   let location;
   const Probe = () => { location = useLocation(); return null; };
   let originalObserver;

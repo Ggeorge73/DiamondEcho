@@ -13,9 +13,10 @@ import { PAGES, SERVICE_AREAS } from './lib/pageMeta';
 import { prerenderGuard, renderPage } from './prerender';
 
 // No page may reach the network from a test: every request simply never answers.
-jest.mock('axios', () => {
+vi.mock('axios', () => {
   const pending = () => new Promise(() => {});
-  return { get: jest.fn(pending), post: jest.fn(pending) };
+  const axios = { get: vi.fn(pending), post: vi.fn(pending) };
+  return { default: axios, ...axios };
 });
 
 const savedBackend = process.env.REACT_APP_BACKEND_URL;
@@ -26,8 +27,8 @@ let root;
 
 beforeEach(() => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
-  window.scrollTo = jest.fn();
-  global.fetch = jest.fn(() => new Promise(() => {}));
+  window.scrollTo = vi.fn();
+  global.fetch = vi.fn(() => new Promise(() => {}));
   global.IntersectionObserver = class { observe() {} unobserve() {} disconnect() {} };
   container = document.createElement('div');
   document.body.appendChild(container);
@@ -73,7 +74,7 @@ describe.each([
     container.innerHTML = renderPage(address);
     const before = container.querySelector('h1');
     const redrawn = [];
-    const complaints = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const complaints = vi.spyOn(console, 'error').mockImplementation(() => {});
     await act(async () => {
       root = hydrateRoot(container, <React.StrictMode><App Router={MemoryRouter} initialEntries={[address]} /></React.StrictMode>, {
         onRecoverableError: (error) => redrawn.push(String(error && error.message)),

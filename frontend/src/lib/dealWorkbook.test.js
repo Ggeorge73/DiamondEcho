@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { analyzeDealLocally } from './dealAnalysis';
-import { buildDealWorkbook } from './dealWorkbook';
+import { annualTotals, buildDealWorkbook, irrGuess } from './dealWorkbook';
 import { buildDealRequest } from './dealRequest';
 
 const landForm = {
@@ -40,7 +40,6 @@ test('deal-specific XLSX contains the submitted land assumptions and reconciled 
 // and the status column stored 0 for "OK", so Excel's Protected View, phone
 // previews and LibreOffice showed zeros; and the IRR formula, left to its
 // default guess, did not reach the website's figure in LibreOffice.
-const { annualTotals, irrGuess } = require('./dealWorkbook');
 
 const rentalForm = {
   strategy: 'rental', propertyType: 'multifamily', market: 'Atlanta, GA', units: '2', rentableSquareFeet: '2820',

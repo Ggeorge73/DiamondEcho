@@ -1,11 +1,12 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import MarketBrief from './MarketBrief';
-import { BriefAudioProvider, HEARD_KEY, chimeUri } from './BriefAudio';
+import { BriefAudioProvider, HEARD_KEY, REFRESH_MS, chimeUri } from './BriefAudio';
 
 const BRIEF = {
   date: '2026-10-09',
   generated_at: '2026-10-09T11:00:00+00:00',
+  checked_at: '2026-10-09T18:05:00+00:00',
   tour: { script: 'Welcome to DiamondEcho Realty. I am your guide.', audio_url: '/api/v1/market-brief/audio/tour-0123456789abcdef.mp3' },
   market: {
     script: 'Here is the Georgia market brief for Friday, October 9, 2026.',
@@ -37,14 +38,14 @@ const barPlay = () => container.querySelector('.mf-brief-bar .mf-brief__play');
 
 beforeEach(() => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
-  jest.useFakeTimers();
+  vi.useFakeTimers();
   savedBackend = process.env.REACT_APP_BACKEND_URL;
   process.env.REACT_APP_BACKEND_URL = 'https://api.example.test/';
   window.sessionStorage.clear();
-  global.fetch = jest.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve(BRIEF) }));
+  global.fetch = vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve(BRIEF) }));
   // Like a browser that blocks sound until the visitor interacts.
-  play = jest.spyOn(window.HTMLMediaElement.prototype, 'play').mockImplementation(() => Promise.reject(new Error('NotAllowedError')));
-  pause = jest.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+  play = vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockImplementation(() => Promise.reject(new Error('NotAllowedError')));
+  pause = vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
@@ -53,7 +54,7 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
-  jest.useRealTimers();
+  vi.useRealTimers();
   play.mockRestore();
   pause.mockRestore();
   delete global.fetch;
@@ -69,7 +70,7 @@ test('shows nothing without a service to read the brief from', async () => {
 });
 
 test('shows nothing when the service has no brief', async () => {
-  global.fetch = jest.fn(() => Promise.resolve({ ok: false, json: () => Promise.resolve({}) }));
+  global.fetch = vi.fn(() => Promise.resolve({ ok: false, json: () => Promise.resolve({}) }));
   await render();
   expect(container.innerHTML).toBe('');
 });
@@ -167,7 +168,7 @@ test('the transcript gives the same words as text', async () => {
 });
 
 test('without audio the figures still show and no player is offered', async () => {
-  global.fetch = jest.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({
+  global.fetch = vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({
     ...BRIEF, tour: { ...BRIEF.tour, audio_url: null }, market: { ...BRIEF.market, audio_url: null },
   }) }));
   await render();
@@ -209,4 +210,44 @@ test('a visitor who arrives on another page is welcomed there too', async () => 
   await act(async () => { document.body.click(); });
   await flush();
   expect(audio().getAttribute('src')).toBe(chimeUri());
+});
+
+test('says when the figures were last checked, in Eastern time', async () => {
+  await render();
+  expect(container.querySelector('.mf-brief__date').textContent).toContain('Figures checked 2:05 PM ET');
+});
+
+test('an open page picks up new figures without restarting the sound', async () => {
+  play.mockImplementation(() => Promise.resolve());
+  await render();
+  expect(audio().getAttribute('src')).toBe(chimeUri());
+  play.mockClear();
+
+  const newer = {
+    ...BRIEF,
+    checked_at: '2026-10-09T19:05:00+00:00',
+    market: { ...BRIEF.market, audio_url: '/api/v1/market-brief/audio/2026-10-09-0badf00d.mp3',
+      items: [{ ...BRIEF.market.items[0], value: '6.05%' }] },
+  };
+  global.fetch.mockImplementation(() => Promise.resolve({ ok: true, json: () => Promise.resolve(newer) }));
+  await act(async () => { vi.advanceTimersByTime(REFRESH_MS); });
+  await flush();
+  expect(global.fetch).toHaveBeenCalledTimes(2);
+  expect(container.querySelector('.mf-brief__figures strong').textContent).toBe('6.05%');
+  expect(play).not.toHaveBeenCalled();
+  expect(audio().getAttribute('src')).toBe(chimeUri());
+
+  // The market part that follows is the new recording.
+  await act(async () => { audio().dispatchEvent(new Event('ended')); });
+  await act(async () => { audio().dispatchEvent(new Event('ended')); });
+  await flush();
+  expect(audio().getAttribute('src')).toContain('2026-10-09-0badf00d.mp3');
+});
+
+test('coming back to the tab reads the brief again', async () => {
+  await render();
+  expect(global.fetch).toHaveBeenCalledTimes(1);
+  await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+  await flush();
+  expect(global.fetch).toHaveBeenCalledTimes(2);
 });

@@ -3,19 +3,21 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import axios from 'axios';
 import InvestmentCalculator, { EXAMPLE_ASSET_TYPES, exampleSwap, FLIP_EXAMPLE_SHARED, LAND_EXAMPLE_SHARED } from './InvestmentCalculator';
+import { DECISION_VERSION } from '../lib/dealDecision';
 
 // DE-25. The Fix & flip tab opened on the apartment-building example held for
 // five years, which read as a flip that lost $930,936 before the visitor had
 // typed anything. The real calculation code runs here; only the network and
 // the Excel download are faked.
-jest.mock('react-router-dom', () => ({
+vi.mock('react-router-dom', () => ({
   MemoryRouter: ({ children }) => children,
   Link: ({ to, children, ...rest }) => require('react').createElement('a', { href: to, ...rest }, children),
   useLocation: () => ({ pathname: '/investment-calculator', search: '' }),
-  useNavigate: () => jest.fn(),
+  useNavigate: () => vi.fn(),
 }));
-jest.mock('axios', () => ({ get: jest.fn(), post: jest.fn() }));
-jest.mock('../lib/dealWorkbook', () => ({ downloadDealWorkbook: jest.fn() }));
+// The page imports axios as a default export.
+vi.mock('axios', () => { const axios = { get: vi.fn(), post: vi.fn() }; return { default: axios, ...axios }; });
+vi.mock('../lib/dealWorkbook', () => ({ downloadDealWorkbook: vi.fn() }));
 
 let container;
 let root;
@@ -60,7 +62,7 @@ beforeEach(async () => {
 afterEach(async () => {
   await act(async () => { root.unmount(); });
   container.remove();
-  jest.clearAllMocks();
+  vi.clearAllMocks();
 });
 
 describe('the fix and flip tab has its own example', () => {
@@ -176,5 +178,234 @@ describe('the fix and flip tab has its own example', () => {
     // A box that is the visitor's, or was loaded for an address, is held even when it equals the example.
     expect(exampleSwap({ ...FLIP_EXAMPLE_SHARED }, 'flip', 'rental', new Set(['units'])).units).toBeUndefined();
     expect(exampleSwap({ ...FLIP_EXAMPLE_SHARED, purchasePrice: '' }, 'flip', 'rental').purchasePrice).toBeUndefined();
+  });
+});
+
+// Items 1 and 3 of the 2026-10-22 review of the Fix & flip tab: the Monte
+// Carlo interest band was hidden on this tab and stayed at the example's
+// 6.75% whatever rate was typed, and the tab had no Go / No-Go decision.
+describe('the fix and flip tab has a decision', () => {
+  // A rural fixer: $93,000 price, hard-money loan at 70% / 11% / interest
+  // only / 2 points, $85,000 rehab with a 15% contingency, $250,000
+  // after-repair value, seven-month hold. The figures were checked by hand.
+  const ruralFixer = {
+    purchasePrice: '93000', closingCosts: '3000', dueDiligenceCosts: '2000', initialCapex: '0', holdMonths: '7',
+    ltv: '70', interestRate: '11', interestOnlyMonths: '7', loanTermYears: '1', originationFee: '2',
+    arv: '250000', rehabCost: '85000', rehabContingency: '15', monthlyHolding: '450', otherProjectCosts: '4000', sellingCosts: '7',
+    rentableSquareFeet: '1655',
+  };
+  const enterFixer = async (changes = {}) => {
+    for (const [name, value] of Object.entries({ ...ruralFixer, ...changes })) await setControl(name, value);
+  };
+  const kpis = () => [...container.querySelectorAll('.studio-decision-kpis article')].map((item) => item.textContent);
+
+  test('the tab offers an IC decision, and the untouched example is a conditional Go', async () => {
+    await click('Fix & flip');
+    expect(button('IC decision')).toBeTruthy();
+    expect(button('Base case')).toBeUndefined();
+    expect(field('flipMinimumProfit').value).toBe('30000');
+    expect(field('flipTargetRoi').value).toBe('20');
+    await runBase();
+    const verdict = container.querySelector('.studio-result__verdict');
+    expect(verdict.className).toContain('studio-result__verdict--amber');
+    expect(verdict.textContent).toContain('CONDITIONAL GO — VERIFY BEFORE CLOSING');
+    expect(verdict.textContent).toContain('At $180,000 the deal is modeled to earn $48,149 (27.79% on cash), which meets your targets. The highest price that still meets them is $192,034.');
+    expect(kpis()[0]).toContain('MAXIMUM OFFER$192,000Exact modeled ceiling $192,034');
+    expect(kpis()[1]).toContain('$12,000 below');
+    expect(kpis()[2]).toContain('PROFIT AT THIS PRICE$48,14927.79% on cash; minimum $30,000');
+    expect(kpis()[3]).toContain('0 of 7 evidence items verified');
+    expect(text()).toContain('BREAK-EVEN AFTER-REPAIR VALUE');
+    expect(text()).toContain('HIGHEST PRICE THAT MEETS EACH TARGET');
+    expect(text()).toContain('70% rule screening figure');
+    expect(text()).toContain('SCREEN');
+    // The transparent model output is still there under the decision.
+    expect(tile('Projected profit').textContent).toContain('$48,149');
+    expect(text()).toContain(DECISION_VERSION);
+  });
+
+  test('a flip priced above its ceiling is a No-Go that names the price that would work', async () => {
+    await click('Fix & flip');
+    await enterFixer();
+    await runBase();
+    const verdict = container.querySelector('.studio-result__verdict');
+    expect(verdict.className).toContain('studio-result__verdict--red');
+    expect(verdict.textContent).toContain('NO-GO AT THIS PRICE — REPRICE OR PASS');
+    expect(verdict.textContent).toContain('At $93,000 the deal is modeled to earn $24,121 (16.83% on cash), short of your $30,000 minimum profit and your 20% return on cash. The highest price that meets your targets is $87,447, which is $5,553 below this price.');
+    expect(kpis()[0]).toContain('MAXIMUM OFFER$87,000Exact modeled ceiling $87,447');
+    expect(kpis()[1]).toContain('$6,000 overPurchase price $93,000 · open at $80,000–$84,000');
+    const ceilings = [...container.querySelectorAll('.studio-ceiling-list > div')].map((row) => row.textContent);
+    expect(ceilings[0]).toContain('$30,000 minimum profit');
+    expect(ceilings[0]).toContain('$87,447BINDING');
+    expect(ceilings[1]).toContain('20% return on cash');
+    expect(ceilings[2]).toContain('70% rule screening figure');
+    expect(ceilings[2]).toContain('$77,250SCREEN');
+    expect(text()).toContain('The price is $15,750 above the 70% rule screening figure of $77,250.');
+    expect(text()).toContain('The downside case loses $2,269.');
+    const rows = [...container.querySelectorAll('.studio-scenario-row')].map((row) => row.textContent);
+    expect(rows[0]).toBe('CaseProfitMarginROIIRR');
+    expect(rows[2]).toContain('Base$24,121');
+    expect(tile('70% screening threshold').textContent).toContain('$77,250');
+  });
+
+  test('at a price that meets the targets with every item verified, the call is Go', async () => {
+    await click('Fix & flip');
+    await enterFixer({ purchasePrice: '77000' });
+    const boxes = [...container.querySelectorAll('.studio-evidence-grid input[type="checkbox"]')];
+    expect(boxes).toHaveLength(7);
+    for (const box of boxes) await act(async () => { box.click(); });
+    await runBase();
+    const verdict = container.querySelector('.studio-result__verdict');
+    expect(verdict.className).toContain('studio-result__verdict--green');
+    expect(verdict.textContent).toContain('GO — MEETS YOUR TARGETS');
+    expect(text()).toContain('7 of 7 evidence items verified');
+  });
+});
+
+describe('the Monte Carlo interest band on the fix and flip tab', () => {
+  const band = () => ['mcInterestMin', 'mcInterestMode', 'mcInterestMax'].map((name) => field(name).value);
+
+  test('the band is on the tab and follows the entered interest rate', async () => {
+    await click('Fix & flip');
+    expect(band()).toEqual(['5.75', '6.75', '8.5']);
+    expect(text()).toContain('follows the interest rate you entered until you change the band yourself');
+    expect(text()).toContain('A rehab overrun drawn here replaces the contingency rather than adding to it');
+    await setControl('interestRate', '11');
+    expect(band()).toEqual(['10', '11', '12.75']);
+    await setControl('interestRate', '0.5');
+    expect(band()).toEqual(['0', '0.5', '2.25']);
+    // The three fields are what the simulation reads, so the simulated loan is at the entered rate.
+    await setControl('interestRate', '11');
+    await click('Rental & commercial');
+    expect(band()).toEqual(['10', '11', '12.75']);
+  });
+
+  test('a band the visitor set stays put when the rate changes again', async () => {
+    await click('Fix & flip');
+    await setControl('mcInterestMode', '9');
+    await setControl('interestRate', '12');
+    expect(band()).toEqual(['5.75', '9', '8.5']);
+  });
+
+  test('the simulation on this tab runs on the entered rate and shows its results', async () => {
+    await click('Fix & flip');
+    await setControl('interestRate', '11');
+    await setControl('mcIterations', '1000');
+    await act(async () => { button('Run Monte Carlo').click(); });
+    for (let wait = 0; wait < 100 && !container.querySelector('.studio-risk-results article'); wait += 1) {
+      await act(async () => { await new Promise((resolve) => { setTimeout(resolve, 20); }); });
+    }
+    const cards = [...container.querySelectorAll('.studio-risk-results article')];
+    expect(cards).toHaveLength(3);
+    for (const card of cards) expect(card.querySelector('small').textContent).toContain('Requested 1,000 · Completed 1,000 · Excluded 0 · Valid for Projected profit 1,000');
+    expect(axios.post).not.toHaveBeenCalled();
+  });
+});
+
+describe('rehab financing and the hold-period band on the fix and flip tab', () => {
+  test('the loan can fund a share of the rehab, and loan-to-cost says so', async () => {
+    await click('Fix & flip');
+    expect(field('rehabFinanced').value).toBe('0');
+    expect(text()).toContain('plus the financed share of the rehabilitation budget');
+    await runBase();
+    expect(tile('Loan-to-cost').textContent).toContain('44.23%');
+    await setControl('rehabFinanced', '100');
+    await runBase();
+    // 65% of $180,000 plus all of the $65,000 budget: $182,000 on $264,500 of cost.
+    expect(tile('Loan-to-cost').textContent).toContain('68.81%');
+    expect(tile('Loan-to-value').textContent).toContain('101.11%');
+    expect(tile('Projected profit').textContent).not.toContain('$48,149');
+  });
+
+  test('the hold-period band is on the tab in months, and the rental tab does not have it', async () => {
+    await click('Fix & flip');
+    expect(['mcHoldMin', 'mcHoldMode', 'mcHoldMax'].map((name) => field(name).value)).toEqual(['0', '1', '4']);
+    expect(text()).toContain('The hold period change is in months');
+    await click('Land development');
+    expect(field('mcHoldMode')).toBeTruthy();
+    await click('Rental & commercial');
+    expect(field('mcHoldMode')).toBeNull();
+  });
+});
+
+describe('listing history, holding-cost parts and sanity checks on the fix and flip tab', () => {
+  test('the listing history boxes are on the tab, start empty, and follow the rule for typed figures', async () => {
+    await click('Fix & flip');
+    for (const name of ['lastSalePrice', 'lastSaleDate', 'originalListPrice', 'daysOnMarket', 'ownerType', 'disclosureStatus', 'saleTerms', 'compSoldPerSf', 'flipAnnualTaxes']) {
+      expect(field(name)).toBeTruthy();
+      expect(field(name).value).toBe('');
+    }
+    expect(field('lastSaleDate').type).toBe('month');
+    expect(text()).toContain('This site does not look up sale history or ownership.');
+    // As for every other figure (DE-25): what the visitor typed is kept when an
+    // address is typed; what was loaded or an example is cleared.
+    await setControl('lastSalePrice', '135000');
+    await setControl('ownerType', 'agent');
+    await setControl('address', '12 Example Rd');
+    expect(field('lastSalePrice').value).toBe('135000');
+    expect(field('ownerType').value).toBe('agent');
+    expect(field('purchasePrice').value).toBe('');
+  });
+
+  test('the decision shows the facts, the seller cautions and the per-square-foot check', async () => {
+    await click('Fix & flip');
+    for (const [name, value] of Object.entries({ purchasePrice: '93000', rentableSquareFeet: '1655', arv: '250000', rehabCost: '85000', rehabContingency: '15', lastSalePrice: '135000', lastSaleDate: '2025-04', originalListPrice: '141900', daysOnMarket: '270', ownerType: 'agent', disclosureStatus: 'none', saleTerms: 'as_is' })) await setControl(name, value);
+    await runBase();
+    expect(text()).toContain('PROPERTY INTELLIGENCE');
+    const facts = [...container.querySelectorAll('.studio-decision-section .studio-ceiling-list > div')].map((row) => row.textContent);
+    expect(facts.some((row) => row.startsWith('Last sale') && row.endsWith('$135,000'))).toBe(true);
+    expect(facts.some((row) => row.startsWith('Original list pricecut 34% to $93,000$141,900'))).toBe(true);
+    expect(facts.some((row) => row.startsWith('After-repair value per square foot$250,000 on 1,655 sf$151/sf'))).toBe(true);
+    expect(text()).toContain('Selling below their own basis after a short hold usually means a failed project or a problem found');
+    expect(text()).toContain('The market has already passed at higher prices');
+    expect(text()).toContain('Sold as-is: the 15% contingency is the only repair credit you will get.');
+    const exceptions = [...container.querySelectorAll('.studio-diligence .is-walk')];
+    expect(exceptions.length).toBeGreaterThanOrEqual(4);
+  });
+
+  test('holding costs can be built from their parts, with insurance and utilities estimated from the size', async () => {
+    await click('Fix & flip');
+    await setControl('rentableSquareFeet', '1655');
+    await setControl('flipAnnualTaxes', '1220');
+    await click('Estimate insurance and utilities from 1,655 sf');
+    expect(field('flipAnnualInsurance').value).toBe('1241');
+    expect(field('flipMonthlyUtilities').value).toBe('166');
+    expect(text()).toContain('Taxes, insurance and utilities add up to $371 a month.');
+    await click('Use $371 as the monthly holding cost');
+    expect(field('monthlyHolding').value).toBe('371');
+    // The figure now matches its parts, so the decision raises no holding-cost exception.
+    await runBase();
+    expect(text()).not.toContain('but taxes, insurance and utilities add up to');
+    expect(text()).toContain('Holding costs from their parts');
+  });
+});
+
+describe('the loan basis on the fix and flip tab', () => {
+  const fixer = {
+    purchasePrice: '93000', closingCosts: '3000', dueDiligenceCosts: '2000', initialCapex: '0', holdMonths: '7',
+    ltv: '70', interestRate: '11', interestOnlyMonths: '7', loanTermYears: '1', originationFee: '2',
+    arv: '250000', rehabCost: '85000', rehabContingency: '15', monthlyHolding: '450', otherProjectCosts: '4000', sellingCosts: '7',
+  };
+
+  test('the loan can be sized on the price, the total project cost or the after-repair value, and the page says which', async () => {
+    await click('Fix & flip');
+    for (const [name, value] of Object.entries(fixer)) await setControl(name, value);
+    expect(field('loanBasis').value).toBe('purchase_price');
+    expect(text()).toContain('Loan-to-value%');
+    await runBase();
+    expect(tile('Loan amount').textContent).toContain('$65,100');
+    expect(tile('Loan amount').textContent).toContain('loan-to-value x purchase price');
+    await setControl('loanBasis', 'total_project_cost');
+    expect(text()).toContain('Loan-to-cost%');
+    expect(text()).toContain('The rehab is already inside this loan basis.');
+    await runBase();
+    // 70% of $199,750 of project cost.
+    expect(tile('Loan amount').textContent).toContain('$139,825');
+    expect(tile('Loan amount').textContent).toContain('loan-to-value x total project cost');
+    await setControl('loanBasis', 'after_repair_value');
+    expect(text()).toContain('Loan-to-after-repair value%');
+    await runBase();
+    expect(tile('Loan amount').textContent).toContain('$175,000');
+    expect(tile('Loan-to-value').textContent).toContain('188.17%');
+    expect(tile('Loan-to-cost').textContent).toContain('87.61%');
   });
 });

@@ -66,22 +66,21 @@ describe('what each page tells a search engine', () => {
       if (saved === undefined) delete process.env.REACT_APP_BACKEND_URL;
       else process.env.REACT_APP_BACKEND_URL = saved;
     });
-    const summary = (backend) => {
+    const summary = async (backend) => {
       if (backend) process.env.REACT_APP_BACKEND_URL = backend;
       else delete process.env.REACT_APP_BACKEND_URL;
-      let description;
-      jest.isolateModules(() => { description = require('./pageMeta').pageForPath('/inquire').description; });
-      return description;
+      vi.resetModules();
+      return (await import('./pageMeta')).pageForPath('/inquire').description;
     };
 
-    test('with the service: the three requests and when replies are sent', () => {
-      const description = summary('https://api.example.com');
+    test('with the service: the three requests and when replies are sent', async () => {
+      const description = await summary('https://api.example.com');
       expect(description).toBe(`Ask about buying, request a seller consultation or a property tour. Replies ${HOURS.label}. Direct ${OFFICE.phone}.`);
       expect(description.length).toBeLessThanOrEqual(160);
     });
 
-    test('without it: how to reach the brokerage and DiamondEcho, and no promise of a form', () => {
-      const description = summary('');
+    test('without it: how to reach the brokerage and DiamondEcho, and no promise of a form', async () => {
+      const description = await summary('');
       expect(description).toBe(`Reach DiamondEcho about buying or selling a home in Georgia. Brokerage: ${BROKERAGE.name}, office ${BROKERAGE.phone}. Direct ${OFFICE.phone}.`);
       expect(description).not.toMatch(/request|Replies|tour/);
       expect(description.length).toBeLessThanOrEqual(160);

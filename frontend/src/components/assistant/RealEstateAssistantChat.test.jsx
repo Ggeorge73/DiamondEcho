@@ -6,7 +6,8 @@ import RealEstateAssistant, { formatReviewed, handoffFor, isSitePath } from './R
 
 // DE-20: what the panel does with an answer. The service is stood in for; its
 // own answers are tested in backend/tests/test_assistant_conversation.py.
-jest.mock('axios', () => ({ post: jest.fn() }));
+// The page imports axios as a default export.
+vi.mock('axios', () => { const axios = { post: vi.fn() }; return { default: axios, ...axios }; });
 
 const savedBackend = process.env.REACT_APP_BACKEND_URL;
 let container;

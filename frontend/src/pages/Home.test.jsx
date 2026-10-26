@@ -54,7 +54,7 @@ test('every homepage section navigation target exists after removing sample sect
 // section says where DiamondEcho works and nothing more: no counts, rankings
 // or market figures, which would need a source and his approval (DE-17).
 test('the home page says where DiamondEcho works, naming the approved cities and no others', async () => {
-  const { SERVICE_AREAS } = require('../lib/pageMeta');
+  const { SERVICE_AREAS } = await import('../lib/pageMeta');
   await act(async () => root.render(<MemoryRouter><Home /></MemoryRouter>));
   const section = container.querySelector('section[aria-labelledby="home-areas-heading"]');
   expect(section.querySelector('h2').textContent).toBe('Homes and investmentsacross metro Atlanta.');

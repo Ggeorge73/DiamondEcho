@@ -20,7 +20,7 @@
 // The build fails, rather than publish a weaker page, if a page comes out
 // without exactly one main heading, without the brokerage's name and telephone
 // number, or with a title or summary another page already uses.
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -34,8 +34,8 @@ if (!existsSync(shellFile)) throw new Error(`Missing build output: ${shellFile}`
 const shell = readFileSync(shellFile, 'utf8');
 if (shell.includes('data-prerendered')) throw new Error('index.html has already been prerendered; run a fresh build first.');
 
-// The same REACT_APP_ settings the build itself used, read the way Create
-// React App reads them: the environment first, then its .env files in order.
+// The same REACT_APP_ settings the build itself used, read the way Vite reads
+// them (vite.config.mjs): the environment first, then its .env files in order.
 const publicEnv = () => {
   const env = {};
   const take = (source) => Object.entries(source).forEach(([key, value]) => {
@@ -55,9 +55,9 @@ const env = publicEnv();
 // script built with the same one, or the two would disagree about the request
 // forms and the assistant.
 const backend = (env.REACT_APP_BACKEND_URL || '').trim();
-const scripts = readdirSync(join(out, 'static', 'js')).filter((name) => /^main\..+\.js$/.test(name));
+const scripts = [...shell.matchAll(/<script type="module"[^>]*\bsrc="\/(assets\/[^"]+\.js)"/g)].map((match) => match[1]);
 if (scripts.length !== 1) throw new Error(`Expected one main script in the build, found ${scripts.length}`);
-if (backend && !readFileSync(join(out, 'static', 'js', scripts[0]), 'utf8').includes(backend)) {
+if (backend && !readFileSync(join(out, scripts[0]), 'utf8').includes(backend)) {
   throw new Error('REACT_APP_BACKEND_URL is set for this step but is not in the built script: the pages would not match the app.');
 }
 

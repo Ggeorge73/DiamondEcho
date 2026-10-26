@@ -3,8 +3,9 @@ import { createRoot } from 'react-dom/client';
 import axios from 'axios';
 import InquiryForm from './InquiryForm';
 
-jest.mock('axios', () => ({ post: jest.fn() }));
-jest.mock('react-router-dom', () => ({
+// The page imports axios as a default export.
+vi.mock('axios', () => { const axios = { post: vi.fn() }; return { default: axios, ...axios }; });
+vi.mock('react-router-dom', () => ({
   Link: ({ to, children, ...props }) => require('react').createElement('a', { href: to, ...props }, children),
 }));
 
@@ -43,7 +44,7 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => { root.unmount(); });
   container.remove();
-  jest.clearAllMocks();
+  vi.clearAllMocks();
   if (originalCryptoDescriptor) Object.defineProperty(globalThis, 'crypto', originalCryptoDescriptor);
   else delete globalThis.crypto;
 });
@@ -215,11 +216,11 @@ test('a request received outside business hours is told so and when to expect a 
 });
 
 test('the out-of-hours notice follows the time the service recorded, not the clock on the device', async () => {
-  jest.useFakeTimers({ now: new Date('2026-10-06T15:00:00Z'), doNotFake: ['setTimeout', 'setInterval', 'setImmediate', 'clearTimeout', 'clearInterval', 'clearImmediate', 'nextTick', 'queueMicrotask'] });
+  vi.useFakeTimers({ now: new Date('2026-10-06T15:00:00Z'), doNotFake: ['setTimeout', 'setInterval', 'setImmediate', 'clearTimeout', 'clearInterval', 'clearImmediate', 'nextTick', 'queueMicrotask'] });
   try {
     await sendBuyer('2026-10-06T02:00:00+00:00'); // Monday 10:00 PM Eastern, while the device says Tuesday 11:00 AM
     expect(container.textContent).toContain('outside our business hours');
-  } finally { jest.useRealTimers(); }
+  } finally { vi.useRealTimers(); }
 });
 
 test('a receipt with no readable time is treated as out of hours rather than promising too much', async () => {
