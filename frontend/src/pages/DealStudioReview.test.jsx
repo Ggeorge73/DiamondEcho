@@ -238,7 +238,44 @@ describe('polish', () => {
     expect(exampleFactsToClear(form, 'flip', new Set(['rehabCost']))).toEqual({ arv: '360000', monthlyHolding: '1800', otherProjectCosts: '6000' });
     // Hard construction is 0 in the land example: an empty box would look cleared, so it is left.
     expect(Object.keys(exampleFactsToClear({ siteAcres: '6', hardConstructionCost: '0', siteWorkCost: '780000' }, 'land'))).toEqual(['siteAcres', 'siteWorkCost']);
-    expect(rentalServiceFormulaIsCurrent('diamond-underwriting-1.5.0')).toBe(false);
-    expect(rentalServiceFormulaIsCurrent('diamond-underwriting-1.6.0')).toBe(true);
+    expect(rentalServiceFormulaIsCurrent('diamond-underwriting-1.6.0')).toBe(false);
+    expect(rentalServiceFormulaIsCurrent('diamond-underwriting-1.7.0')).toBe(true);
+  });
+});
+
+// The second pass of the 2026-10-26 review.
+describe('the second pass', () => {
+  test('a flip hold longer than the loan term is an exception, and the loan is extended rather than paid from the pocket', async () => {
+    await click('Fix & flip');
+    await setControl('holdMonths', '13');
+    await setControl('interestOnlyMonths', '12');
+    await runBase();
+    expect(text()).toContain('The 13-month hold is longer than the 12-month loan term, so the loan would need extending to the sale; the model extends it at the same rate.');
+    expect(text()).toContain('CONDITIONAL GO — RESOLVE EXCEPTIONS');
+    // Return on cash stays in the twenties, not the thirteen percent the trap gave.
+    const roi = [...container.querySelectorAll('.studio-decision-kpis article')].map((item) => item.textContent).find((card) => card.startsWith('RETURN ON CASH'));
+    expect(Number(roi.match(/([0-9.]+)%/)[1])).toBeGreaterThan(20);
+    expect(financing()[3]).toContain('MONTHLY PAYMENT$658');
+    expect(financing()[3]).toContain('Interest only for 12 months, then principal and interest, at 6.75%');
+  });
+
+  test('a land hold shorter than build plus sell-out is a hard stop, never a Go', async () => {
+    await click('Land development');
+    await setControl('holdMonths', '3');
+    await runBase();
+    expect(container.querySelector('.studio-error').textContent).toContain('Hold period must be at least the development schedule plus the absorption (24 months). Lengthen the hold or shorten the schedule.');
+    expect(text()).not.toContain('CONDITIONAL GO');
+    expect(text()).not.toContain('741,908');
+  });
+
+  test('a service sentence gets its capital letter', async () => {
+    await act(async () => { root.unmount(); });
+    process.env.REACT_APP_BACKEND_URL = 'https://example.test';
+    root = createRoot(container);
+    await act(async () => { root.render(<MemoryRouter><InvestmentCalculator /></MemoryRouter>); });
+    axios.post.mockRejectedValueOnce({ isAxiosError: true, response: { status: 400, data: { detail: 'construction financing must leave a positive equity contribution' } } });
+    await click('Land development');
+    await runBase();
+    expect(container.querySelector('.studio-error').textContent).toContain('Construction financing must leave a positive equity contribution');
   });
 });

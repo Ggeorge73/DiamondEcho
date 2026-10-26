@@ -15,7 +15,10 @@ import { arvChecks, buildListingSignals, holdingCostParts } from './listingSigna
 // monthly interest, cash required); the rental decision names its three cases'
 // assumptions and measures DSCR on the basis chosen (NOI, or NOI after
 // reserves and TI); every ceiling solver holds closing costs as entered.
-export const DECISION_VERSION = 'diamond-decision-1.5.0';
+// 1.6.0 (2026-10-26, second pass): a flip hold longer than the loan term is an
+// exception that says the loan is modeled as extended; a land hold shorter
+// than the schedule is refused by the engine before any decision.
+export const DECISION_VERSION = 'diamond-decision-1.6.0';
 
 const EXPLICIT_EXIT_DOWNSIDE_MULTIPLIER = 0.9;
 const EXPLICIT_EXIT_UPSIDE_MULTIPLIER = 1.1;
@@ -327,7 +330,6 @@ export const buildLandDecision = ({ form, evidence = {} }) => {
   const scenarios = buildLandScenarios(form);
   const downside = scenarios[0].metrics;
   const flood = classifyFloodZone(form.floodZone);
-  const scheduleMonths = n(form.developmentMonths) + n(form.absorptionMonths);
 
   // Conditions that stop the deal whatever the price.
   const stoppers = [];
@@ -336,7 +338,6 @@ export const buildLandDecision = ({ form, evidence = {} }) => {
   // Conditions to resolve before going ahead.
   const cautions = [];
   if (downside.profit !== null && downside.profit < 0) cautions.push(`The downside case loses ${usd(Math.abs(downside.profit))}.`);
-  if (scheduleMonths > n(form.holdMonths)) cautions.push(`Development plus absorption is ${scheduleMonths} months, longer than the ${n(form.holdMonths)}-month hold, so the model overlaps them. Lengthen the hold or shorten the schedule.`);
   if (form.environmentalStatus === 'remediation_required' && !(n(form.environmentalRemediation) > 0)) cautions.push('Remediation is required but no remediation cost is entered.');
   if (flood.status === 'special') cautions.push(`Flood zone ${flood.zone} is a FEMA Special Flood Hazard Area.`);
   if (n(form.wetlandsAcres) > 0) cautions.push('Wetlands are on the site; the buildable area and permits need confirming.');
@@ -491,6 +492,7 @@ export const flipFinancing = (form, analysis) => {
     originationRate,
     monthlyDebtService: monthly.length ? monthly[0] : 0,
     interestOnly,
+    interestOnlyMonths: n(form.interestOnlyMonths),
     totalInterest,
     totalDebtService,
     interestRate: n(form.interestRate) / 100,
@@ -554,7 +556,7 @@ export const buildFlipDecision = ({ form, evidence = {}, today = new Date() }) =
   if (downside.profit !== null && downside.profit < 0) cautions.push(`The downside case loses ${usd(Math.abs(downside.profit))}.`);
   if (rule70 !== null && askingPrice > rule70) cautions.push(`The price is ${usd(askingPrice - rule70)} above the 70% rule screening figure of ${usd(rule70)}. The rule is a screen, not a valuation; it says the margin is thin for the work involved, so the after-repair value and the budget must hold.`);
   if (cushion !== null && now.profit > 0 && cushion < FLIP_THIN_CUSHION) cautions.push(`The after-repair value can fall only ${pct(cushion)} before the deal loses money.`);
-  if (loanTermMonths !== null && n(form.holdMonths) > loanTermMonths) cautions.push(`The ${n(form.holdMonths)}-month hold is longer than the ${loanTermMonths}-month loan term, so the loan comes due before the sale.`);
+  if (loanTermMonths !== null && n(form.holdMonths) > loanTermMonths) cautions.push(`The ${n(form.holdMonths)}-month hold is longer than the ${loanTermMonths}-month loan term, so the loan would need extending to the sale; the model extends it at the same rate. Confirm the extension terms and fee with the lender, and add the fee to other project costs.`);
   // Items 2, 7 and 8: what the listing history and the seller's posture
   // usually mean, the after-repair value per square foot, and the holding
   // costs against their parts. Each caution is an exception to resolve.

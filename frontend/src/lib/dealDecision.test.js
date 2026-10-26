@@ -187,8 +187,8 @@ test('exceptions make a deal that meets its targets conditional', () => {
   const flood = land({ purchasePrice: '650000', ...verifiedSite, floodZone: 'AE' }, allTicked);
   expect(flood.verdict).toBe('CONDITIONAL GO — RESOLVE EXCEPTIONS');
   expect(flood.walkAwaySignals).toEqual(['Flood zone AE is a FEMA Special Flood Hazard Area.']);
-  const slow = land({ purchasePrice: '650000', ...verifiedSite, developmentMonths: '24', absorptionMonths: '12' }, allTicked);
-  expect(slow.walkAwaySignals[0]).toContain('36 months, longer than the 24-month hold');
+  // A schedule longer than the hold is refused by the engine before any decision.
+  expect(() => land({ purchasePrice: '650000', ...verifiedSite, developmentMonths: '24', absorptionMonths: '12' }, allTicked)).toThrow('The 24-month hold is shorter than the development schedule plus the absorption (24 + 12 months). Lengthen the hold or shorten the schedule.');
   // With the cost rise replacing the contingency the downside is milder than it
   // was, so the exit value sits lower to keep the downside case under water.
   const thin = land({ purchasePrice: '700000', ...verifiedSite, expectedTerminalValue: '3600000', targetProfitMargin: '8', targetIrr: '' }, allTicked);
@@ -348,7 +348,13 @@ test('exceptions make a flip that meets its targets conditional', () => {
   const overdue = buildFlipDecision({ form: { ...ruralFixerForm, purchasePrice: '70000', holdMonths: '13' }, evidence: allFlipEvidence });
   expect(overdue.hurdleResults.every((item) => item.pass)).toBe(true);
   expect(overdue.verdict).toBe('CONDITIONAL GO — RESOLVE EXCEPTIONS');
-  expect(overdue.walkAwaySignals).toContain('The 13-month hold is longer than the 12-month loan term, so the loan comes due before the sale.');
+  expect(overdue.walkAwaySignals).toContain('The 13-month hold is longer than the 12-month loan term, so the loan would need extending to the sale; the model extends it at the same rate. Confirm the extension terms and fee with the lender, and add the fee to other project costs.');
+  // The extension keeps the figures sane: profit at 13 months is the 10-month
+  // profit less three more months of holding costs and interest, not less the
+  // whole loan balance.
+  const atTen = buildFlipDecision({ form: { ...ruralFixerForm, purchasePrice: '70000', holdMonths: '10' }, evidence: allFlipEvidence });
+  expect(atTen.profitability.profit - overdue.profitability.profit).toBeLessThan(3 * (450 + 70000 * 0.7 * 0.11 / 12) + 1);
+  expect(overdue.profitability.roi).toBeGreaterThan(atTen.profitability.roi * 0.7);
 });
 
 test('a thin cushion is an exception that says how far the after-repair value can fall', () => {
@@ -435,7 +441,7 @@ test('the flip decision reads the listing history and seller posture, and checks
   expect(listed.intelligence.facts.at(-1).detail).toBe('taxes $102, insurance $103, utilities $166 a month; $450 entered');
   expect(listed.intelligence.notes).toEqual(['Sold as-is: the 15% contingency is the only repair credit you will get.']);
   expect(listed.version).toBe(DECISION_VERSION);
-  expect(DECISION_VERSION).toBe('diamond-decision-1.5.0');
+  expect(DECISION_VERSION).toBe('diamond-decision-1.6.0');
 });
 
 test('with nothing typed about the listing, the flip decision only reminds, and never stacks exceptions', () => {

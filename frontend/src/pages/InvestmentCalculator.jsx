@@ -33,10 +33,9 @@ import { applyPropertyAutofill, prepareAddressEdit, preparePropertyChange } from
 // The service and this page carry the same formulas, but the service is
 // redeployed by hand and can lag. When it answers with a formula older than a
 // strategy needs, the page calculates on this device instead, so it never
-// shows an older figure beside its decision. Fix and flip needs 1.5.0 (the
-// loan amount and its basis); land needs 1.6.0 (the development timetable);
-// rental needs 1.6.0 (the coverage after reserves and TI).
-const SERVICE_FORMULA_MINIMUM = { rental: [1, 6], land: [1, 6], flip: [1, 5] };
+// shows an older figure beside its decision. Every strategy needs 1.7.0: a
+// loan whose term ends before the hold is extended, not paid at maturity.
+const SERVICE_FORMULA_MINIMUM = { rental: [1, 7], land: [1, 7], flip: [1, 7] };
 export const serviceFormulaIsCurrent = (version, minimum) => {
   const match = /(\d+)\.(\d+)\.\d+$/.exec(String(version || ''));
   if (!match || !minimum) return true; // not a version this page can read: leave the result alone
@@ -1200,7 +1199,7 @@ const InvestmentCalculator = () => {
                   <article><small>LOAN AMOUNT</small><strong>{decision.financing.loanAmount > 0 ? money.format(decision.financing.loanAmount) : 'None'}</strong><p>{decision.financing.sizing}</p></article>
                   <article><small>CASH REQUIRED AT CLOSING</small><strong>{decision.financing.cashRequired == null ? '—' : money.format(decision.financing.cashRequired)}</strong><p>Price, closing, due diligence, rehab with contingency, other costs and points, less the loan</p></article>
                   <article><small>ORIGINATION FEE</small><strong>{money.format(decision.financing.originationFee)}</strong><p>{decision.financing.loanAmount > 0 ? `${number.format(decision.financing.originationRate * 100)} ${decision.financing.originationRate * 100 === 1 ? 'point' : 'points'} on the loan` : 'No loan'}</p></article>
-                  <article><small>{decision.financing.interestOnly ? 'MONTHLY INTEREST' : 'MONTHLY PAYMENT'}</small><strong>{money.format(decision.financing.monthlyDebtService)}</strong><p>{decision.financing.loanAmount > 0 ? `${decision.financing.interestOnly ? 'Interest only' : 'Principal and interest'} at ${number.format(decision.financing.interestRate * 100)}%; ${money.format(decision.financing.totalInterest)} of interest over the ${n(form.holdMonths)}-month hold` : 'No loan'}</p></article>
+                  <article><small>{decision.financing.interestOnly ? 'MONTHLY INTEREST' : 'MONTHLY PAYMENT'}</small><strong>{money.format(decision.financing.monthlyDebtService)}</strong><p>{decision.financing.loanAmount > 0 ? `${decision.financing.interestOnly ? 'Interest only' : decision.financing.interestOnlyMonths > 0 ? `Interest only for ${decision.financing.interestOnlyMonths} months, then principal and interest,` : 'Principal and interest'} at ${number.format(decision.financing.interestRate * 100)}%; ${money.format(decision.financing.totalInterest)} of interest over the ${n(form.holdMonths)}-month hold` : 'No loan'}</p></article>
                 </div>
                 <div className="studio-decision-kpis studio-decision-kpis--minor">
                   <article><small>RETURN ON CASH</small><strong>{decision.profitability.roi == null ? '—' : `${number.format(decision.profitability.roi * 100)}%`}</strong><p>{decision.profitability.targetRoi > 0 ? `Profit over the cash you put in; minimum ${number.format(decision.profitability.targetRoi * 100)}%` : 'Profit over the cash you put in'}</p></article>

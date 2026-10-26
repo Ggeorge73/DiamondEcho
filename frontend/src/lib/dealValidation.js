@@ -147,6 +147,12 @@ export const validateDealForm = (form) => {
     requireRange(form, 'siteAcres', 'Site area', 0, Number.MAX_SAFE_INTEGER, { exclusive: true });
     requireRange(form, 'parcelCount', 'Parcel count', 1, 1000000, { integer: true });
     requireRange(form, 'developmentMonths', 'Development schedule', 1, 600, { integer: true });
+    requireRange(form, 'absorptionMonths', 'Sales / lease-up absorption', 0, 600, { integer: true });
+    // A hold shorter than the build plus the sell-out cannot be modeled; the
+    // engines refuse it too (the 2026-10-26 review's second pass).
+    if (Number(form.holdMonths) < Number(form.developmentMonths) + Number(form.absorptionMonths || 0)) {
+      throw new Error(`Hold period must be at least the development schedule plus the absorption (${Number(form.developmentMonths) + Number(form.absorptionMonths || 0)} months). Lengthen the hold or shorten the schedule.`);
+    }
     requireRange(form, 'expectedTerminalValue', 'Expected terminal value', 0, Number.MAX_SAFE_INTEGER);
   }
   if (form.strategy === 'flip') {
@@ -207,7 +213,8 @@ const rejectedField = (loc) => (Array.isArray(loc) ? loc : [])
 
 export const responseErrorMessage = (error, fallback) => {
   const detail = error.response?.data?.detail;
-  if (typeof detail === 'string') return detail;
+  // A sentence from the service starts with a capital letter on the page.
+  if (typeof detail === 'string') return detail.charAt(0).toUpperCase() + detail.slice(1);
   if (Array.isArray(detail)) {
     const lines = [...new Set(detail.filter((item) => item?.msg).map((item) => {
       const field = rejectedField(item.loc);

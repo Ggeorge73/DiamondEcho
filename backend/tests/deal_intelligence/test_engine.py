@@ -416,9 +416,10 @@ def test_the_facility_is_drawn_as_the_money_is_spent_and_repaid_from_the_sales()
     assert sum(row.loan_payoff for row in interest_only) == pytest.approx(3_643_250, rel=1e-6)
 
 
-def test_the_timetable_is_kept_inside_the_hold_and_says_so():
-    overlap = _timed_land(48, 24)
-    assert any("longer than the 60-month hold, so the model overlaps them" in w for w in overlap.warnings)
+def test_a_hold_shorter_than_the_schedule_is_refused_and_idle_months_are_said():
+    # The second pass of the review: a 3-month hold on a 12 + 12 schedule read as a Go at a 741,908% IRR.
+    with pytest.raises(ValueError, match=r"60-month hold is shorter than the development schedule plus the absorption \(48 \+ 24 months\)"):
+        _timed_land(48, 24)
     idle = _timed_land(12, 12)
     assert "The hold is 36 months longer than development plus absorption; carrying costs and interest on the drawn facility run for those months too." in idle.warnings
     # Zero absorption is one sale in the final month.
@@ -427,7 +428,7 @@ def test_the_timetable_is_kept_inside_the_hold_and_says_so():
 
 
 def test_the_residual_is_solved_on_the_timetable_and_left_out_of_a_simulation_pass():
-    for development, absorption in [(24, 12), (6, 1), (60, 60)]:
+    for development, absorption in [(24, 12), (6, 1), (30, 30)]:
         residual = _timed_land(development, absorption, expected_terminal_value=9_000_000).metrics["residual_land_value"].value
         base = land_request()
         land = base.land.model_dump()
@@ -455,3 +456,53 @@ def test_a_rental_reports_coverage_before_and_after_reserves_and_ti():
     assert result.metrics["dscr_after_reserves"].formula == (
         "(year-one NOI - replacement reserves - TI, leasing and capital costs) / year-one debt service"
     )
+
+
+# The second pass of the 2026-10-26 review: a loan whose term ended before the
+# hold had its balance paid from the investor's pocket at maturity, with the
+# interest stopping and no warning. It is now extended to the sale.
+def test_a_loan_whose_term_ends_before_the_hold_is_extended_to_the_sale():
+    base = land_request()  # reused only for its shape; the flip below is the page's example
+    flip = DealAnalysisRequest(
+        strategy="flip",
+        property={"property_type": "single_family"},
+        acquisition={"purchase_price": 180_000, "closing_costs": 5_500, "due_diligence_costs": 1_500, "hold_months": 13},
+        debt=[{"loan_to_value": 0.65, "annual_interest_rate": 0.0675, "amortization_years": 30, "interest_only_months": 12, "term_months": 12, "origination_fee_rate": 0.01}],
+        flip={"after_repair_value": 360_000, "rehab_cost": 65_000, "rehab_contingency_rate": 0.1, "monthly_holding_costs": 1_800, "other_project_costs": 6_000},
+        exit={"selling_cost_rate": 0.06},
+    )
+    result = analyze_deal(flip)
+    interest = 117_000 * 0.0675 / 12
+    for month in (11, 12):
+        assert result.cash_flows[month].debt_service == pytest.approx(interest)
+    assert result.cash_flows[13].debt_service > interest  # the thirteenth month amortizes
+    assert result.cash_flows[12].loan_payoff == 0
+    # The balance is repaid at the sale, less the one scheduled principal payment.
+    assert result.cash_flows[13].loan_payoff + (result.cash_flows[13].debt_service - interest) == pytest.approx(117_000)
+    assert (
+        "The 13-month hold is longer than the 12-month loan term, so the loan is modeled as extended to the end "
+        "of the hold at the same rate. Confirm the extension terms and fee with the lender, and add the fee to the costs."
+    ) in result.warnings
+    ten = flip.model_copy(deep=True)
+    ten.acquisition.hold_months = 10
+    ten.debt[0].interest_only_months = 10
+    at_ten = analyze_deal(ten)
+    assert at_ten.metrics["flip_profit"].value - result.metrics["flip_profit"].value == pytest.approx(3 * (1_800 + interest), abs=1e-4)
+    assert not any("loan term" in w for w in at_ten.warnings)
+    # The ten-month deal is the page's example: $48,149 of profit.
+    assert at_ten.metrics["flip_profit"].value == pytest.approx(48_149, abs=1)
+    # A rental and the land reference deal get the same treatment.
+    rental = rental_request(debt=[{"loan_to_value": 0.70, "annual_interest_rate": 0.06, "amortization_years": 30, "term_months": 36}])
+    rental_result = analyze_deal(rental)
+    assert rental_result.cash_flows[36].debt_service == pytest.approx(rental_result.cash_flows[37].debt_service)
+    assert any("60-month hold is longer than the 36-month loan term" in w for w in rental_result.warnings)
+    debt = base.debt[0].model_dump()
+    debt["term_months"] = 12
+    land = analyze_deal(land_request(debt=[debt]))
+    assert any("60-month hold is longer than the 12-month loan term" in w for w in land.warnings)
+    assert land.metrics["development_profit"].value == pytest.approx(analyze_deal(base).metrics["development_profit"].value)
+
+
+def test_service_sentences_start_with_a_capital_letter():
+    with pytest.raises(ValueError, match="^Construction financing must leave a positive equity contribution"):
+        analyze_deal(land_request(debt=[{"principal": 6_000_000, "annual_interest_rate": 0.0675, "amortization_years": 30, "term_months": 120}]))

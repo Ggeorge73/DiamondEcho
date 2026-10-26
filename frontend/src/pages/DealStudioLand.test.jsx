@@ -96,7 +96,10 @@ describe('land development Go / No-Go', () => {
     // The downside's 10% cost rise replaces the 10% contingency, so this deal
     // no longer loses money in it (it lost $93,752 when the contingency was
     // applied on top of the rise).
-    expect(rows[1]).toContain('Downside$185,648');
+    // The downside's six extra months run past the two-year facility, which
+    // is now extended at the same rate rather than paid from the pocket at
+    // maturity with the interest stopping (second pass of the 2026-10-26 review).
+    expect(rows[1]).toContain('Downside$158,240');
     expect(text()).not.toContain('The downside case loses');
   });
 
@@ -162,7 +165,7 @@ describe('the service and the page agree on land', () => {
   test('a service on the current formula is shown as it answered', async () => {
     await act(async () => { root.unmount(); });
     await mount('https://example.test');
-    axios.post.mockResolvedValueOnce({ data: { ...oldService, formula_version: 'diamond-underwriting-1.6.0', metrics: { residual_land_value: { value: 831051.13226601, unit: 'USD', formula: 'new' } } } });
+    axios.post.mockResolvedValueOnce({ data: { ...oldService, formula_version: 'diamond-underwriting-1.7.0', metrics: { residual_land_value: { value: 831051.13226601, unit: 'USD', formula: 'new' } } } });
     await click('Land development');
     await enterDeal();
     await runBase();
@@ -171,8 +174,8 @@ describe('the service and the page agree on land', () => {
   });
 
   test.each([
-    ['diamond-underwriting-1.0.0', false], ['diamond-underwriting-1.1.0', false], ['diamond-underwriting-1.5.0', false],
-    ['diamond-underwriting-1.6.0', true], ['diamond-underwriting-2.0.0', true], ['diamond-underwriting-web-1.7.0', true], ['test', true], [undefined, true],
+    ['diamond-underwriting-1.0.0', false], ['diamond-underwriting-1.1.0', false], ['diamond-underwriting-1.6.0', false],
+    ['diamond-underwriting-1.7.0', true], ['diamond-underwriting-2.0.0', true], ['diamond-underwriting-web-1.8.0', true], ['test', true], [undefined, true],
   ])('service formula %s is current enough for land: %s', (version, current) => {
     expect(landServiceFormulaIsCurrent(version)).toBe(current);
   });
