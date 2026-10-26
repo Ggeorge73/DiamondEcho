@@ -143,11 +143,11 @@ def test_land_development_matches_the_browser_engine():
     # site would show different figures depending on where it calculates.
     result = analyze_deal(land_request())
     expected = {
-        "irr": -0.37373084, "npv": -2737498.34981048, "equity_multiple": 0.22140541,
-        "ltv": 1.21441667, "ltc": 0.65, "development_profit": -2756112.29691015,
-        "development_roi": -0.77859459, "development_margin": -0.6124694,
-        "total_development_cost": 5_605_000, "residual_land_value": 2315.27304722,
-        "break_even_terminal_value": 7432034.35841515, "cost_per_acre": 2_242_000,
+        "irr": -0.32278589, "npv": -2485468.16259679, "equity_multiple": 0.2879165,
+        "ltv": 1.21441667, "ltc": 0.65, "development_profit": -2483459.11392855,
+        "development_roi": -0.7120835, "development_margin": -0.5518798,
+        "total_development_cost": 5_605_000, "residual_land_value": 188393.53109743,
+        "break_even_terminal_value": 7141977.78077513, "cost_per_acre": 2_242_000,
         "cost_per_unit": 467083.33333333, "cost_per_buildable_sf": 311.38888889,
     }
     assert result.strategy.value == "land"
@@ -155,7 +155,11 @@ def test_land_development_matches_the_browser_engine():
     for key, value in expected.items():
         assert result.metrics[key].value == pytest.approx(value, rel=1e-9), key
     assert len(result.cash_flows) == 61
-    assert result.cash_flows[0].net_cash_flow == pytest.approx(-(5_605_000 + 36_432.5 - 3_643_250))
+    # At closing the sponsor funds 35% of the $3,225,000 acquisition plus the points on the whole facility.
+    assert result.cash_flows[0].net_cash_flow == pytest.approx(-1_165_182.5)
+    assert result.cash_flows[1].debt_service == pytest.approx(23630.05015322)
+    assert result.cash_flows[60].sale_proceeds == pytest.approx(352_500)
+    assert result.cash_flows[60].loan_payoff == 0
     assert any("entitlement risk" in warning for warning in result.warnings)
     assert any("residual land value is below" in warning for warning in result.warnings)
 
@@ -361,3 +365,93 @@ def test_an_after_repair_value_basis_is_a_flip_idea_only():
         exit={"exit_cap_rate": 0.065},
     )
     assert analyze_deal(rental).metrics["ltv"].value == pytest.approx(0.65 * 3_200_000 / 3_000_000)
+
+
+# Item 3 of the 2026-10-26 review: the development schedule and absorption
+# inputs did nothing, and the facility was drawn in full on day one. The
+# figures below are the browser engine's for the same deals.
+def _timed_land(development_months, absorption_months, **overrides):
+    land = land_request().land.model_dump()
+    land.update(development_months=development_months, absorption_months=absorption_months, **overrides)
+    return analyze_deal(land_request(land=land))
+
+
+def test_the_schedule_and_absorption_inputs_move_the_figures():
+    quick = _timed_land(6, 1).metrics["development_profit"].value
+    even = _timed_land(24, 12).metrics["development_profit"].value
+    assert quick != pytest.approx(even, abs=1)
+    assert even == pytest.approx(-2483459.11392855, rel=1e-9)
+
+
+def test_the_budget_is_spent_over_the_development_months_and_sales_fall_in_the_absorption_months():
+    rows = _timed_land(24, 12).cash_flows
+    budget = (300_000 + 1_500_000) * 1.1 + 200_000 + 100_000 + 100_000
+    assert rows[1].capital_costs == pytest.approx(budget / 24 + 2_500)
+    assert rows[24].capital_costs == pytest.approx(budget / 24 + 2_500)
+    assert rows[25].capital_costs == pytest.approx(2_500)
+    assert all(row.sale_proceeds == 0 for row in rows[1:49])
+    assert all(row.sale_proceeds == pytest.approx(4_500_000 * 0.94 / 12) for row in rows[49:])
+
+
+def test_the_facility_is_drawn_as_the_money_is_spent_and_repaid_from_the_sales():
+    rows = _timed_land(24, 12).cash_flows
+    # The reference facility amortizes from month one, so its payment is level;
+    # on an interest-only facility the interest grows with the drawn balance.
+    base = land_request()
+    debt = base.debt[0].model_dump()
+    debt["interest_only_months"] = 60
+    land = base.land.model_dump()
+    land.update(development_months=24, absorption_months=12)
+    interest_only = analyze_deal(land_request(debt=[debt], land=land)).cash_flows
+    assert interest_only[1].debt_service < interest_only[2].debt_service < interest_only[24].debt_service
+    assert interest_only[25].debt_service == pytest.approx(3_643_250 * 0.0675 / 12)
+    # The acquisition is 57.5% of this deal's cost, so that much is drawn at closing.
+    assert interest_only[1].debt_service == pytest.approx(interest_only[25].debt_service * 3_225_000 / 5_605_000)
+    # Every sale dollar goes to the lender until the facility is repaid.
+    assert rows[49].loan_payoff == pytest.approx(rows[49].sale_proceeds)
+    assert rows[60].loan_payoff == 0 and rows[60].net_cash_flow > 0
+    # The amortizing reference loan has repaid some principal on schedule, so
+    # the releases cover the rest; on the interest-only facility they cover it all.
+    assert 0.85 * 3_643_250 < sum(row.loan_payoff for row in rows) < 3_643_250
+    assert sum(row.loan_payoff for row in interest_only) == pytest.approx(3_643_250, rel=1e-6)
+
+
+def test_the_timetable_is_kept_inside_the_hold_and_says_so():
+    overlap = _timed_land(48, 24)
+    assert any("longer than the 60-month hold, so the model overlaps them" in w for w in overlap.warnings)
+    idle = _timed_land(12, 12)
+    assert "The hold is 36 months longer than development plus absorption; carrying costs and interest on the drawn facility run for those months too." in idle.warnings
+    # Zero absorption is one sale in the final month.
+    rows = _timed_land(24, 0).cash_flows
+    assert rows[59].sale_proceeds == 0 and rows[60].sale_proceeds == pytest.approx(4_500_000 * 0.94)
+
+
+def test_the_residual_is_solved_on_the_timetable_and_left_out_of_a_simulation_pass():
+    for development, absorption in [(24, 12), (6, 1), (60, 60)]:
+        residual = _timed_land(development, absorption, expected_terminal_value=9_000_000).metrics["residual_land_value"].value
+        base = land_request()
+        land = base.land.model_dump()
+        land.update(development_months=development, absorption_months=absorption, expected_terminal_value=9_000_000)
+        acquisition = base.acquisition.model_dump()
+        acquisition["purchase_price"] = residual
+        debt = base.debt[0].model_dump()
+        debt["principal"] = (residual + 225_000 + 2_380_000) * 0.65
+        again = analyze_deal(land_request(acquisition=acquisition, debt=[debt], land=land))
+        assert again.metrics["development_margin"].value == pytest.approx(0.20, abs=1e-7)
+    without = analyze_deal(land_request(), include_residual=False)
+    assert "residual_land_value" not in without.metrics
+    assert without.metrics["development_profit"].value == analyze_deal(land_request()).metrics["development_profit"].value
+
+
+# Item 4 of the 2026-10-26 review: DSCR before the reserves and TI lenders deduct.
+def test_a_rental_reports_coverage_before_and_after_reserves_and_ti():
+    result = analyze_deal(rental_request())
+    noi = result.metrics["noi"].value
+    debt_service = result.metrics["dscr"].components["debt_service"]
+    operating = rental_request().operating
+    after = (noi - operating.replacement_reserves - operating.annual_below_noi_costs) / debt_service
+    assert result.metrics["dscr_after_reserves"].value == pytest.approx(after, abs=1e-7)
+    assert result.metrics["dscr_after_reserves"].value < result.metrics["dscr"].value
+    assert result.metrics["dscr_after_reserves"].formula == (
+        "(year-one NOI - replacement reserves - TI, leasing and capital costs) / year-one debt service"
+    )

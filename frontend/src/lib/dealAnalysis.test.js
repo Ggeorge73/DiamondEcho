@@ -46,7 +46,7 @@ test('underwrites a ground-up land development with residual land value', () => 
     },
   };
   const result = analyzeDealLocally(deal);
-  expect(result.metrics.development_profit.value).toBe(835001);
+  expect(result.metrics.development_profit.value).toBeCloseTo(835001, 4);
   expect(result.metrics.cost_per_unit.value).toBeCloseTo(1126666.33, 1);
   expect(result.metrics.residual_land_value.value).toBeGreaterThan(0);
   expect(result.metrics.irr.value).toBeGreaterThan(0);
@@ -171,20 +171,30 @@ describe('the land contingency absorbs a simulated cost change instead of multip
     return analyzeDealLocally(deal).metrics.development_profit.value;
   };
 
+  // Since 1.7.0 the budget is spent over the development months and the
+  // facility drawn as it is spent, so a cost dollar also moves the draws and
+  // the interest a little: the cases are compared deal for deal, not by adding
+  // the cost dollars to the base profit.
   test('a 30% rise on a 10% contingency costs 30% over budget, not 43%', () => {
     const simulated = simulatedProfit(0.30);
     expect(simulated).toBeCloseTo(profitWithCostsScaled(1.30, 0), 2);
     // The old result: 1.3 x 1.1 = 43% over on site work and hard construction.
-    expect(simulated).toBeCloseTo(profitWithCostsScaled(1.30, 0.10) + contingencyBasis * 1.30 * 0.10, 2);
+    expect(simulated).toBeGreaterThan(profitWithCostsScaled(1.30, 0.10) + contingencyBasis * 1.30 * 0.10 * 0.9);
+    expect(simulated).not.toBeCloseTo(profitWithCostsScaled(1.30, 0.10), 0);
   });
 
   test('a draw equal to the contingency is the base case on the contingency basis, and a smaller one is better by the unspent reserve', () => {
-    const base = landAt().metrics.development_profit.value;
     // Site work and hard construction come out exactly as in the base case;
     // the four costs that carry no contingency still rise by the draw.
-    expect(simulatedProfit(0.10)).toBeCloseTo(base - otherCosts * 0.10, 2);
-    expect(simulatedProfit(0.05)).toBeCloseTo(base + contingencyBasis * 0.05 - otherCosts * 0.05, 2);
-    expect(simulatedProfit(0)).toBeCloseTo(base + contingencyBasis * 0.10, 2);
+    expect(simulatedProfit(0.10)).toBeCloseTo(profitWithCostsScaled(1.10, 0), 2);
+    expect(simulatedProfit(0.05)).toBeCloseTo(profitWithCostsScaled(1.05, 0), 2);
+    expect(simulatedProfit(0)).toBeCloseTo(profitWithCostsScaled(1, 0), 2);
+    const base = landAt().metrics.development_profit.value;
+    expect(simulatedProfit(0)).toBeGreaterThan(base + contingencyBasis * 0.10 * 0.9);
+    expect(simulatedProfit(0.05)).toBeGreaterThan(simulatedProfit(0.10));
+    // On the two fields that carry it, a draw equal to the contingency is the base case.
+    expect(profitWithCostsScaled(1.10, 0)).toBeCloseTo(base - otherCosts * 0.10, -3);
+    expect(otherCosts).toBe(290000);
   });
 
   test('without a contingency the whole cost change is taken', () => {
@@ -204,8 +214,8 @@ test('residual land value is the price at which the deal earns exactly the targe
   // It used to take the target margin off net proceeds and leave out loan fees,
   // so it could sit above the price while the margin missed its target.
   const first = landAt();
-  expect(first.metrics.development_margin.value).toBeCloseTo(0.13359738, 8);
-  expect(first.metrics.residual_land_value.value).toBeCloseTo(724062.14302033, 6);
+  expect(first.metrics.development_margin.value).toBeCloseTo(0.16120289, 8);
+  expect(first.metrics.residual_land_value.value).toBeCloseTo(831051.13226601, 6);
   const again = landAt({ purchasePrice: String(first.metrics.residual_land_value.value) });
   expect(again.metrics.development_margin.value).toBeCloseTo(0.2, 7);
   expect(again.metrics.residual_land_value.value).toBeCloseTo(first.metrics.residual_land_value.value, 4);
@@ -228,11 +238,17 @@ test('the land figures match the analysis service for its reference deal', () =>
     absorptionMonths: '12', siteWorkCost: '300000', hardConstructionCost: '1500000', softCosts: '200000',
     permitsImpactFees: '100000', developerFee: '100000', annualCarryingCosts: '30000', expectedTerminalValue: '4500000',
   });
-  expect(result.metrics.development_profit.value).toBeCloseTo(-2756112.29691015, 6);
-  expect(result.metrics.development_margin.value).toBeCloseTo(-0.6124694, 8);
-  expect(result.metrics.irr.value).toBeCloseTo(-0.37373084, 8);
-  expect(result.metrics.residual_land_value.value).toBeCloseTo(2315.27304722, 6);
-  expect(result.metrics.break_even_terminal_value.value).toBeCloseTo(7432034.35841515, 6);
+  expect(result.metrics.development_profit.value).toBeCloseTo(-2483459.11392855, 6);
+  expect(result.metrics.development_margin.value).toBeCloseTo(-0.5518798, 8);
+  expect(result.metrics.irr.value).toBeCloseTo(-0.32278589, 8);
+  expect(result.metrics.npv.value).toBeCloseTo(-2485468.16259679, 6);
+  expect(result.metrics.equity_multiple.value).toBeCloseTo(0.2879165, 8);
+  expect(result.metrics.residual_land_value.value).toBeCloseTo(188393.53109743, 6);
+  expect(result.metrics.break_even_terminal_value.value).toBeCloseTo(7141977.78077513, 6);
+  expect(result.cash_flows[0].net_cash_flow).toBeCloseTo(-1165182.5, 6);
+  expect(result.cash_flows[1].debt_service).toBeCloseTo(23630.05015322, 6);
+  expect(result.cash_flows[60].sale_proceeds).toBe(352500);
+  expect(result.cash_flows[60].loan_payoff).toBe(0);
 });
 
 test('"Not verified" typed as the flood zone is not treated as an entered zone', () => {
@@ -485,4 +501,116 @@ describe('the loan basis', () => {
     const capped = { ...deal, flip: { ...deal.flip, rehab_contingency_rate: 0 }, debt: [{ ...deal.debt[0], principal: cost, loan_to_value: undefined }] };
     expect(run.summaries.flip_profit.p50).toBeCloseTo(analyzeDealLocally(capped).metrics.flip_profit.value, 2);
   });
+});
+
+// ---------------------------------------------------------------------------
+// Item 3 of the 2026-10-26 review: the development schedule and absorption
+// boxes did nothing, and the facility was drawn in full on day one.
+describe('a land development follows its timetable', () => {
+  const flows = (changes = {}) => landAt(changes).cash_flows;
+
+  test('the schedule and absorption inputs move the figures', () => {
+    const quick = landAt({ developmentMonths: '6', absorptionMonths: '1' }).metrics.development_profit.value;
+    const even = landAt({ developmentMonths: '12', absorptionMonths: '12' }).metrics.development_profit.value;
+    expect(quick).not.toBeCloseTo(even, 0);
+    expect(quick).toBeCloseTo(601406.17, 1);
+    expect(even).toBeCloseTo(721412.73, 1);
+  });
+
+  test('the budget is spent over the development months and the sales fall in the absorption months', () => {
+    const rows = flows({ developmentMonths: '18', absorptionMonths: '6' });
+    // 18 months of spend at 1/18 of the budget each, plus carrying; then carrying alone.
+    const budget = (250000 + 1400000) * 1.1 + 150000 + 60000 + 80000;
+    expect(rows[1].capital_costs).toBeCloseTo(budget / 18 + 2000, 4);
+    expect(rows[18].capital_costs).toBeCloseTo(budget / 18 + 2000, 4);
+    expect(rows[19].capital_costs).toBe(2000);
+    expect(rows.slice(1, 19).every((row) => row.sale_proceeds === 0)).toBe(true);
+    rows.slice(19).forEach((row) => expect(row.sale_proceeds).toBeCloseTo(4300000 * 0.94 / 6, 4));
+    expect(rows.reduce((sum, row) => sum + row.sale_proceeds, 0)).toBeCloseTo(4300000 * 0.94, 4);
+  });
+
+  test('the facility is drawn as the money is spent, so interest starts low and grows', () => {
+    const rows = flows();
+    expect(rows[1].debt_service).toBeLessThan(rows[2].debt_service);
+    expect(rows[2].debt_service).toBeLessThan(rows[18].debt_service);
+    // Fully drawn after month 18: 65% of the $3,125,000 cost at 6.75% / 12.
+    expect(rows[19].debt_service).toBeCloseTo(3125000 * 0.65 * 0.0675 / 12, 4);
+    // The old model charged that from the first month.
+    expect(rows[1].debt_service).toBeLessThan(rows[19].debt_service / 2);
+  });
+
+  test('sale proceeds pay the facility down first, and the rest is the sponsor\'s', () => {
+    const rows = flows();
+    const facility = 3125000 * 0.65;
+    const paid = rows.reduce((sum, row) => sum + row.loan_payoff, 0);
+    expect(paid).toBeCloseTo(facility, 4);
+    // The first sale month goes wholly to the lender; the last ones to the sponsor.
+    expect(rows[19].loan_payoff).toBeCloseTo(rows[19].sale_proceeds, 4);
+    expect(rows[24].loan_payoff).toBe(0);
+    expect(rows[24].net_cash_flow).toBeGreaterThan(0);
+    // The cash flows change sign once, so the IRR is defined.
+    expect(landAt().metrics.irr.value).toBeCloseTo(0.36482976, 8);
+  });
+
+  test('the equity goes in as the money is spent, not all on day one', () => {
+    const rows = flows();
+    // At closing: 35% of the acquisition cost plus the points on the whole facility.
+    expect(rows[0].net_cash_flow).toBeCloseTo(-((985000 + 20000 + 15000) * 0.35 + 3125000 * 0.65 * 0.01), 4);
+    expect(rows[0].capital_costs).toBeCloseTo(1020000 + 3125000 * 0.65 * 0.01, 4);
+    // Every development month: 35% of that month's spend, the carrying and the interest.
+    const budget = 3125000 - 1020000;
+    expect(rows[1].net_cash_flow).toBeCloseTo(-(budget / 18 * 0.35 + 2000 + rows[1].debt_service), 4);
+  });
+
+  test('the timetable is kept inside the hold and says so', () => {
+    const overlap = landAt({ developmentMonths: '24', absorptionMonths: '12' });
+    expect(overlap.warnings).toContain('Development (24 months) plus sales / lease-up absorption (12 months) is longer than the 24-month hold, so the model overlaps them: the budget is spent over the first 24 months and the sales fall in the last 12 months. Lengthen the hold or shorten the schedule.');
+    const idle = landAt({ developmentMonths: '6', absorptionMonths: '6' });
+    expect(idle.warnings).toContain('The hold is 12 months longer than development plus absorption; carrying costs and interest on the drawn facility run for those months too.');
+    expect(landAt().warnings.some((warning) => /longer than/.test(warning))).toBe(false);
+    // Zero absorption is one sale in the final month.
+    const rows = flows({ absorptionMonths: '0' });
+    expect(rows[23].sale_proceeds).toBe(0);
+    expect(rows[24].sale_proceeds).toBeCloseTo(4300000 * 0.94, 4);
+  });
+
+  test('the residual land value is solved on the same timetable, so re-running at it earns the target margin', () => {
+    for (const changes of [{}, { developmentMonths: '6', absorptionMonths: '1' }, { interestOnlyMonths: '0', amortizationYears: '25' }, { expectedTerminalValue: '3600000' }]) {
+      const residual = landAt(changes).metrics.residual_land_value.value;
+      expect(landAt({ ...changes, purchasePrice: String(residual) }).metrics.development_margin.value).toBeCloseTo(0.2, 7);
+    }
+  });
+
+  test('the simulation leaves the residual out, and its figures are the deal\'s own', () => {
+    const deal = buildDealRequest(landForm);
+    const result = runMonteCarloLocally({ deal, scenarios: [{ name: 'Fixed', iterations: 20, seed: 3, drivers: { terminal_value_change: { minimum: 0, mode: 0, maximum: 0 } } }] });
+    expect(result.scenarios[0].summaries.development_profit.p50).toBeCloseTo(landAt().metrics.development_profit.value, 6);
+    expect(result.scenarios[0].summaries.irr.p50).toBeCloseTo(landAt().metrics.irr.value, 8);
+    expect(result.scenarios[0].summaries.residual_land_value).toBeUndefined();
+    expect(analyzeDealLocally(deal, { residual: false }).metrics.residual_land_value).toBeUndefined();
+    expect(analyzeDealLocally(deal).metrics.residual_land_value.value).toBeCloseTo(831051.13226601, 6);
+  });
+});
+
+// Item 4 of the 2026-10-26 review: DSCR was computed before the reserves and
+// TI that lenders deduct, while cash-on-cash deducted them.
+test('a rental reports its debt service coverage before and after reserves and TI', () => {
+  const request = buildDealRequest({
+    strategy: 'rental', propertyType: 'multifamily', units: '12', rentableSquareFeet: '18000', purchasePrice: '3000000',
+    closingCosts: '75000', dueDiligenceCosts: '25000', initialCapex: '125000', holdMonths: '60', ltv: '65', interestRate: '6.75',
+    amortizationYears: '30', interestOnlyMonths: '0', loanTermYears: '10', originationFee: '1', annualRent: '360000', otherIncome: '18000',
+    vacancy: '5', propertyTaxes: '54000', insurance: '24000', repairsMaintenance: '18000', utilities: '12000', payrollAdmin: '18000',
+    managementFee: '4', reserves: '30000', annualBelowNoiCosts: '10000', incomeGrowth: '3', expenseGrowth: '3', exitCap: '6.5',
+    explicitSalePrice: '', sellingCosts: '6', discountRate: '10',
+  });
+  const result = analyzeDealLocally(request);
+  expect(result.metrics.dscr.value).toBeCloseTo(1.44690764, 8);
+  expect(result.metrics.dscr_after_reserves.value).toBeCloseTo(1.18335433, 8);
+  const noi = result.metrics.noi.value; const debt = result.metrics.dscr.components.debt_service;
+  expect(result.metrics.dscr_after_reserves.value).toBeCloseTo((noi - 40000) / debt, 8);
+  expect(result.metrics.dscr_after_reserves.formula).toBe('(year-one NOI - replacement reserves - TI, leasing and capital costs) / year-one debt service');
+  expect(result.warnings.some((warning) => /shorter than 12 months/.test(warning))).toBe(false);
+  // Item 2: a hold shorter than a year is said, as the service says it.
+  const short = analyzeDealLocally({ ...request, acquisition: { ...request.acquisition, hold_months: 5 } });
+  expect(short.warnings).toContain('Year-one operating metrics are annualized from a holding period shorter than 12 months.');
 });

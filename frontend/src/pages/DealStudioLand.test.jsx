@@ -80,11 +80,11 @@ describe('land development Go / No-Go', () => {
     const verdict = container.querySelector('.studio-result__verdict');
     expect(verdict.className).toContain('studio-result__verdict--red');
     expect(verdict.textContent).toContain('NO-GO AT THIS PRICE — REPRICE OR PASS');
-    expect(verdict.textContent).toContain('At $985,000 the deal is modeled to earn $574,469 (13.36% of exit value), short of your 20% margin target.');
+    expect(verdict.textContent).toContain('At $985,000 the deal is modeled to earn $693,172 (16.12% of exit value), short of your 20% margin target.');
     const kpis = [...container.querySelectorAll('.studio-decision-kpis article')].map((item) => item.textContent);
-    expect(kpis[0]).toContain('MAXIMUM LAND PRICE$720,000Exact modeled ceiling $724,062');
-    expect(kpis[1]).toContain('$265,000 over');
-    expect(kpis[2]).toContain('PROFIT AT THIS PRICE$574,46913.36% of exit value; target 20%');
+    expect(kpis[0]).toContain('MAXIMUM LAND PRICE$830,000Exact modeled ceiling $831,051');
+    expect(kpis[1]).toContain('$155,000 over');
+    expect(kpis[2]).toContain('PROFIT AT THIS PRICE$693,17216.12% of exit value; target 20%');
     expect(kpis[3]).toContain('0 of 10 diligence items verified');
     expect(text()).toContain('BREAK-EVEN EXIT VALUE');
     expect(text()).toContain('SAFETY CUSHION');
@@ -96,7 +96,7 @@ describe('land development Go / No-Go', () => {
     // The downside's 10% cost rise replaces the 10% contingency, so this deal
     // no longer loses money in it (it lost $93,752 when the contingency was
     // applied on top of the rise).
-    expect(rows[1]).toContain('Downside$106,035');
+    expect(rows[1]).toContain('Downside$185,648');
     expect(text()).not.toContain('The downside case loses');
   });
 
@@ -104,8 +104,8 @@ describe('land development Go / No-Go', () => {
     await click('Land development');
     await enterDeal();
     await runBase();
-    expect(tile('Residual land value').querySelector('strong').textContent).toBe('$724,062');
-    expect(tile('Development margin').querySelector('strong').textContent).toBe('13.36%');
+    expect(tile('Residual land value').querySelector('strong').textContent).toBe('$831,051');
+    expect(tile('Development margin').querySelector('strong').textContent).toBe('16.12%');
     expect(text()).toContain('The modeled residual land value is below the proposed purchase price, so the deal misses the selected target margin at this price.');
   });
 
@@ -153,7 +153,7 @@ describe('the service and the page agree on land', () => {
     await enterDeal();
     await runBase();
     expect(axios.post).toHaveBeenCalledTimes(1);
-    expect(tile('Residual land value').querySelector('strong').textContent).toBe('$724,062');
+    expect(tile('Residual land value').querySelector('strong').textContent).toBe('$831,051');
     expect(text()).not.toContain('$1,013,695');
     expect(text()).not.toContain('From the service.');
     expect(text()).toContain('NO-GO AT THIS PRICE — REPRICE OR PASS');
@@ -162,17 +162,17 @@ describe('the service and the page agree on land', () => {
   test('a service on the current formula is shown as it answered', async () => {
     await act(async () => { root.unmount(); });
     await mount('https://example.test');
-    axios.post.mockResolvedValueOnce({ data: { ...oldService, formula_version: 'diamond-underwriting-1.1.0', metrics: { residual_land_value: { value: 724062.14302033, unit: 'USD', formula: 'new' } } } });
+    axios.post.mockResolvedValueOnce({ data: { ...oldService, formula_version: 'diamond-underwriting-1.6.0', metrics: { residual_land_value: { value: 831051.13226601, unit: 'USD', formula: 'new' } } } });
     await click('Land development');
     await enterDeal();
     await runBase();
-    expect(tile('Residual land value').querySelector('strong').textContent).toBe('$724,062');
+    expect(tile('Residual land value').querySelector('strong').textContent).toBe('$831,051');
     expect(text()).toContain('From the service.');
   });
 
   test.each([
-    ['diamond-underwriting-1.0.0', false], ['diamond-underwriting-1.1.0', true], ['diamond-underwriting-1.2.3', true],
-    ['diamond-underwriting-2.0.0', true], ['diamond-underwriting-web-1.2.0', true], ['test', true], [undefined, true],
+    ['diamond-underwriting-1.0.0', false], ['diamond-underwriting-1.1.0', false], ['diamond-underwriting-1.5.0', false],
+    ['diamond-underwriting-1.6.0', true], ['diamond-underwriting-2.0.0', true], ['diamond-underwriting-web-1.7.0', true], ['test', true], [undefined, true],
   ])('service formula %s is current enough for land: %s', (version, current) => {
     expect(landServiceFormulaIsCurrent(version)).toBe(current);
   });
@@ -367,9 +367,9 @@ describe('the land tab has its own example', () => {
     await runBase();
     const verdict = container.querySelector('.studio-result__verdict');
     expect(verdict.textContent).toContain('CONDITIONAL GO — VERIFY BEFORE CLOSING');
-    expect(verdict.textContent).toContain('At $375,000 the deal is modeled to earn $474,542 (20.81% of exit value), which meets your targets.');
+    expect(verdict.textContent).toContain('At $375,000 the deal is modeled to earn $548,441 (24.05% of exit value), which meets your targets.');
     const kpis = [...container.querySelectorAll('.studio-decision-kpis article')].map((item) => item.textContent);
-    expect(kpis[0]).toContain('MAXIMUM LAND PRICE$390,000Exact modeled ceiling $391,945');
+    expect(kpis[0]).toContain('MAXIMUM LAND PRICE$460,000Exact modeled ceiling $461,207');
     expect(kpis[3]).toContain('0 of 10 diligence items verified');
     expect(text()).not.toContain('THE DEAL LOSES MONEY');
   });
@@ -385,19 +385,30 @@ describe('the land tab has its own example', () => {
     for (const name of shared) expect(field(name).value).toBe(FLIP_EXAMPLE_SHARED[name]);
   });
 
-  test('a figure the visitor typed is never swapped, in either direction', async () => {
+  test('a figure the visitor typed is never swapped, and a typed price anchors the property facts', async () => {
     await setControl('purchasePrice', '985000');
     await setControl('holdMonths', '36');
     await click('Land development');
     expect(field('purchasePrice').value).toBe('985000');
     expect(field('holdMonths').value).toBe('36');
-    expect(field('closingCosts').value).toBe('15000');      // untouched, so it followed the tab
+    // A typed price means a real property: the facts about it stay, the
+    // strategy's timing follows the tab, and the land example's own facts are
+    // not filled in beside the typed price (the 2026-10-26 review).
+    expect(field('closingCosts').value).toBe('75000');
+    expect(field('interestOnlyMonths').value).toBe('24');
+    expect(field('siteAcres').value).toBe('');
+    expect(field('siteWorkCost').value).toBe('');
+    expect(field('expectedTerminalValue').value).toBe('');
+    expect(notice().textContent).toContain('You entered a purchase price, so the land example figures were not filled in beside it; enter them for this property: site area, site work and infrastructure, soft costs, permits and impact fees, developer fee, annual taxes and carrying, expected gross terminal value.');
+    expect(button('Put the example figures back')).toBeTruthy();
     await setControl('closingCosts', '22000');
     await click('Rental & commercial');
     expect(field('purchasePrice').value).toBe('985000');
     expect(field('holdMonths').value).toBe('36');
     expect(field('closingCosts').value).toBe('22000');
-    expect(field('initialCapex').value).toBe('125000');     // still an example, so it went back
+    expect(field('initialCapex').value).toBe('125000');
+    expect(field('annualRent').value).toBe('');
+    expect(notice().textContent).toContain('the building example figures were not filled in beside it');
   });
 
   test('a typed figure is kept between the two building tabs as well', async () => {

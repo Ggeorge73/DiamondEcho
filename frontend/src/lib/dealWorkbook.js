@@ -125,13 +125,13 @@ const outputStyle = (unit) => unit === 'decimal_rate' ? 10 : unit === 'multiple'
 const inputStyle = (value, unit) => typeof value === 'number' && unit === 'USD' ? 16 : typeof value === 'number' && unit === '%' ? 17 : 4;
 
 const metricOrder = {
-  rental: ['irr', 'cash_on_cash', 'cap_rate', 'dscr', 'noi', 'npv', 'equity_multiple', 'break_even_occupancy', 'sale_price', 'ltv', 'ltc'],
+  rental: ['irr', 'cash_on_cash', 'cap_rate', 'dscr', 'dscr_after_reserves', 'noi', 'npv', 'equity_multiple', 'break_even_occupancy', 'sale_price', 'ltv', 'ltc'],
   flip: ['flip_profit', 'flip_roi', 'irr', 'npv', 'equity_multiple', 'max_offer_70_rule', 'ltv', 'ltc'],
   land: ['development_profit', 'development_roi', 'irr', 'npv', 'development_margin', 'total_development_cost', 'residual_land_value', 'break_even_terminal_value', 'cost_per_acre', 'cost_per_unit', 'cost_per_buildable_sf', 'ltc'],
 };
 
 const metricLabels = {
-  irr: 'Projected IRR', cash_on_cash: 'Cash-on-cash return', cap_rate: 'Going-in cap rate', dscr: 'Debt service coverage', noi: 'Year-one NOI', npv: 'Net present value', equity_multiple: 'Equity multiple', break_even_occupancy: 'Break-even occupancy', sale_price: 'Terminal sale value', ltv: 'Loan-to-value', ltc: 'Loan-to-cost', flip_profit: 'Projected profit', flip_roi: 'Flip ROI', max_offer_70_rule: '70% screening threshold', development_profit: 'Development profit', development_roi: 'Development ROI', development_margin: 'Development margin', total_development_cost: 'Total development cost', residual_land_value: 'Residual land value', break_even_terminal_value: 'Break-even terminal value', cost_per_acre: 'Cost per acre', cost_per_unit: 'Cost per planned unit', cost_per_buildable_sf: 'Cost per buildable square foot',
+  irr: 'Projected IRR', cash_on_cash: 'Cash-on-cash return', cap_rate: 'Going-in cap rate', dscr: 'Debt service coverage (on NOI)', dscr_after_reserves: 'Debt service coverage after reserves and TI', noi: 'Year-one NOI', npv: 'Net present value', equity_multiple: 'Equity multiple', break_even_occupancy: 'Break-even occupancy', sale_price: 'Terminal sale value', ltv: 'Loan-to-value', ltc: 'Loan-to-cost', flip_profit: 'Projected profit', flip_roi: 'Flip ROI', max_offer_70_rule: '70% screening threshold', development_profit: 'Development profit', development_roi: 'Development ROI', development_margin: 'Development margin', total_development_cost: 'Total development cost', residual_land_value: 'Residual land value', break_even_terminal_value: 'Break-even terminal value', cost_per_acre: 'Cost per acre', cost_per_unit: 'Cost per planned unit', cost_per_buildable_sf: 'Cost per buildable square foot',
 };
 
 const inputRows = ({ form, request }) => {

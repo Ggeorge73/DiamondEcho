@@ -43,9 +43,10 @@ test('preserves an explicit terminal value while solving the maximum offer', () 
   const irrCeiling = decision.ceilings.find((item) => item.key === 'irr');
 
   expect(irrCeiling.value).toBeGreaterThan(300000);
-  expect(decision.recommendedMaximum).toBe(325000);
+  // Closing costs stay as entered at every price, as they do for flip and land.
+  expect(decision.recommendedMaximum).toBe(320000);
   expect(decision.verdict).toBe('REPRICE OR PASS');
-  expect(decision.openingRange).toEqual([300000, 315000]);
+  expect(decision.openingRange).toEqual([295000, 310000]);
 });
 
 test('stresses an explicit terminal value instead of an ignored exit cap', () => {
@@ -101,12 +102,12 @@ test('a land deal priced above its ceiling is a No-Go with the price that would 
   expect(decision.call).toBe('NO-GO');
   expect(decision.verdict).toBe('NO-GO AT THIS PRICE — REPRICE OR PASS');
   expect(decision.tone).toBe('red');
-  expect(decision.exactMaximum).toBeCloseTo(724062.14, 1);
-  expect(decision.recommendedMaximum).toBe(720000);
-  expect(decision.gapToAsk).toBe(265000);
-  expect(decision.openingRange).toEqual([660000, 700000]);
+  expect(decision.exactMaximum).toBeCloseTo(831051.13, 1);
+  expect(decision.recommendedMaximum).toBe(830000);
+  expect(decision.gapToAsk).toBe(155000);
+  expect(decision.openingRange).toEqual([765000, 805000]);
   expect(decision.ceilings.find((item) => item.binding).key).toBe('margin');
-  expect(decision.summary).toBe('At $985,000 the deal is modeled to earn $574,469 (13.36% of exit value), short of your 20% margin target. The highest land price that meets your targets is $724,062, which is $260,938 below this price.');
+  expect(decision.summary).toBe('At $985,000 the deal is modeled to earn $693,172 (16.12% of exit value), short of your 20% margin target. The highest land price that meets your targets is $831,051, which is $153,949 below this price.');
   // Only the target that is missed is named: the IRR target is met here.
   expect(decision.hurdleResults.map((item) => [item.label, item.pass])).toEqual([['Development margin', false], ['Levered IRR', true]]);
 });
@@ -120,7 +121,7 @@ test('the margin ceiling is the residual land value, so the decision and the met
 });
 
 test('within 5% above the ceiling the call is to negotiate', () => {
-  const decision = land({ purchasePrice: '740000' });
+  const decision = land({ purchasePrice: '850000' });
   expect(decision.call).toBe('NEGOTIATE');
   expect(decision.verdict).toBe('NEGOTIATE — WITHIN 5% OF THE CEILING');
   expect(decision.tone).toBe('amber');
@@ -128,7 +129,7 @@ test('within 5% above the ceiling the call is to negotiate', () => {
 });
 
 test('a price that meets the targets is a conditional Go until the diligence is verified', () => {
-  const decision = land({ purchasePrice: '700000' });
+  const decision = land({ purchasePrice: '810000' });
   expect(decision.call).toBe('CONDITIONAL GO');
   expect(decision.verdict).toBe('CONDITIONAL GO — VERIFY BEFORE CLOSING');
   expect(decision.confidence).toBe('Low');
@@ -175,7 +176,7 @@ test('a deal that loses money, or has no exit value, is a No-Go that says why', 
   expect(loss.verdict).toBe('NO-GO — THE DEAL LOSES MONEY');
   expect(loss.exactMaximum).toBeNull();
   expect(loss.recommendedMaximum).toBeNull();
-  expect(loss.summary).toContain('is modeled to lose $1,117,531');
+  expect(loss.summary).toContain('is modeled to lose $1,011,369');
   expect(loss.profitability.cushion).toBeLessThan(0);
   const none = land({ expectedTerminalValue: '0' });
   expect(none.verdict).toBe('NO-GO — NO EXIT VALUE ENTERED');
@@ -190,7 +191,7 @@ test('exceptions make a deal that meets its targets conditional', () => {
   expect(slow.walkAwaySignals[0]).toContain('36 months, longer than the 24-month hold');
   // With the cost rise replacing the contingency the downside is milder than it
   // was, so the exit value sits lower to keep the downside case under water.
-  const thin = land({ purchasePrice: '700000', ...verifiedSite, expectedTerminalValue: '3750000', targetProfitMargin: '8', targetIrr: '' }, allTicked);
+  const thin = land({ purchasePrice: '700000', ...verifiedSite, expectedTerminalValue: '3600000', targetProfitMargin: '8', targetIrr: '' }, allTicked);
   expect(thin.scenarios[0].metrics.profit).toBeLessThan(0);
   expect(thin.walkAwaySignals.some((signal) => signal.startsWith('The downside case loses'))).toBe(true);
   expect(thin.call).toBe('CONDITIONAL GO');
@@ -434,7 +435,7 @@ test('the flip decision reads the listing history and seller posture, and checks
   expect(listed.intelligence.facts.at(-1).detail).toBe('taxes $102, insurance $103, utilities $166 a month; $450 entered');
   expect(listed.intelligence.notes).toEqual(['Sold as-is: the 15% contingency is the only repair credit you will get.']);
   expect(listed.version).toBe(DECISION_VERSION);
-  expect(DECISION_VERSION).toBe('diamond-decision-1.4.0');
+  expect(DECISION_VERSION).toBe('diamond-decision-1.5.0');
 });
 
 test('with nothing typed about the listing, the flip decision only reminds, and never stacks exceptions', () => {

@@ -693,6 +693,12 @@ h1, h2, h3, .display { font-family: 'Sora', 'Inter', sans-serif; }
 .studio-inline-actions p { margin: 0; flex: 1 1 240px; color: var(--mist); font-size: 11px; line-height: 1.6; }
 .studio-inline-actions button { padding: 10px 14px; border: 1px solid var(--line-strong); background: transparent; color: var(--ice); font-size: 10px; letter-spacing: .04em; cursor: pointer; }
 .studio-inline-actions button:hover { background: var(--panel-raised); }
+.studio-inline-actions--warn { margin-top: 18px; padding: 12px 14px; border: 1px solid rgba(212,155,98,.5); background: rgba(126,79,35,.14); }
+.studio-inline-actions--warn > svg { width: 16px; flex: none; color: #dca66f; }
+.studio-inline-actions--warn p { color: var(--ice); }
+.studio-band-state { margin: -14px 0 18px; padding: 0; list-style: none; color: var(--mist); font-size: 11px; line-height: 1.7; }
+.studio-band-state strong { color: var(--ice); font-weight: 600; }
+.studio-band-state button { margin-left: 10px; padding: 6px 10px; border: 1px solid var(--line-strong); background: transparent; color: var(--ice); font-size: 10px; letter-spacing: .04em; cursor: pointer; }
 .studio-progress { width: min(100%, 320px); height: 4px; margin: 22px auto 0; background: var(--line); }
 .studio-progress span { display: block; height: 100%; background: var(--steel-bright); transition: width .2s linear; }
 .studio-decision-kpis--minor article { min-height: 104px; }

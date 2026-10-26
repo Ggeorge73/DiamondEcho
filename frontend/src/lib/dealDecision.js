@@ -11,7 +11,11 @@ import { arvChecks, buildListingSignals, holdingCostParts } from './listingSigna
 // 1.4.0 (2026-10-22): the flip decision reads the listing history and seller
 // posture, checks the after-repair value per square foot, and checks the
 // holding costs against their parts.
-export const DECISION_VERSION = 'diamond-decision-1.4.0';
+// 1.5.0 (2026-10-26): the flip decision carries the financing (loan, points,
+// monthly interest, cash required); the rental decision names its three cases'
+// assumptions and measures DSCR on the basis chosen (NOI, or NOI after
+// reserves and TI); every ceiling solver holds closing costs as entered.
+export const DECISION_VERSION = 'diamond-decision-1.5.0';
 
 const EXPLICIT_EXIT_DOWNSIDE_MULTIPLIER = 0.9;
 const EXPLICIT_EXIT_UPSIDE_MULTIPLIER = 1.1;
@@ -35,15 +39,11 @@ const metricValue = (analysis, key) => finite(analysis?.metrics?.[key]?.value);
 
 const analyzeForm = (form) => analyzeDealLocally(buildDealRequest(form));
 
-const atPrice = (form, purchasePrice) => {
-  const originalPrice = n(form.purchasePrice);
-  const closingRate = originalPrice > 0 ? n(form.closingCosts) / originalPrice : 0;
-  return analyzeForm({
-    ...form,
-    purchasePrice: String(purchasePrice),
-    closingCosts: String(purchasePrice * closingRate),
-  });
-};
+// The deal at another price. Other costs, closing costs included, stay as
+// entered; a loan sized on the price keeps its share of it. One convention
+// for the three strategies (item 6 of the 2026-10-26 review: the rental solver
+// used to scale the closing costs with the price while the others did not).
+const atPrice = (form, purchasePrice) => analyzeForm({ ...form, purchasePrice: String(purchasePrice) });
 
 const findPriceCeiling = ({ form, metricKey, target, minimum = 1000, analyzeAt = atPrice, allowZeroTarget = false }) => {
   if (!Number.isFinite(target) || (!allowZeroTarget && !(target > 0))) return null;
@@ -79,6 +79,15 @@ const scaleOperatingExpenses = (form, multiplier) => ({
   annualBelowNoiCosts: String(n(form.annualBelowNoiCosts) * multiplier),
 });
 
+// Which coverage the rental decision tests: NOI over debt service (the
+// default) or NOI after replacement reserves and TI over debt service, which is
+// how many lenders size (item 4 of the 2026-10-26 review).
+export const DSCR_BASES = Object.freeze({
+  noi: { key: 'dscr', label: 'DSCR', description: 'on NOI, before reserves and TI' },
+  after_reserves: { key: 'dscr_after_reserves', label: 'DSCR after reserves', description: 'on NOI after replacement reserves and TI, leasing and capital costs' },
+});
+export const dscrBasis = (form) => DSCR_BASES[form.dscrBasis] || DSCR_BASES.noi;
+
 const buildScenario = (form, name, changes) => {
   const scenarioForm = { ...form, ...changes };
   const analysis = analyzeForm(scenarioForm);
@@ -89,7 +98,7 @@ const buildScenario = (form, name, changes) => {
       noi: metricValue(analysis, 'noi'),
       capRate: metricValue(analysis, 'cap_rate'),
       cashOnCash: metricValue(analysis, 'cash_on_cash'),
-      dscr: metricValue(analysis, 'dscr'),
+      dscr: metricValue(analysis, dscrBasis(form).key),
       irr: metricValue(analysis, 'irr'),
       equityMultiple: metricValue(analysis, 'equity_multiple'),
       salePrice: metricValue(analysis, 'sale_price'),
@@ -127,8 +136,13 @@ const buildScenarios = (form) => [
   }),
 ];
 
+// What the Downside and Upside cases change, printed under the table (item 5
+// of the 2026-10-26 review: the rental cases were undisclosed).
+export const RENTAL_SCENARIO_NOTE = 'Downside: rent and other income 10% lower, vacancy 3 points higher, operating expenses, reserves and TI 10% higher, initial capital work 25% higher, interest 0.5 points higher, and the exit cap rate 0.75 points higher (or the expected sale price 10% lower). Upside: rent and other income 10% higher, vacancy 2 points lower, operating expenses, reserves and TI 5% lower, initial capital work 25% lower, interest 0.25 points lower, and the exit cap rate 0.5 points lower (or the expected sale price 10% higher).';
+
 export const buildRentalDecision = ({ form, evidence = {} }) => {
   if (form.strategy !== 'rental') return null;
+  const coverage = dscrBasis(form);
   const targets = {
     cashOnCash: n(form.targetCashOnCash) / 100,
     dscr: n(form.minimumDscr),
@@ -136,7 +150,7 @@ export const buildRentalDecision = ({ form, evidence = {} }) => {
   };
   const ceilings = [
     { key: 'cashOnCash', label: `${n(form.targetCashOnCash)}% cash-on-cash`, value: findPriceCeiling({ form, metricKey: 'cash_on_cash', target: targets.cashOnCash }), source: 'Return hurdle' },
-    { key: 'dscr', label: `${n(form.minimumDscr).toFixed(2)}× DSCR`, value: findPriceCeiling({ form, metricKey: 'dscr', target: targets.dscr }), source: 'Debt-service hurdle' },
+    { key: 'dscr', label: `${n(form.minimumDscr).toFixed(2)}× ${coverage.label}`, value: findPriceCeiling({ form, metricKey: coverage.key, target: targets.dscr }), source: `Debt-service hurdle, ${coverage.description}` },
     { key: 'irr', label: `${n(form.targetIrr)}% levered IRR`, value: findPriceCeiling({ form, metricKey: 'irr', target: targets.irr }), source: 'Hold-period hurdle' },
   ];
   if (n(form.preliminaryMarketCeiling) > 0) ceilings.push({ key: 'market', label: 'Preliminary market ceiling', value: n(form.preliminaryMarketCeiling), source: 'User-entered market evidence' });
@@ -149,11 +163,11 @@ export const buildRentalDecision = ({ form, evidence = {} }) => {
   const askingPrice = n(form.purchasePrice);
   const base = analyzeForm(form);
   const baseMetrics = {
-    cashOnCash: metricValue(base, 'cash_on_cash'), dscr: metricValue(base, 'dscr'), irr: metricValue(base, 'irr'),
+    cashOnCash: metricValue(base, 'cash_on_cash'), dscr: metricValue(base, coverage.key), irr: metricValue(base, 'irr'),
   };
   const hurdleResults = [
     { label: 'Cash-on-cash', actual: baseMetrics.cashOnCash, target: targets.cashOnCash, pass: baseMetrics.cashOnCash !== null && baseMetrics.cashOnCash >= targets.cashOnCash, format: 'rate' },
-    { label: 'DSCR', actual: baseMetrics.dscr, target: targets.dscr, pass: baseMetrics.dscr !== null && baseMetrics.dscr >= targets.dscr, format: 'multiple' },
+    { label: coverage.label, actual: baseMetrics.dscr, target: targets.dscr, pass: baseMetrics.dscr !== null && baseMetrics.dscr >= targets.dscr, format: 'multiple' },
     { label: 'Levered IRR', actual: baseMetrics.irr, target: targets.irr, pass: baseMetrics.irr !== null && baseMetrics.irr >= targets.irr, format: 'rate' },
   ];
 
@@ -197,13 +211,15 @@ export const buildRentalDecision = ({ form, evidence = {} }) => {
     openingRange: hasPositiveRecommendedMaximum ? [openingLow, openingHigh] : null,
     targetRange: hasPositiveRecommendedMaximum ? [openingHigh, recommendedMaximum] : null,
     scenarios: buildScenarios(form),
+    scenarioNote: RENTAL_SCENARIO_NOTE,
+    dscrBasis: coverage,
     walkAwaySignals,
     summary: hasExactMaximum
       ? askingPrice > exactMaximum
         ? `The proposed price exceeds the return-constrained ceiling by ${Math.round(gapToAsk).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}. Reprice the basis or improve verified income, expenses, financing, or seller economics.`
         : `The proposed price is within the modeled return ceiling, subject to complete evidence and diligence.`
       : 'No defensible maximum offer could be established from the selected hurdles. Review the assumptions before proceeding.',
-    valuationNotice: 'This is an investment-value ceiling based on the entered assumptions—not an appraisal, broker price opinion, or representation of market value.',
+    valuationNotice: 'This is an investment-value ceiling based on the entered assumptions—not an appraisal, broker price opinion, or representation of market value. Other costs, closing costs included, stay as entered at each price; the loan keeps its share of the price.',
   };
 };
 
@@ -271,7 +287,7 @@ const buildLandScenarios = (form) => [
 export const LAND_SCENARIO_NOTE = 'Downside: exit value 10% lower, development costs 10% higher (the rise replaces the contingency), six months longer, interest 0.5 points higher. Upside: exit value 5% higher, costs 5% lower with the contingency unspent, interest 0.25 points lower.';
 
 // Other costs stay as entered; the facility is resized to the same share of cost.
-const landAtPrice = (form, purchasePrice) => analyzeForm({ ...form, purchasePrice: String(purchasePrice) });
+const landAtPrice = atPrice;
 
 export const buildLandDecision = ({ form, evidence = {} }) => {
   if (form.strategy !== 'land') return null;
@@ -320,7 +336,7 @@ export const buildLandDecision = ({ form, evidence = {} }) => {
   // Conditions to resolve before going ahead.
   const cautions = [];
   if (downside.profit !== null && downside.profit < 0) cautions.push(`The downside case loses ${usd(Math.abs(downside.profit))}.`);
-  if (scheduleMonths > n(form.holdMonths)) cautions.push(`Development plus absorption is ${scheduleMonths} months, longer than the ${n(form.holdMonths)}-month hold, so carrying costs and interest are understated.`);
+  if (scheduleMonths > n(form.holdMonths)) cautions.push(`Development plus absorption is ${scheduleMonths} months, longer than the ${n(form.holdMonths)}-month hold, so the model overlaps them. Lengthen the hold or shorten the schedule.`);
   if (form.environmentalStatus === 'remediation_required' && !(n(form.environmentalRemediation) > 0)) cautions.push('Remediation is required but no remediation cost is entered.');
   if (flood.status === 'special') cautions.push(`Flood zone ${flood.zone} is a FEMA Special Flood Hazard Area.`);
   if (n(form.wetlandsAcres) > 0) cautions.push('Wetlands are on the site; the buildable area and permits need confirming.');
@@ -450,8 +466,42 @@ export const FLIP_SCENARIO_NOTE = 'Downside: after-repair value 10% lower, rehab
 // The after-repair value can fall this far before the deal loses money.
 const FLIP_THIN_CUSHION = 0.10;
 
+const BASIS_WORDS = { purchase_price: 'the purchase price', total_project_cost: 'the total project cost', after_repair_value: 'the after-repair value' };
+
+// What a hard-money flipper reads first: the loan, the points, the monthly
+// interest and the cash the deal needs (the 2026-10-26 review found the loan
+// amount only in the model output at the foot of the results).
+export const flipFinancing = (form, analysis) => {
+  const flows = Array.isArray(analysis?.cash_flows) ? analysis.cash_flows : [];
+  const hold = n(form.holdMonths);
+  const loanAmount = metricValue(analysis, 'loan_amount') || 0;
+  const cashRequired = flows[0] ? -flows[0].net_cash_flow : null;
+  const originationRate = n(form.originationFee) / 100;
+  const monthly = flows.slice(1, hold + 1).map((row) => n(row.debt_service));
+  const totalDebtService = monthly.reduce((sum, value) => sum + value, 0);
+  const loanPayoff = n(flows[hold]?.loan_payoff);
+  const totalInterest = loanAmount > 0 ? totalDebtService - (loanAmount - loanPayoff) : 0;
+  const interestOnly = loanAmount <= 0 || n(form.interestOnlyMonths) >= hold;
+  const basis = BASIS_WORDS[form.loanBasis] || BASIS_WORDS.purchase_price;
+  const rehabShare = form.loanBasis && form.loanBasis !== 'purchase_price' ? 0 : n(form.rehabFinanced);
+  return {
+    loanAmount,
+    cashRequired,
+    originationFee: loanAmount * originationRate,
+    originationRate,
+    monthlyDebtService: monthly.length ? monthly[0] : 0,
+    interestOnly,
+    totalInterest,
+    totalDebtService,
+    interestRate: n(form.interestRate) / 100,
+    sizing: loanAmount > 0
+      ? `${n(form.ltv)}% of ${basis}${rehabShare > 0 ? ` plus ${rehabShare}% of the rehab budget` : ''}`
+      : 'No loan: the deal is all cash',
+  };
+};
+
 // Other costs stay as entered; the loan is resized to the same share of the price.
-const flipAtPrice = (form, purchasePrice) => analyzeForm({ ...form, purchasePrice: String(purchasePrice) });
+const flipAtPrice = atPrice;
 
 export const buildFlipDecision = ({ form, evidence = {}, today = new Date() }) => {
   if (form.strategy !== 'flip') return null;
@@ -567,6 +617,7 @@ export const buildFlipDecision = ({ form, evidence = {}, today = new Date() }) =
     },
     scenarios,
     scenarioNote: FLIP_SCENARIO_NOTE,
+    financing: flipFinancing(form, base),
     walkAwaySignals,
     // Facts and notes for the page; the cautions are already in walkAwaySignals.
     intelligence: {
