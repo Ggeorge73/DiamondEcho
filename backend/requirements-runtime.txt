@@ -4,4 +4,4 @@ python-dotenv>=1.2.4,<2
 pydantic>=2.13.5,<3
 email-validator>=2.3.0,<3
 firebase-admin==7.7.0
-tzdata>=2025.2  # Eastern time for the market brief; the slim image has no system time zone data
+tzdata>=2026.5  # Eastern time for the market brief; the slim image has no system time zone data
