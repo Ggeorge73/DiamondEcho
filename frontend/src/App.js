@@ -14,7 +14,8 @@ import { Privacy, Terms } from "./pages/Policies";
 import Podcast from "./pages/Podcast";
 import RealEstateAssistant from "./components/assistant/RealEstateAssistant";
 import { BriefAudioProvider } from "./components/BriefAudio";
-import { scrollKey } from "./lib/intelligenceTools";
+import PageMeta from "./components/PageMeta";
+import { scrollKey, TOOL_PATHS } from "./lib/intelligenceTools";
 
 const ScrollToTop = () => {
   const { pathname, search } = useLocation();
@@ -25,34 +26,49 @@ const ScrollToTop = () => {
   return null;
 };
 
-function App() {
+// Everything inside the router. The app wraps it in the browser's router
+// below; the build wraps the same thing in a fixed address to save each page
+// as HTML (src/prerender.jsx), so the two can never show different pages.
+export const Site = () => (
+  // The daily brief's player sits above the pages, so the welcome tour
+  // keeps playing as the visitor moves around the site.
+  <BriefAudioProvider>
+    <ScrollToTop />
+    <PageMeta />
+    <Navbar />
+    <Routes>
+      <Route path="/" element={<Home />} />
+      {/* The search page itself is KeptSearch, below: it stays loaded between visits. */}
+      <Route path="/search" element={null} />
+      <Route path="/property/:id" element={<Navigate to="/search" replace />} />
+      {/* Three addresses, one page: Deal Studio, the mortgage calculator and the
+          seller net sheet are tabs of the Intelligence page, and what a visitor
+          typed in one is still there after a look at another. */}
+      <Route path={TOOL_PATHS.deal} element={<InvestmentCalculator />} />
+      <Route path={TOOL_PATHS.mortgage} element={<InvestmentCalculator />} />
+      <Route path={TOOL_PATHS["net-proceeds"]} element={<InvestmentCalculator />} />
+      <Route path="/agents" element={<Agents />} />
+      <Route path="/about" element={<About />} />
+      <Route path="/inquire" element={<Inquire />} />
+      <Route path="/podcast" element={<Podcast />} />
+      <Route path="/privacy" element={<Privacy />} />
+      <Route path="/terms" element={<Terms />} />
+      <Route path="*" element={<NotFound />} />
+    </Routes>
+    <KeptSearch />
+    <Footer />
+    <RealEstateAssistant />
+  </BriefAudioProvider>
+);
+
+// The browser's router by default. The build passes a router fixed at one
+// address instead, and nothing else changes.
+function App({ Router = BrowserRouter, ...routerProps }) {
   return (
     <div className="App">
-      <BrowserRouter>
-        {/* The daily brief's player sits above the pages, so the welcome tour
-            keeps playing as the visitor moves around the site. */}
-        <BriefAudioProvider>
-          <ScrollToTop />
-          <Navbar />
-          <Routes>
-            <Route path="/" element={<Home />} />
-            {/* The search page itself is KeptSearch, below: it stays loaded between visits. */}
-            <Route path="/search" element={null} />
-            <Route path="/property/:id" element={<Navigate to="/search" replace />} />
-            <Route path="/investment-calculator" element={<InvestmentCalculator />} />
-            <Route path="/agents" element={<Agents />} />
-            <Route path="/about" element={<About />} />
-            <Route path="/inquire" element={<Inquire />} />
-            <Route path="/podcast" element={<Podcast />} />
-            <Route path="/privacy" element={<Privacy />} />
-            <Route path="/terms" element={<Terms />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-          <KeptSearch />
-          <Footer />
-          <RealEstateAssistant />
-        </BriefAudioProvider>
-      </BrowserRouter>
+      <Router {...routerProps}>
+        <Site />
+      </Router>
     </div>
   );
 }

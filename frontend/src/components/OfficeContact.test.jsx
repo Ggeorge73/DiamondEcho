@@ -78,3 +78,32 @@ test('footer names the brokerage and its office number before the direct number,
   expect(phones[0].className).toBe(phones[1].className);
   expect(container.querySelector('.mf-footer__legal').textContent).toContain('Brokerage: Virtual Properties Realty.com');
 });
+
+// The saved HTML of a page carries the year it was built in (scripts/prerender.mjs).
+test('the footer shows this year, and corrects a saved page that was built last year', async () => {
+  const { hydrateRoot } = require('react-dom/client');
+  const year = new Date().getFullYear();
+  await act(async () => root.render(<MemoryRouter><Footer /></MemoryRouter>));
+  expect(container.querySelector('.mf-footer__legal span').textContent).toMatch(new RegExp(`^© ${year} DiamondEcho Private Real Estate · Brokerage: Virtual Properties Realty\\.com`));
+
+  const { renderToString } = require('react-dom/server');
+  const saved = document.createElement('div');
+  saved.innerHTML = renderToString(<MemoryRouter><Footer /></MemoryRouter>).replace(`>${year}<`, `>${year - 1}<`);
+  document.body.appendChild(saved);
+  expect(saved.querySelector('.mf-footer__legal span').textContent).toContain(`© ${year - 1} `);
+  const redrawn = [];
+  let taken;
+  await act(async () => {
+    taken = hydrateRoot(saved, <MemoryRouter><Footer /></MemoryRouter>, { onRecoverableError: (error) => redrawn.push(String(error)) });
+  });
+  expect(redrawn).toEqual([]);
+  expect(saved.querySelector('.mf-footer__legal span').textContent).toContain(`© ${year} `);
+  await act(async () => taken.unmount());
+  saved.remove();
+});
+
+test('the footer of every page says where DiamondEcho works, in the cities Gbenga named', async () => {
+  await act(async () => { root.render(<MemoryRouter><Footer /></MemoryRouter>); });
+  expect(container.querySelector('.mf-footer__areas').textContent.replace(/\s+/g, ' ').trim())
+    .toBe('Working with buyers, sellers and investors in Alpharetta, Roswell, Duluth, Atlanta, Suwanee, Cumming and Lawrenceville, Georgia.');
+});
