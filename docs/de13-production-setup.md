@@ -50,7 +50,8 @@ Cloud Run: 1 CPU, 1 GiB, concurrency 1, timeout 30 s, minimum 0 and maximum 3 in
 | `diamondecho-api-00004-kiq` | New image from `main` at `50705a5` (formula `diamond-underwriting-1.1.0`). Served all requests from 2026-10-06, shortly before 21:00 UTC, to 2026-10-07 01:05 UTC. Kept as the fallback |
 | `diamondecho-api-00007-deh` | New image from `main` at `f8853da` (assistant topics, continued conversations and fair-housing check; route list switched off). Served all requests from 2026-10-07 01:05 UTC to 01:45 UTC. Kept as the fallback |
 | `diamondecho-api-00010-car` | New image from `main` at `d151b51` (a plain tour request gets the tour request form). Served all requests from 2026-10-07 01:45 UTC to 2026-10-26. Kept as the fallback. Numbers 5, 6, 8 and 9 name no revision: the list shows 1, 2, 3, 4, 7 and 10. Each redeploy was followed by two traffic-only changes, and the next revision's number was three higher each time |
-| `diamondecho-api-00022-zow` | New image from `main` at `3766d16` (formula `diamond-underwriting-1.5.0`: the 2026-10-22 Deal Studio changes, the loan basis, and the dependency updates since). Serving all requests since 2026-10-26, morning UTC |
+| `diamondecho-api-00022-zow` | New image from `main` at `3766d16` (formula `diamond-underwriting-1.5.0`: the 2026-10-22 Deal Studio changes, the loan basis, and the dependency updates since). Served all requests from 2026-10-26, morning UTC, to 2026-10-26, about 12:00 UTC. Kept as the fallback |
+| `diamondecho-api-00025-sij` | New image from `main` at `b5227c2` (formula `diamond-underwriting-1.6.0`: the 2026-10-26 Deal Studio review fixes, the land timetable and the coverage after reserves). Serving all requests since 2026-10-26, about 12:00 UTC. Numbers 23 and 24 were not seen from this session; the deploy output went straight from 22 to 25 |
 
 Always pass `--project diamondecho-prod`. Cloud Shell's default project can be either staging or production, depending on how the session was opened.
 
@@ -246,6 +247,35 @@ dependency updates in this image (FastAPI 0.156.1, pydantic 2.14, uvicorn
 0.54, Python 3.14) are serving for the first time; the service's own tests
 passed on `main` before the merge.
 
+### API redeploy from `b5227c2` (2026-10-26, about 11:40 to 12:00 UTC)
+
+**API moved from `3766d16` to `b5227c2`.** One merge: PR #105, the
+2026-10-26 Deal Studio review fixes. In the service that is the land
+timetable (the budget spent over the development months, the facility drawn
+as it is spent and repaid from the sales, the residual solved on that
+timetable) and the coverage after reserves and TI (`dscr_after_reserves`).
+The service formula moves from `diamond-underwriting-1.5.0` to `1.6.0`. Why
+now: the page merged the same morning needs `1.6.0` for rental and land, and
+calculated those two on the device until this redeploy. Record of the
+changes: `docs/deal-studio-review-2026-10-26.md`.
+
+1. From the Cloud Shell clone after `git checkout main && git pull`, at
+   `b5227c2` with nothing uncommitted.
+2. `gcloud run deploy diamondecho-api --source backend --project diamondecho-prod --region us-east1 --no-traffic --tag candidate --quiet`. Built with the Dockerfile. Result: `diamondecho-api-00025-sij`, serving 0 percent.
+3. Candidate check at its temporary address: the land tab's own example
+   (price 375,000, 12 and 12 months, facility 976,950) answered
+   `"formula_version":"diamond-underwriting-1.6.0"` and a residual land
+   value of 461,206.85, the browser engine's figure to the cent. A request
+   to `/healthz` on the candidate address was answered by a Google 404
+   before reaching the service; `/health` is the path to use.
+4. `update-traffic --to-latest`, then `--remove-tags candidate`. One entry:
+   latest revision (`diamondecho-api-00025-sij`), 100 percent. `/health` on
+   the service address answered `{"status":"ok"}`.
+
+Not done: the same list as the redeploy above, and revision 22 was not
+rehearsed as a fallback. The exact clock times were not recorded; the
+times above are from the chat.
+
 ## Proven by the owner
 
 | Date | What Gbenga did | Result |
@@ -283,7 +313,7 @@ State on 2026-10-07, after the owner's decisions of that night (Jira DE-26, DE-1
 ## Undo
 
 - **Close the request slot at once:** `gcloud run services update diamondecho-api --region us-east1 --project diamondecho-prod --update-env-vars INQUIRY_STAFF_QUEUE_ENABLED=false`. The form then answers 503 and stores nothing.
-- **Return the API to the earlier code:** `gcloud run services update-traffic diamondecho-api --to-revisions=diamondecho-api-00010-car=100 --project diamondecho-prod --region us-east1`. Revision 10 (`d151b51`) is kept for this. Going back to it gives up the 22 October Deal Studio changes in the service and the dependency updates; the service would then refuse the two loan fields again, which the page tolerates since PR #103 (it calculates a fix and flip on the device when the service refuses or answers with an older formula), so Deal Studio keeps working either way.
+- **Return the API to the earlier code:** `gcloud run services update-traffic diamondecho-api --to-revisions=diamondecho-api-00022-zow=100 --project diamondecho-prod --region us-east1`. Revision 22 (`3766d16`, formula `1.5.0`) is kept for this. Going back to it gives up the land timetable and the coverage after reserves in the service; the page then calculates rental and land on the device and says so, so Deal Studio keeps working either way. Revision 10 (`d151b51`, formula `1.1.0`) is the step before that, with the same page fallback for fix and flip.
 - **Allow the database to be deleted again:** `gcloud firestore databases update --database="(default)" --no-delete-protection --project diamondecho-prod`. Only needed before a deliberate removal, which is the owner's to run.
 - **Silence the alert:** disable the policy; do not remove it.
 - **Move DNS back:** at GoDaddy choose "GoDaddy Nameservers". If GoDaddy does not restore its record list, re-enter the nineteen records in the table above. Then set `PUBLIC_ORIGIN`, `STAFF_ORIGIN` and `CORS_ORIGINS` on the API, and `STAFF_ORIGIN` and `PUBLIC_ORIGIN` on the staff Pages project, back to the `pages.dev` addresses and rebuild the staff site.
