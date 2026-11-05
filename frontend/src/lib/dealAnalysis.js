@@ -27,7 +27,14 @@ import { floodZoneWarning } from './floodZone';
 // of its balance being paid from the investor's pocket at maturity while the
 // property is still held; a land hold shorter than development plus absorption
 // is refused instead of compressed.
-export const FORMULA_VERSION = 'diamond-underwriting-web-1.8.0';
+// 1.9.0 (2026-11-05): a land facility can fund the deal only after the
+// sponsor's equity is spent (draw_order equity_first), as most construction
+// lenders require, instead of pro rata from closing; a land deal can sell part
+// of the site early (early_sale_proceeds in early_sale_month) and keep a piece,
+// an existing house say, that is valued at the end of the hold without being
+// sold (retained_value) and earns while held (retained_monthly_income). Absent
+// fields keep the earlier figures.
+export const FORMULA_VERSION = 'diamond-underwriting-web-1.9.0';
 
 const clean = (value, digits = 8) => value == null || !Number.isFinite(value) ? null : Number(value.toFixed(digits));
 const ratio = (numerator, denominator) => Math.abs(denominator) < 1e-12 ? null : clean(numerator / denominator);
@@ -267,6 +274,28 @@ export const landTimetable = (land, holdMonths) => ({
   absorption: Math.max(1, Math.min(land.absorption_months || 0, holdMonths)),
 });
 
+// What a land deal brings in besides the exit at the end of the hold: a piece
+// sold early (gross, in the month it closes, inside the hold) and a piece kept,
+// which is worth its value at the end of the hold without being sold and may
+// earn a net income every month while held.
+export const landExtras = (land, holdMonths) => {
+  const earlySale = Math.max(0, land.early_sale_proceeds || 0);
+  return {
+    earlySale,
+    earlySaleMonth: earlySale > 0 ? Math.max(1, Math.min(holdMonths, Math.round(land.early_sale_month || holdMonths))) : 0,
+    retainedValue: Math.max(0, land.retained_value || 0),
+    retainedIncome: Math.max(0, land.retained_monthly_income || 0),
+  };
+};
+
+// How much of the facility has been drawn once a share of the cost is spent.
+// Pro rata: the facility funds its share of every dollar from closing. Equity
+// first: the sponsor's cash goes in first and the facility funds every dollar
+// after it, so nothing is drawn until the equity requirement is spent.
+export const facilityDrawn = (order, spentShare, totalProjectCost, totalDebt) => (order === 'equity_first'
+  ? Math.min(totalDebt, Math.max(0, totalProjectCost * spentShare - (totalProjectCost - totalDebt)))
+  : totalDebt * spentShare);
+
 // The cash flows of a land development at a given price, with the facility's
 // amounts given. Called once for the deal and again by the residual solver
 // at other prices. It never throws; the caller checks the equity.
@@ -284,12 +313,17 @@ const landFigures = (request, purchasePrice, principals) => {
     spent.push(totalProjectCost > 0 ? (acquisitionCost + developmentCosts * Math.min(month, development) / development) / totalProjectCost : 1);
   }
   const totalDebt = principals.reduce((sum, value) => sum + value, 0);
+  const drawn = spent.map((share) => facilityDrawn(land.draw_order, share, totalProjectCost, totalDebt));
   const originationFees = principals.reduce((sum, principal, index) => sum + principal * (request.debt[index].origination_fee_rate || 0), 0);
   const monthlyCarrying = land.annual_carrying_costs / 12;
   const derivedTerminalValue = land.stabilized_noi > 0 && land.stabilized_exit_cap_rate > 0 ? land.stabilized_noi / land.stabilized_exit_cap_rate : 0;
   const terminalValue = Math.max(0, land.expected_terminal_value || derivedTerminalValue);
-  const sellingCosts = terminalValue * request.exit.selling_cost_rate;
-  const monthlyProceeds = (terminalValue - sellingCosts) / absorption;
+  const { earlySale, earlySaleMonth, retainedValue, retainedIncome } = landExtras(land, hold);
+  // The piece kept is not sold, so it carries no selling costs.
+  const sellingCosts = (terminalValue + earlySale) * request.exit.selling_cost_rate;
+  const earlySaleNet = earlySale * (1 - request.exit.selling_cost_rate);
+  const grossExitValue = terminalValue + earlySale + retainedValue;
+  const monthlyProceeds = terminalValue * (1 - request.exit.selling_cost_rate) / absorption;
   // The facility is drawn as the money is spent, so interest runs on the drawn
   // balance, not on the whole commitment from day one. A draw lands at the end
   // of its month and bears interest from the next. Sale proceeds pay the
@@ -299,20 +333,25 @@ const landFigures = (request, purchasePrice, principals) => {
   const loans = (request.debt || []).map((loan, index) => {
     const rate = (loan.annual_interest_rate || 0) / 12;
     const ioMonths = loan.interest_only_months || 0;
-    return { rate, ioMonths, principal: principals[index], balance: principals[index] * spent[0], payment: periodicPayment(principals[index], rate, Math.max((loan.amortization_years || 30) * 12 - ioMonths, 1)) };
+    const share = totalDebt > 0 ? principals[index] / totalDebt : 0;
+    return { rate, ioMonths, share, principal: principals[index], balance: share * drawn[0], payment: periodicPayment(principals[index], rate, Math.max((loan.amortization_years || 30) * 12 - ioMonths, 1)) };
   });
-  const cashFlows = [{ month: 0, operating_cash_flow: 0, debt_service: 0, capital_costs: acquisitionCost + originationFees, sale_proceeds: 0, loan_payoff: 0, net_cash_flow: -(acquisitionCost + originationFees - totalDebt * spent[0]) }];
+  const cashFlows = [{ month: 0, operating_cash_flow: 0, debt_service: 0, capital_costs: acquisitionCost + originationFees, sale_proceeds: 0, loan_payoff: 0, net_cash_flow: -(acquisitionCost + originationFees - drawn[0]) }];
   let totalInterest = 0;
   for (let month = 1; month <= hold; month += 1) {
     const delta = spent[month] - spent[month - 1];
     const spend = totalProjectCost * delta;
-    const draw = totalDebt * delta;
-    const proceeds = month > hold - absorption ? monthlyProceeds : 0;
-    let debtService = 0; let payoff = 0; let available = proceeds;
+    const draw = drawn[month] - drawn[month - 1];
+    // Cash from sales: the exit over the absorption months, and the early sale
+    // in its month. The kept piece's value is counted in the final month but is
+    // not cash, so it repays nothing.
+    const cashProceeds = (month > hold - absorption ? monthlyProceeds : 0) + (month === earlySaleMonth ? earlySaleNet : 0);
+    const proceeds = cashProceeds + (month === hold ? retainedValue : 0);
+    let debtService = 0; let payoff = 0; let available = cashProceeds;
     loans.forEach((loan) => {
       const interest = loan.balance * loan.rate;
       const scheduledPrincipal = month <= loan.ioMonths ? 0 : Math.min(loan.balance, Math.max(loan.payment - interest, 0));
-      loan.balance = loan.balance - scheduledPrincipal + loan.principal * delta;
+      loan.balance = loan.balance - scheduledPrincipal + loan.share * draw;
       const release = Math.min(loan.balance, available);
       loan.balance -= release; available -= release;
       const atEnd = month === hold ? loan.balance : 0;
@@ -321,7 +360,7 @@ const landFigures = (request, purchasePrice, principals) => {
       debtService += interest + scheduledPrincipal;
       payoff += release + atEnd;
     });
-    cashFlows.push({ month, operating_cash_flow: 0, debt_service: clean(debtService), capital_costs: clean(spend + monthlyCarrying), sale_proceeds: clean(proceeds), loan_payoff: clean(payoff), net_cash_flow: clean(-(spend - draw) - monthlyCarrying - debtService + proceeds - payoff) });
+    cashFlows.push({ month, operating_cash_flow: clean(retainedIncome), debt_service: clean(debtService), capital_costs: clean(spend + monthlyCarrying), sale_proceeds: clean(proceeds), loan_payoff: clean(payoff), net_cash_flow: clean(retainedIncome - (spend - draw) - monthlyCarrying - debtService + proceeds - payoff) });
   }
   const values = cashFlows.map((row) => row.net_cash_flow);
   const profit = values.reduce((sum, value) => sum + value, 0);
@@ -330,6 +369,8 @@ const landFigures = (request, purchasePrice, principals) => {
   return {
     cashFlows, profit, equityContributions, totalInterest, totalCarrying, originationFees, totalDebt,
     totalProjectCost, acquisitionCost, developmentCosts, contingency, terminalValue, sellingCosts,
+    grossExitValue, earlySale, earlySaleNet, earlySaleMonth, retainedValue, retainedIncome: retainedIncome * hold,
+    drawOrder: land.draw_order === 'equity_first' ? 'equity_first' : 'pro_rata',
     economicCost: totalProjectCost + originationFees + totalInterest + totalCarrying, development, absorption,
   };
 };
@@ -369,9 +410,11 @@ const analyzeLand = (request, { residual = true } = {}) => {
   if (tooShort) throw new Error(tooShort);
   const principals = (request.debt || []).map((loan) => loanPrincipal(request, loan));
   const base = landFigures(request, acquisition.purchase_price, principals);
-  const { totalProjectCost, originationFees, totalDebt, terminalValue } = base;
+  const { totalProjectCost, originationFees, totalDebt, terminalValue, grossExitValue } = base;
   if (totalProjectCost + originationFees - totalDebt <= 0) throw new Error('Construction financing must leave a positive equity contribution.');
-  const breakEvenTerminalValue = request.exit.selling_cost_rate < 1 ? base.economicCost / (1 - request.exit.selling_cost_rate) : null;
+  // The exit value at the end of the hold at which the deal breaks even, with
+  // the early sale, the kept piece's value and its income as entered.
+  const breakEvenTerminalValue = request.exit.selling_cost_rate < 1 ? Math.max(0, base.economicCost - base.earlySaleNet - base.retainedValue - base.retainedIncome) / (1 - request.exit.selling_cost_rate) : null;
   const nonLandCosts = totalProjectCost - acquisition.purchase_price;
   const facilityShare = totalProjectCost > 0 ? totalDebt / totalProjectCost : 0;
   // The land price at which development profit is exactly the target margin on
@@ -382,24 +425,27 @@ const analyzeLand = (request, { residual = true } = {}) => {
   const residualLandValue = residual ? solveLandResidual((price) => {
     const scale = totalProjectCost > 0 ? (totalProjectCost - acquisition.purchase_price + price) / totalProjectCost : 1;
     return landFigures(request, price, principals.map((principal) => principal * scale)).profit;
-  }, acquisition.purchase_price, terminalValue * land.target_profit_margin) : null;
+  }, acquisition.purchase_price, grossExitValue * land.target_profit_margin) : null;
   const metrics = commonMetrics(request, base.cashFlows, totalDebt, totalProjectCost);
   Object.assign(metrics, {
     development_profit: metric(base.profit, request.property.currency, 'net disposition proceeds - equity contributions - carrying and financing costs', { terminal_value: terminalValue, selling_costs: base.sellingCosts, economic_cost: base.economicCost }),
     development_roi: metric(ratio(base.profit, base.equityContributions), 'decimal_rate', 'development profit / total equity contributions', { profit: base.profit, equity_contributions: base.equityContributions }),
-    development_margin: metric(ratio(base.profit, terminalValue), 'decimal_rate', 'development profit / gross terminal value', { profit: base.profit, terminal_value: terminalValue }, terminalValue ? null : 'Development margin is undefined without a terminal value.'),
+    development_margin: metric(ratio(base.profit, grossExitValue), 'decimal_rate', 'development profit / gross exit value (terminal value + early sale + value of the piece kept)', { profit: base.profit, terminal_value: terminalValue, early_sale_proceeds: base.earlySale, retained_value: base.retainedValue, gross_exit_value: grossExitValue }, grossExitValue ? null : 'Development margin is undefined without a terminal value.'),
     total_development_cost: metric(totalProjectCost, request.property.currency, 'land acquisition + transaction + site + hard + soft + entitlement + environmental + developer fee + contingency', { acquisition_cost: base.acquisitionCost, development_costs: base.developmentCosts, contingency: base.contingency }),
-    break_even_terminal_value: metric(breakEvenTerminalValue, request.property.currency, 'total economic cost / (1 - selling cost rate)', { economic_cost: base.economicCost, selling_cost_rate: request.exit.selling_cost_rate }),
+    break_even_terminal_value: metric(breakEvenTerminalValue, request.property.currency, '(total economic cost - early sale net of selling costs - value of the piece kept - its income) / (1 - selling cost rate)', { economic_cost: base.economicCost, early_sale_net: base.earlySaleNet, retained_value: base.retainedValue, retained_income: base.retainedIncome, selling_cost_rate: request.exit.selling_cost_rate }),
     cost_per_acre: metric(ratio(totalProjectCost, land.site_acres), `${request.property.currency}/acre`, 'total development cost / site acres', { total_project_cost: totalProjectCost, site_acres: land.site_acres }),
     cost_per_unit: metric(ratio(totalProjectCost, land.planned_units), `${request.property.currency}/unit`, 'total development cost / planned units', { total_project_cost: totalProjectCost, planned_units: land.planned_units }),
     cost_per_buildable_sf: metric(ratio(totalProjectCost, land.buildable_square_feet), `${request.property.currency}/sf`, 'total development cost / buildable square feet', { total_project_cost: totalProjectCost, buildable_square_feet: land.buildable_square_feet }),
   });
   if (residual) {
-    metrics.residual_land_value = metric(residualLandValue, request.property.currency, 'land price at which development profit equals the target margin on gross terminal value, with other costs as entered, the facility at its modeled share of project cost and the same timetable', { terminal_value: terminalValue, target_profit_margin: land.target_profit_margin, non_land_costs: nonLandCosts, carrying_costs: base.totalCarrying, facility_share_of_cost: facilityShare });
+    metrics.residual_land_value = metric(residualLandValue, request.property.currency, 'land price at which development profit equals the target margin on gross exit value, with other costs as entered, the facility at its modeled share of project cost and the same timetable', { terminal_value: terminalValue, gross_exit_value: grossExitValue, target_profit_margin: land.target_profit_margin, non_land_costs: nonLandCosts, carrying_costs: base.totalCarrying, facility_share_of_cost: facilityShare });
   }
 
   const warnings = ['Calculated securely in this browser; no live analysis service was required.', 'Land-development results depend on zoning, entitlement, utility, environmental, geotechnical, civil, market, and construction assumptions that require professional verification.'];
   if (!terminalValue) warnings.push('No terminal value can be calculated. Enter an expected gross exit value or stabilized NOI with a capitalization rate.');
+  if (base.earlySale > 0) warnings.push(`A piece of the site is modeled as sold in month ${base.earlySaleMonth} for ${base.earlySale.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })} gross, net of selling costs, repaying the facility first. The exit value entered must be for what remains.`);
+  if (base.retainedValue > 0 || base.retainedIncome > 0) warnings.push(`A piece of the property is modeled as kept: valued at ${base.retainedValue.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })} at the end of the hold without selling costs${base.retainedIncome > 0 ? `, earning ${(base.retainedIncome / acquisition.hold_months).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })} a month net while held` : ''}. Its value is your estimate, not a sale; the exit value entered must be for what is sold.`);
+  if (totalDebt > 0 && base.drawOrder !== 'equity_first') warnings.push('The facility is modeled as funding its share of every dollar from closing. Most construction lenders require the sponsor\'s equity in first; choose "after your equity is spent" if yours does.');
   const schedule = land.development_months + (land.absorption_months || 0);
   if (schedule < acquisition.hold_months) warnings.push(`The hold is ${acquisition.hold_months - schedule} months longer than development plus absorption; carrying costs and interest on the drawn facility run for those months too.`);
   const extended = extendedLoanWarning(request);
@@ -415,7 +461,7 @@ const analyzeLand = (request, { residual = true } = {}) => {
   if (residual && residualLandValue !== null && residualLandValue < acquisition.purchase_price) warnings.push('The modeled residual land value is below the proposed purchase price, so the deal misses the selected target margin at this price.');
   if (land.planned_units < 1 && land.buildable_square_feet < 1) warnings.push('Enter planned units or buildable square feet to evaluate density and unit economics.');
 
-  return { analysis_id: `browser-${Date.now()}`, schema_version: '1.0', formula_version: FORMULA_VERSION, strategy: 'land', computed_at: new Date().toISOString(), metrics, cash_flows: base.cashFlows, calculation_mode: 'browser', assumptions: { cost_timing: 'Acquisition costs fall at closing; the development budget is spent evenly over the development schedule; the facility is drawn as the money is spent, bears interest on the drawn balance and is repaid from sale proceeds first and otherwise at the end of the hold; sales are taken evenly over the absorption months at the end of the hold; carrying costs run monthly for the whole hold. Contingency applies to site work and hard construction only.', terminal_value: 'Uses explicit exit value first, otherwise stabilized NOI divided by exit cap rate.', taxes: 'Income taxes, depreciation, tax credits, and entity-level tax effects are not modeled.' }, warnings };
+  return { analysis_id: `browser-${Date.now()}`, schema_version: '1.0', formula_version: FORMULA_VERSION, strategy: 'land', computed_at: new Date().toISOString(), metrics, cash_flows: base.cashFlows, calculation_mode: 'browser', assumptions: { cost_timing: `Acquisition costs fall at closing; the development budget is spent evenly over the development schedule; the facility is drawn ${base.drawOrder === 'equity_first' ? 'only after the sponsor\'s equity is spent, then for every dollar' : 'as the money is spent, for its share of every dollar'}, bears interest on the drawn balance and is repaid from sale proceeds first and otherwise at the end of the hold; sales are taken evenly over the absorption months at the end of the hold; an early sale lands in its month net of selling costs; a piece kept is counted at its value in the final month without selling costs and its net income is received monthly; carrying costs run monthly for the whole hold. Contingency applies to site work and hard construction only.`, terminal_value: 'Uses explicit exit value first, otherwise stabilized NOI divided by exit cap rate.', taxes: 'Income taxes, depreciation, tax credits, and entity-level tax effects are not modeled.' }, warnings };
 };
 
 // `residual: false` leaves out the land residual, which costs two more passes

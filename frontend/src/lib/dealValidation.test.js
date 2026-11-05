@@ -1,4 +1,4 @@
-import { FIELD_LABELS, responseErrorMessage, validateDealForm } from './dealValidation';
+import { FIELD_LABELS, marketProblem, responseErrorMessage, validateDealForm } from './dealValidation';
 
 const apiError = (detail) => ({ isAxiosError: true, response: { status: 422, data: { detail } } });
 
@@ -76,5 +76,18 @@ describe('validation messages name the box as the page does', () => {
   test('every numeric box the form validates has a label', () => {
     for (const key of Object.keys(FIELD_LABELS)) expect(FIELD_LABELS[key]).toMatch(/^[A-Z]/);
     expect(FIELD_LABELS.rehabCost).toBe('Rehabilitation budget');
+  });
+});
+
+// Item 4 of the 2026-11-05 review: one letter left in the Market box while a
+// list was open must not be accepted as a market.
+describe('the market box', () => {
+  test('one letter is not a market; a listed market, a typed city and state, or nothing is fine', () => {
+    expect(marketProblem('A')).toMatch(/"A" is not a market/);
+    expect(marketProblem(' 12 ')).toMatch(/not a market/);
+    expect(marketProblem('Austin, TX')).toBeNull();
+    expect(marketProblem('Macon, GA')).toBeNull();
+    expect(marketProblem('')).toBeNull();
+    expect(marketProblem(undefined)).toBeNull();
   });
 });

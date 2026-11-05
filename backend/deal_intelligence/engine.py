@@ -47,7 +47,7 @@ from .models import (
 # of its balance being paid from the investor's pocket at maturity while the
 # property is still held; a land hold shorter than development plus absorption
 # is refused instead of compressed.
-FORMULA_VERSION = "diamond-underwriting-1.7.0"
+FORMULA_VERSION = "diamond-underwriting-1.8.0"
 
 
 # FEMA flood-zone designations. Mirrors ``classifyFloodZone`` in
@@ -621,6 +621,24 @@ def land_timetable(land, hold_months: int) -> Tuple[int, int]:
     return development, absorption
 
 
+def land_extras(land, hold_months: int) -> Tuple[float, int, float, float]:
+    """What a land deal brings in besides the exit at the end of the hold:
+    the early sale (gross) and the month it closes, the value of the piece
+    kept and its net monthly income. Mirrors ``landExtras`` in the browser
+    engine."""
+    early_sale = max(0.0, land.early_sale_proceeds or 0)
+    early_sale_month = max(1, min(hold_months, round(land.early_sale_month or hold_months))) if early_sale > 0 else 0
+    return early_sale, early_sale_month, max(0.0, land.retained_value or 0), max(0.0, land.retained_monthly_income or 0)
+
+
+def facility_drawn(order, spent_share: float, total_project_cost: float, total_debt: float) -> float:
+    """How much of the facility has been drawn once a share of the cost is
+    spent. Mirrors ``facilityDrawn`` in the browser engine."""
+    if getattr(order, "value", order) == "equity_first":
+        return min(total_debt, max(0.0, total_project_cost * spent_share - (total_project_cost - total_debt)))
+    return total_debt * spent_share
+
+
 @dataclass
 class _LandFigures:
     cash_flows: List[PeriodCashFlow]
@@ -639,6 +657,13 @@ class _LandFigures:
     economic_cost: float
     development: int
     absorption: int
+    gross_exit_value: float = 0.0
+    early_sale: float = 0.0
+    early_sale_net: float = 0.0
+    early_sale_month: int = 0
+    retained_value: float = 0.0
+    retained_income: float = 0.0
+    draw_order: str = "pro_rata"
 
 
 def _land_figures(request: DealAnalysisRequest, purchase_price: float, principals: Sequence[float]) -> _LandFigures:
@@ -664,6 +689,7 @@ def _land_figures(request: DealAnalysisRequest, purchase_price: float, principal
         for month in range(hold + 1)
     ]
     total_debt = sum(principals)
+    drawn = [facility_drawn(land.draw_order, share, total_project_cost, total_debt) for share in spent]
     origination_fees = sum(principal * loan.origination_fee_rate for principal, loan in zip(principals, request.debt))
     monthly_carrying = land.annual_carrying_costs / 12
     derived_terminal_value = (
@@ -671,8 +697,12 @@ def _land_figures(request: DealAnalysisRequest, purchase_price: float, principal
         if land.stabilized_noi > 0 and land.stabilized_exit_cap_rate > 0 else 0
     )
     terminal_value = max(0, land.expected_terminal_value or derived_terminal_value)
-    selling_costs = terminal_value * request.exit.selling_cost_rate
-    monthly_proceeds = (terminal_value - selling_costs) / absorption
+    early_sale, early_sale_month, retained_value, retained_income = land_extras(land, hold)
+    # The piece kept is not sold, so it carries no selling costs.
+    selling_costs = (terminal_value + early_sale) * request.exit.selling_cost_rate
+    early_sale_net = early_sale * (1 - request.exit.selling_cost_rate)
+    gross_exit_value = terminal_value + early_sale + retained_value
+    monthly_proceeds = terminal_value * (1 - request.exit.selling_cost_rate) / absorption
     # The facility is drawn as the money is spent, so interest runs on the drawn
     # balance, not on the whole commitment from day one. A draw lands at the end
     # of its month and bears interest from the next. Sale proceeds pay the
@@ -682,29 +712,34 @@ def _land_figures(request: DealAnalysisRequest, purchase_price: float, principal
     loans = []
     for principal, loan in zip(principals, request.debt):
         rate = loan.annual_interest_rate / 12
+        share = principal / total_debt if total_debt > 0 else 0
         loans.append({
-            "rate": rate, "io_months": loan.interest_only_months, "principal": principal, "balance": principal * spent[0],
+            "rate": rate, "io_months": loan.interest_only_months, "share": share, "principal": principal, "balance": share * drawn[0],
             "payment": periodic_payment(principal, rate, max(loan.amortization_years * 12 - loan.interest_only_months, 1)),
         })
     cash_flows: List[PeriodCashFlow] = [
         PeriodCashFlow(
             month=0, capital_costs=acquisition_cost + origination_fees,
-            net_cash_flow=-(acquisition_cost + origination_fees - total_debt * spent[0]),
+            net_cash_flow=-(acquisition_cost + origination_fees - drawn[0]),
         )
     ]
     total_interest = 0.0
     for month in range(1, hold + 1):
         delta = spent[month] - spent[month - 1]
         spend = total_project_cost * delta
-        draw = total_debt * delta
-        proceeds = monthly_proceeds if month > hold - absorption else 0
+        draw = drawn[month] - drawn[month - 1]
+        # Cash from sales: the exit over the absorption months, and the early
+        # sale in its month. The kept piece's value is counted in the final
+        # month but is not cash, so it repays nothing.
+        cash_proceeds = (monthly_proceeds if month > hold - absorption else 0) + (early_sale_net if month == early_sale_month else 0)
+        proceeds = cash_proceeds + (retained_value if month == hold else 0)
         debt_service = 0.0
         payoff = 0.0
-        available = proceeds
+        available = cash_proceeds
         for loan in loans:
             interest = loan["balance"] * loan["rate"]
             scheduled_principal = 0 if month <= loan["io_months"] else min(loan["balance"], max(loan["payment"] - interest, 0))
-            loan["balance"] = loan["balance"] - scheduled_principal + loan["principal"] * delta
+            loan["balance"] = loan["balance"] - scheduled_principal + loan["share"] * draw
             release = min(loan["balance"], available)
             loan["balance"] -= release
             available -= release
@@ -717,11 +752,12 @@ def _land_figures(request: DealAnalysisRequest, purchase_price: float, principal
         cash_flows.append(
             PeriodCashFlow(
                 month=month,
+                operating_cash_flow=_clean(retained_income) or 0,
                 debt_service=_clean(debt_service) or 0,
                 capital_costs=_clean(spend + monthly_carrying) or 0,
                 sale_proceeds=_clean(proceeds) or 0,
                 loan_payoff=_clean(payoff) or 0,
-                net_cash_flow=_clean(-(spend - draw) - monthly_carrying - debt_service + proceeds - payoff) or 0,
+                net_cash_flow=_clean(retained_income - (spend - draw) - monthly_carrying - debt_service + proceeds - payoff) or 0,
             )
         )
     values = [row.net_cash_flow for row in cash_flows]
@@ -736,6 +772,9 @@ def _land_figures(request: DealAnalysisRequest, purchase_price: float, principal
         selling_costs=selling_costs,
         economic_cost=total_project_cost + origination_fees + total_interest + total_carrying,
         development=development, absorption=absorption,
+        gross_exit_value=gross_exit_value, early_sale=early_sale, early_sale_net=early_sale_net,
+        early_sale_month=early_sale_month, retained_value=retained_value, retained_income=retained_income * hold,
+        draw_order="equity_first" if getattr(land.draw_order, "value", land.draw_order) == "equity_first" else "pro_rata",
     )
 
 
@@ -796,10 +835,16 @@ def _land_analysis(request: DealAnalysisRequest, include_residual: bool = True) 
     total_project_cost = base.total_project_cost
     total_debt = base.total_debt
     terminal_value = base.terminal_value
+    gross_exit_value = base.gross_exit_value
     if total_project_cost + base.origination_fees - total_debt <= 0:
         raise ValueError("Construction financing must leave a positive equity contribution.")
 
-    break_even_terminal_value = base.economic_cost / (1 - selling_cost_rate) if selling_cost_rate < 1 else None
+    # The exit value at the end of the hold at which the deal breaks even, with
+    # the early sale, the kept piece's value and its income as entered.
+    break_even_terminal_value = (
+        max(0.0, base.economic_cost - base.early_sale_net - base.retained_value - base.retained_income) / (1 - selling_cost_rate)
+        if selling_cost_rate < 1 else None
+    )
     non_land_costs = total_project_cost - acquisition.purchase_price
     facility_share = total_debt / total_project_cost if total_project_cost > 0 else 0
     # The land price at which development profit is exactly the target margin
@@ -813,7 +858,7 @@ def _land_analysis(request: DealAnalysisRequest, include_residual: bool = True) 
         def profit_at(price: float) -> float:
             scale = (total_project_cost - acquisition.purchase_price + price) / total_project_cost if total_project_cost > 0 else 1
             return _land_figures(request, price, [principal * scale for principal in principals]).profit
-        residual_land_value = solve_land_residual(profit_at, acquisition.purchase_price, terminal_value * land.target_profit_margin)
+        residual_land_value = solve_land_residual(profit_at, acquisition.purchase_price, gross_exit_value * land.target_profit_margin)
 
     metrics = _common_metrics(request, base.cash_flows, total_debt, total_project_cost)
     metrics.update(
@@ -831,11 +876,14 @@ def _land_analysis(request: DealAnalysisRequest, include_residual: bool = True) 
                 {"profit": base.profit, "equity_contributions": base.equity_contributions},
             ),
             "development_margin": _metric(
-                ratio(base.profit, terminal_value),
+                ratio(base.profit, gross_exit_value),
                 "decimal_rate",
-                "development profit / gross terminal value",
-                {"profit": base.profit, "terminal_value": terminal_value},
-                None if terminal_value else "Development margin is undefined without a terminal value.",
+                "development profit / gross exit value (terminal value + early sale + value of the piece kept)",
+                {
+                    "profit": base.profit, "terminal_value": terminal_value, "early_sale_proceeds": base.early_sale,
+                    "retained_value": base.retained_value, "gross_exit_value": gross_exit_value,
+                },
+                None if gross_exit_value else "Development margin is undefined without a terminal value.",
             ),
             "total_development_cost": _metric(
                 total_project_cost,
@@ -846,8 +894,11 @@ def _land_analysis(request: DealAnalysisRequest, include_residual: bool = True) 
             "break_even_terminal_value": _metric(
                 break_even_terminal_value,
                 currency,
-                "total economic cost / (1 - selling cost rate)",
-                {"economic_cost": base.economic_cost, "selling_cost_rate": selling_cost_rate},
+                "(total economic cost - early sale net of selling costs - value of the piece kept - its income) / (1 - selling cost rate)",
+                {
+                    "economic_cost": base.economic_cost, "early_sale_net": base.early_sale_net, "retained_value": base.retained_value,
+                    "retained_income": base.retained_income, "selling_cost_rate": selling_cost_rate,
+                },
             ),
             "cost_per_acre": _metric(
                 ratio(total_project_cost, land.site_acres),
@@ -873,10 +924,11 @@ def _land_analysis(request: DealAnalysisRequest, include_residual: bool = True) 
         metrics["residual_land_value"] = _metric(
             residual_land_value,
             currency,
-            "land price at which development profit equals the target margin on gross terminal value, "
+            "land price at which development profit equals the target margin on gross exit value, "
             "with other costs as entered, the facility at its modeled share of project cost and the same timetable",
             {
                 "terminal_value": terminal_value,
+                "gross_exit_value": gross_exit_value,
                 "target_profit_margin": land.target_profit_margin,
                 "non_land_costs": non_land_costs,
                 "carrying_costs": base.total_carrying,
@@ -892,6 +944,22 @@ def _land_analysis(request: DealAnalysisRequest, include_residual: bool = True) 
         warnings.append(
             "No terminal value can be calculated. Enter an expected gross exit value or stabilized NOI with a "
             "capitalization rate."
+        )
+    if base.early_sale > 0:
+        warnings.append(
+            f"A piece of the site is modeled as sold in month {base.early_sale_month} for ${base.early_sale:,.0f} gross, "
+            "net of selling costs, repaying the facility first. The exit value entered must be for what remains."
+        )
+    if base.retained_value > 0 or base.retained_income > 0:
+        earning = f", earning ${base.retained_income / acquisition.hold_months:,.0f} a month net while held" if base.retained_income > 0 else ""
+        warnings.append(
+            f"A piece of the property is modeled as kept: valued at ${base.retained_value:,.0f} at the end of the hold "
+            f"without selling costs{earning}. Its value is your estimate, not a sale; the exit value entered must be for what is sold."
+        )
+    if total_debt > 0 and base.draw_order != "equity_first":
+        warnings.append(
+            "The facility is modeled as funding its share of every dollar from closing. Most construction lenders "
+            "require the sponsor's equity in first; choose \"after your equity is spent\" if yours does."
         )
     schedule = land.development_months + land.absorption_months
     if schedule < acquisition.hold_months:
@@ -971,9 +1039,13 @@ def _land_analysis(request: DealAnalysisRequest, include_residual: bool = True) 
             "rate_convention": "All rates are decimal annual rates unless labeled otherwise.",
             "cost_timing": (
                 "Acquisition costs fall at closing; the development budget is spent evenly over the development "
-                "schedule; the facility is drawn as the money is spent, bears interest on the drawn balance and is "
+                "schedule; the facility is drawn "
+                + ("only after the sponsor's equity is spent, then for every dollar" if base.draw_order == "equity_first" else "as the money is spent, for its share of every dollar")
+                + ", bears interest on the drawn balance and is "
                 "repaid from sale proceeds first and otherwise at the end of the hold; sales are taken evenly over "
-                "the absorption months at the end of the hold; carrying costs run monthly for the whole hold. "
+                "the absorption months at the end of the hold; an early sale lands in its month net of selling costs; "
+                "a piece kept is counted at its value in the final month without selling costs and its net income is "
+                "received monthly; carrying costs run monthly for the whole hold. "
                 "Contingency applies to site work and hard construction only."
             ),
             "terminal_value": "Uses explicit exit value first, otherwise stabilized NOI divided by exit cap rate.",

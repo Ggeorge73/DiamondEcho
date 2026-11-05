@@ -19,6 +19,8 @@ export const PROPERTY_ASSUMPTION_FIELDS = [
   // one property too (items 2, 7 and 8 of the 2026-10-22 flip review).
   'lastSalePrice', 'lastSaleDate', 'originalListPrice', 'daysOnMarket',
   'flipAnnualTaxes', 'flipAnnualInsurance', 'flipMonthlyUtilities', 'compSoldPerSf',
+  // A piece of one site sold early, or kept, is about that site only.
+  'earlySaleProceeds', 'earlySaleMonth', 'retainedValue', 'retainedMonthlyIncome',
 ];
 
 const hasValue = (value) => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));

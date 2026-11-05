@@ -240,3 +240,15 @@ the call is reached, the three cases, the contingency) are unchanged.
 - Address suggestions and public-record prefill (finding 7).
 - A Go / No-Go for fix and flip.
 - The decision is not written into the Excel workbook.
+
+## Changed again on 2026-11-05: how the facility funds the deal, a piece sold early, a piece kept
+
+The 2026-11-05 pre-launch review found that the facility funded its share of
+the land on day one, which most construction lenders do not do, and that a
+deal with an existing house kept, or a piece sold early, had to be folded into
+the exit value, which distorted the returns. Since that date the land tab has
+a "Facility funds the deal" choice, starting at "After your equity is spent",
+and four boxes for a piece sold early or kept. The figures above are those of
+the pro-rata model; the equity-first figures, the model and the tests are in
+`docs/deal-studio-review-2026-11-05.md`. The rules for the call, the three
+cases and the contingency are unchanged.
