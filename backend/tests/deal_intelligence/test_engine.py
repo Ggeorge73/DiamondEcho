@@ -506,3 +506,72 @@ def test_a_loan_whose_term_ends_before_the_hold_is_extended_to_the_sale():
 def test_service_sentences_start_with_a_capital_letter():
     with pytest.raises(ValueError, match="^Construction financing must leave a positive equity contribution"):
         analyze_deal(land_request(debt=[{"principal": 6_000_000, "annual_interest_rate": 0.0675, "amortization_years": 30, "term_months": 120}]))
+
+
+def test_land_equity_first_draw_order_matches_the_browser_engine():
+    # The 2026-11-05 review: most construction lenders require the sponsor's
+    # equity in first. Reference values are the browser engine's for the same
+    # request with draw_order equity_first (frontend/src/lib/dealAnalysis.js).
+    land = land_request().land.model_dump()
+    land.update(draw_order="equity_first")
+    result = analyze_deal(land_request(land=land))
+    expected = {
+        "irr": -0.28907523, "npv": -2514255.1761208, "equity_multiple": 0.3048169,
+        "development_profit": -2406352.18001686, "development_roi": -0.6951831,
+        "development_margin": -0.53474493, "break_even_terminal_value": 7059949.1276776,
+        "residual_land_value": 221050.13852516,
+    }
+    for key, value in expected.items():
+        assert result.metrics[key].value == pytest.approx(value, rel=1e-9), key
+    # At closing the sponsor pays the whole $3,225,000 acquisition and the points; the
+    # facility funds only the $1,263,250 of it beyond the $1,961,750 equity requirement.
+    assert result.cash_flows[0].net_cash_flow == pytest.approx(-1_998_182.5)
+    assert result.cash_flows[1].net_cash_flow == pytest.approx(-26130.05015322)
+    assert not any("funding its share of every dollar" in warning for warning in result.warnings)
+    assert "only after the sponsor's equity is spent" in result.assumptions["cost_timing"]
+    # The earlier behaviour is the default and says what it assumes.
+    default = analyze_deal(land_request())
+    assert any("funding its share of every dollar" in warning for warning in default.warnings)
+
+
+def test_land_early_sale_and_kept_piece_match_the_browser_engine():
+    # A piece sold in month 18 for $600,000 gross, and an existing house kept,
+    # worth $350,000 at the end and earning $1,500 a month net. Reference values
+    # are the browser engine's for the same request.
+    land = land_request().land.model_dump()
+    land.update(
+        draw_order="equity_first", early_sale_proceeds=600_000, early_sale_month=18,
+        retained_value=350_000, retained_monthly_income=1_500,
+    )
+    result = analyze_deal(land_request(land=land))
+    expected = {
+        "irr": -0.11777597, "npv": -1778750.05357366, "equity_multiple": 0.62228008,
+        "development_profit": -1266432.65988845, "development_roi": -0.37771992,
+        "development_margin": -0.23237297, "break_even_terminal_value": 5847268.78711546,
+        "residual_land_value": 1029754.59075131,
+    }
+    for key, value in expected.items():
+        assert result.metrics[key].value == pytest.approx(value, rel=1e-9), key
+    assert result.cash_flows[1].operating_cash_flow == pytest.approx(1_500)
+    assert result.cash_flows[18].sale_proceeds == pytest.approx(600_000 * 0.94)
+    # The kept piece's value is counted in the final month with the last sale, without selling costs.
+    assert result.cash_flows[60].sale_proceeds == pytest.approx(352_500 + 350_000)
+    assert result.metrics["development_margin"].components["gross_exit_value"] == pytest.approx(5_450_000)
+    assert any("sold in month 18 for $600,000" in warning for warning in result.warnings)
+    assert any("kept: valued at $350,000" in warning and "$1,500 a month" in warning for warning in result.warnings)
+
+
+def test_land_extras_validation():
+    land = land_request().land.model_dump()
+    land.update(draw_order="whenever")
+    with pytest.raises(ValidationError):
+        land_request(land=land)
+    land = land_request().land.model_dump()
+    land.update(retained_value=-1)
+    with pytest.raises(ValidationError):
+        land_request(land=land)
+    # An early sale month beyond the hold is kept inside it; one of 0 means the last month.
+    land = land_request().land.model_dump()
+    land.update(early_sale_proceeds=100_000, early_sale_month=120)
+    result = analyze_deal(land_request(land=land))
+    assert result.cash_flows[60].sale_proceeds == pytest.approx(352_500 + 94_000)

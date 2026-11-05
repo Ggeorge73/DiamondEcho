@@ -20,6 +20,7 @@ import {
   FIELD_LABELS, MONTE_CARLO_VACANCY_CAP_PERCENT, responseErrorMessage, validateDealForm,
   validateMonteCarloForm, validateMonteCarloScenarios,
 } from '../lib/dealValidation';
+import { simulationLean } from '../lib/monteCarloLean';
 import { buildMonteCarloScenarios, MONTE_CARLO_CASES } from '../lib/monteCarloCases';
 import { resolveListingContext } from '../lib/listingContext';
 import { TOOL_PATHS, currentToolAddress, toolFromLocation } from '../lib/intelligenceTools';
@@ -34,8 +35,10 @@ import { applyPropertyAutofill, prepareAddressEdit, preparePropertyChange } from
 // redeployed by hand and can lag. When it answers with a formula older than a
 // strategy needs, the page calculates on this device instead, so it never
 // shows an older figure beside its decision. Every strategy needs 1.7.0: a
-// loan whose term ends before the hold is extended, not paid at maturity.
-const SERVICE_FORMULA_MINIMUM = { rental: [1, 7], land: [1, 7], flip: [1, 7] };
+// loan whose term ends before the hold is extended, not paid at maturity. Land
+// needs 1.8.0: the facility can fund the deal only after the equity is spent,
+// and a piece of the site can be sold early or kept (the 2026-11-05 review).
+const SERVICE_FORMULA_MINIMUM = { rental: [1, 7], land: [1, 8], flip: [1, 7] };
 export const serviceFormulaIsCurrent = (version, minimum) => {
   const match = /(\d+)\.(\d+)\.\d+$/.exec(String(version || ''));
   if (!match || !minimum) return true; // not a version this page can read: leave the result alone
@@ -135,6 +138,11 @@ const initialForm = {
   environmentalRemediation: '0', developerFee: '60000', landContingency: '10',
   annualCarryingCosts: '12000', expectedTerminalValue: '2280000', stabilizedNoi: '0',
   stabilizedExitCap: '0', targetProfitMargin: '20',
+  // The 2026-11-05 review: most construction lenders require the sponsor's
+  // cash in first, so that is the starting choice; a piece of the site sold
+  // early, or kept (an existing house), starts empty because it is a fact
+  // about one site.
+  landDrawOrder: 'equity_first', earlySaleProceeds: '', earlySaleMonth: '', retainedValue: '', retainedMonthlyIncome: '',
   mcRentMin: '-10', mcRentMode: '2', mcRentMax: '10', mcVacancyMin: '3',
   mcVacancyMode: '6', mcVacancyMax: '14', mcExpenseMin: '-3', mcExpenseMode: '3',
   mcExpenseMax: '15', mcExitCapMin: '5.75', mcExitCapMode: '6.75', mcExitCapMax: '8',
@@ -246,6 +254,36 @@ const SHARED_EXAMPLE_LABELS = {
   holdMonths: 'hold period', interestOnlyMonths: 'interest-only period', loanTermYears: 'loan term',
 };
 
+// Item 3 of the 2026-11-05 review: with fifty-odd boxes, a reload, a closed tab
+// or a wrong tap must not wipe the form. What was entered is kept on this
+// device only, in the browser's own storage, until "Start over" clears it.
+// Results are not kept; they take seconds to run again. A listing link is not
+// restored over: the listing drives that form.
+export const DRAFT_STORAGE_KEY = 'diamondecho.deal-studio.draft.v1';
+const storage = () => { try { return globalThis.localStorage || null; } catch { return null; } };
+export const readDraft = () => {
+  try {
+    const raw = storage()?.getItem(DRAFT_STORAGE_KEY);
+    if (!raw) return null;
+    const draft = JSON.parse(raw);
+    if (!draft || typeof draft !== 'object' || !draft.form || typeof draft.form !== 'object') return null;
+    return {
+      form: Object.fromEntries(Object.entries(draft.form).filter(([key, value]) => key in initialForm && typeof value === 'string')),
+      entered: Array.isArray(draft.entered) ? draft.entered.filter((key) => typeof key === 'string' && key in initialForm) : [],
+      evidence: draft.evidence && typeof draft.evidence === 'object' ? Object.fromEntries(Object.entries(draft.evidence).filter(([, value]) => typeof value === 'boolean')) : {},
+      savedAt: typeof draft.savedAt === 'string' ? draft.savedAt : null,
+    };
+  } catch { return null; }
+};
+export const writeDraft = (draft) => { try { storage()?.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft)); } catch { /* storage blocked or full: the page still works, nothing is kept */ } };
+export const clearDraft = () => { try { storage()?.removeItem(DRAFT_STORAGE_KEY); } catch { /* nothing to clear */ } };
+// A draft worth restoring differs from the example in at least one box.
+export const draftDiffersFromExample = (form) => Object.keys(initialForm).some((key) => form[key] !== undefined && form[key] !== initialForm[key]);
+const savedWhen = (savedAt) => {
+  const date = savedAt ? new Date(savedAt) : null;
+  return date && Number.isFinite(date.getTime()) ? date.toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }) : 'your last visit';
+};
+
 // Which of the shared boxes to change when moving between tabs, and to what.
 // `held` names the boxes that are the visitor's own or loaded for an address.
 export const exampleSwap = (form, fromStrategy, toStrategy, held = new Set()) => {
@@ -275,21 +313,57 @@ const SelectField = ({ label, name, value, onChange, children }) => (
   </label>
 );
 
-const AutocompleteField = ({ label, name, value, onChange, suggestions, onSelect, placeholder, icon: Icon }) => (
-  <label className="studio-field studio-autocomplete">
-    <span>{label}</span>
-    <div>{Icon && <Icon />}<input name={name} value={value} onChange={onChange} type="text" autoComplete="off" placeholder={placeholder} /></div>
-    {value.length > 0 && suggestions.length > 0 && (
-      <div className="studio-suggestions" role="listbox">
-        {suggestions.map((suggestion) => (
-          <button type="button" role="option" key={suggestion.id || suggestion.label} onMouseDown={(event) => event.preventDefault()} onClick={() => onSelect(suggestion)}>
-            <MapPin /><span><strong>{suggestion.label}</strong><small>{suggestion.provider === 'mapbox' ? 'Live address result' : suggestion.kind === 'market' ? 'Market' : suggestion.provider === 'demo' ? 'Illustrative deal example' : 'Address for analysis'}</small></span>
-          </button>
-        ))}
-      </div>
-    )}
-  </label>
-);
+// The list of suggestions is shown while the box has focus and closes when it
+// loses it or on Escape. It sits under the box in the flow of the page, never
+// over the boxes below it, so a click on the next box is a click on the next
+// box. Nothing is chosen unless a suggestion is clicked or activated.
+const AutocompleteField = ({ label, name, value, onChange, suggestions, onSelect, placeholder, icon: Icon, hint }) => {
+  const [open, setOpen] = useState(false);
+  // The list closes a moment after the box loses focus, not during the click
+  // that moved it: closing it moves the boxes below up, and a click on one of
+  // them that is still in progress would land on nothing.
+  const closing = useRef(null);
+  const close = () => { window.clearTimeout(closing.current); closing.current = window.setTimeout(() => setOpen(false), 0); };
+  const show = () => { window.clearTimeout(closing.current); setOpen(true); };
+  useEffect(() => () => window.clearTimeout(closing.current), []);
+  const listed = open && value.length > 0 && suggestions.length > 0;
+  return (
+    <label className="studio-field studio-autocomplete">
+      <span>{label}</span>
+      <div>{Icon && <Icon />}<input name={name} value={value} onChange={(event) => { show(); onChange(event); }} onFocus={show} onBlur={close} onKeyDown={(event) => { if (event.key === 'Escape') setOpen(false); }} type="text" autoComplete="off" placeholder={placeholder} role="combobox" aria-expanded={listed} aria-autocomplete="list" /></div>
+      {listed && (
+        <div className="studio-suggestions" role="listbox">
+          {suggestions.map((suggestion) => (
+            <button type="button" role="option" key={suggestion.id || suggestion.label} onMouseDown={(event) => event.preventDefault()} onClick={() => { setOpen(false); onSelect(suggestion); }}>
+              <MapPin /><span><strong>{suggestion.label}</strong><small>{suggestion.provider === 'mapbox' ? 'Live address result' : suggestion.kind === 'market' ? 'Market' : suggestion.provider === 'demo' ? 'Illustrative deal example' : 'Address for analysis'}</small></span>
+            </button>
+          ))}
+        </div>
+      )}
+      {hint && <small className="studio-field__hint">{hint}</small>}
+    </label>
+  );
+};
+
+// A fault while drawing the results must not take the form down with it: the
+// figures stay where they are, the panel says what happened, and the next run
+// draws again (the 2026-11-05 review saw the whole page go blank).
+// The content is given as a function and drawn by a child, so that a fault
+// while drawing it is thrown below the boundary, where it can be caught.
+const Drawn = ({ render }) => render();
+class ResultsBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { failed: false }; }
+  static getDerivedStateFromError() { return { failed: true }; }
+  componentDidCatch(error) { console.error('DiamondEcho: the results could not be drawn.', error); }
+  render() {
+    if (this.state.failed) {
+      return (
+        <div className="studio-error" role="alert"><AlertCircle /><h2>The results could not be drawn</h2><p>Your figures are kept. Clear the results and run the analysis again; if it happens again, change the assumption you entered last.</p><button type="button" onClick={this.props.onReset}><RotateCcw /> Clear the results</button></div>
+      );
+    }
+    return <Drawn render={this.props.render} />;
+  }
+}
 
 const InvestmentCalculator = () => {
   const location = useLocation();
@@ -337,7 +411,18 @@ const InvestmentCalculator = () => {
   const [addressSuggestions, setAddressSuggestions] = useState([]);
   const [marketSuggestions, setMarketSuggestions] = useState([]);
   const [resultMode, setResultMode] = useState('base');
-  const analysisGeneration = useRef(0);
+  // Remounts the results panel after a fault while drawing it.
+  const [resultsKey, setResultsKey] = useState(0);
+  // The base analysis and the simulation are separate runs with separate
+  // counters. They used to share one: starting the simulation while the base
+  // analysis was still running discarded the base result when it arrived and
+  // left the page on "Calculating…" with its button disabled (items 1 and 2
+  // of the 2026-11-05 review). A changed input still cancels both.
+  const baseGeneration = useRef(0);
+  const riskGeneration = useRef(0);
+  // Set once the form has been restored from this device, so that the first
+  // render's example figures are never written over a saved draft.
+  const draftReady = useRef(false);
   const propertyLookupGeneration = useRef(0);
   const skipNextContextReset = useRef(false);
   // Fields the visitor typed or chose themselves; typing an address keeps these.
@@ -356,7 +441,8 @@ const InvestmentCalculator = () => {
   const rate = (value) => n(value) / 100;
 
   const invalidateAnalysis = () => {
-    analysisGeneration.current += 1;
+    baseGeneration.current += 1;
+    riskGeneration.current += 1;
     setResult(null);
     setAnalysisSnapshot(null);
     setDecision(null);
@@ -498,7 +584,20 @@ const InvestmentCalculator = () => {
     // Putting them back is the visitor's choice, so they now count as entered.
     Object.keys(restored).forEach((field) => enteredFields.current.add(field));
     setForm((current) => ({ ...current, ...restored }));
-    setNotice({ text: 'The example figures are back. They are illustrations, not facts about this address; replace each one with a verified figure.', restore: null });
+    setNotice(notice.undo ? null : { text: 'The example figures are back. They are illustrations, not facts about this address; replace each one with a verified figure.', restore: null });
+  };
+
+  // A market chosen from the list is said, and can be undone: a list laid over
+  // the next boxes once took a click meant for "Units" as a choice of the
+  // second market (item 4 of the 2026-11-05 review).
+  const selectMarket = (item) => {
+    const typed = form.market;
+    invalidateAnalysis();
+    enteredFields.current.add('market');
+    setPropertyProvenance((current) => ({ ...current, market: { source: 'Your input', description: 'Selected market for this analysis' } }));
+    setForm((current) => ({ ...current, market: item.label }));
+    setMarketSuggestions([]);
+    setNotice({ text: `Market set to ${item.label}, chosen from the list. It is a label on the results and the workbook; it does not change the figures.`, restore: typed === item.label ? null : { market: typed }, restoreLabel: `Undo, back to "${typed}"`, undo: true });
   };
 
   // Lot / land is analysed only on the Land development tab, so the asset type
@@ -574,6 +673,17 @@ const InvestmentCalculator = () => {
     });
   };
 
+  // Every change to the form or the evidence is kept on this device, a moment
+  // after it is made. A form back at the example figures keeps nothing.
+  useEffect(() => {
+    if (!draftReady.current) return undefined;
+    const timer = window.setTimeout(() => {
+      if (!draftDiffersFromExample(form) && !Object.values(evidence).some(Boolean)) { clearDraft(); return; }
+      writeDraft({ form, evidence, entered: [...enteredFields.current], savedAt: new Date().toISOString() });
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [form, evidence]);
+
   useEffect(() => {
     if (skipNextContextReset.current) {
       skipNextContextReset.current = false;
@@ -594,10 +704,43 @@ const InvestmentCalculator = () => {
     lastBuiltWasExample.current = false;
     assetTypeIsExample.current = listingContext.kind !== 'missing';
     setNotice(null);
-    setForm(listingContext.kind === 'missing'
-      ? preparePropertyChange(initialForm)
-      : initialForm);
+    draftReady.current = false;
+    const draft = listingContext.kind === 'manual' ? readDraft() : null;
+    if (draft && draftDiffersFromExample(draft.form)) {
+      enteredFields.current = new Set(draft.entered);
+      assetTypeIsExample.current = !draft.entered.includes('propertyType');
+      setEvidence((current) => ({ ...current, ...Object.fromEntries(Object.entries(draft.evidence).filter(([key]) => key in current)) }));
+      setForm({ ...initialForm, ...draft.form });
+      setNotice({ text: `Your figures from ${savedWhen(draft.savedAt)} were restored from this device, so a reload or a closed tab loses nothing. They stay on this device until you start over.`, restore: null, startOver: true });
+    } else {
+      setForm(listingContext.kind === 'missing'
+        ? preparePropertyChange(initialForm)
+        : initialForm);
+    }
+    draftReady.current = listingContext.kind === 'manual';
   }, [listingContext]);
+
+  // Back to the example figures, and nothing kept on this device.
+  const startOver = () => {
+    clearDraft();
+    invalidateAnalysis();
+    propertyLookupGeneration.current += 1;
+    enteredFields.current = new Set();
+    lastBuiltType.current = null;
+    lastBuiltWasExample.current = false;
+    assetTypeIsExample.current = true;
+    setPropertyRecord(null);
+    setPropertyProvenance({});
+    setPropertyReviewFields([]);
+    setPropertySourceLabel('');
+    setPropertyLoading(false);
+    setAddressSuggestions([]);
+    setMarketSuggestions([]);
+    setEvidence((current) => Object.fromEntries(Object.keys(current).map((key) => [key, false])));
+    setForm(initialForm);
+    clearListingRoute();
+    setNotice({ text: 'The form is back to the example figures, and nothing you had entered is kept on this device any more.', restore: null });
+  };
 
   const applyProperty = (record) => {
     const autofill = applyPropertyAutofill(form, record);
@@ -645,8 +788,8 @@ const InvestmentCalculator = () => {
 
   const analyze = async (event) => {
     event.preventDefault();
-    const generation = ++analysisGeneration.current;
-    setLoading(true); setError(''); setRiskError(''); setResult(null); setDecision(null); setMonteCarlo(null); setRiskProgress(null); setResultMode('base');
+    const generation = ++baseGeneration.current;
+    setLoading(true); setError(''); setResult(null); setDecision(null); setResultMode('base');
     setAnalysisSnapshot(null);
     revealResults();
     let request;
@@ -666,14 +809,14 @@ const InvestmentCalculator = () => {
           analysis = calculatedHereInstead(analyzeDealLocally(request), 'The analysis service does not yet accept the loan options used here, so the figures were calculated on this device with the same conventions.');
         }
       }
-      if (generation === analysisGeneration.current) {
+      if (generation === baseGeneration.current) {
         setResult(analysis);
         setAnalysisSnapshot({ form: { ...form }, request, result: analysis });
         setDecision(buildDecision({ form, evidence }));
       }
     } catch (requestError) {
-      if (generation === analysisGeneration.current) setError(responseErrorMessage(requestError, 'The analysis could not be completed. Review the assumptions and try again.'));
-    } finally { if (generation === analysisGeneration.current) setLoading(false); }
+      if (generation === baseGeneration.current) setError(responseErrorMessage(requestError, 'The analysis could not be completed. Review the assumptions and try again.'));
+    } finally { if (generation === baseGeneration.current) setLoading(false); }
   };
 
   // How far each case stretches the entered worst-case values.
@@ -706,7 +849,7 @@ const InvestmentCalculator = () => {
   };
 
   const runRiskAnalysis = async () => {
-    const generation = ++analysisGeneration.current;
+    const generation = ++riskGeneration.current;
     setRiskLoading(true); setRiskError(''); setMonteCarlo(null); setRiskProgress(null); setResultMode('risk');
     revealResults();
     try {
@@ -715,14 +858,14 @@ const InvestmentCalculator = () => {
       validateMonteCarloScenarios(scenarios);
       const payload = { deal: buildRequest(), scenarios };
       const analysis = await runMonteCarloInBrowser(payload, {
-        onProgress: (done, total) => { if (generation === analysisGeneration.current) setRiskProgress({ done, total }); },
+        onProgress: (done, total) => { if (generation === riskGeneration.current) setRiskProgress({ done, total }); },
         // An input changed while this was running: stop, the figures would be stale.
-        shouldStop: () => generation !== analysisGeneration.current,
+        shouldStop: () => generation !== riskGeneration.current,
       });
-      if (analysis && generation === analysisGeneration.current) setMonteCarlo(analysis);
+      if (analysis && generation === riskGeneration.current) setMonteCarlo(analysis);
     } catch (requestError) {
-      if (generation === analysisGeneration.current) setRiskError(responseErrorMessage(requestError, 'Risk analysis could not be completed.'));
-    } finally { if (generation === analysisGeneration.current) { setRiskLoading(false); setRiskProgress(null); } }
+      if (generation === riskGeneration.current) setRiskError(responseErrorMessage(requestError, 'Risk analysis could not be completed.'));
+    } finally { if (generation === riskGeneration.current) { setRiskLoading(false); setRiskProgress(null); } }
   };
 
   const exportWorkbook = () => {
@@ -777,6 +920,10 @@ const InvestmentCalculator = () => {
   // decision, which carries no strategy field, keeps its own.
   const priceDecision = decision?.strategy === 'land' || decision?.strategy === 'flip';
   const riskWarnings = splitWarnings(Array.isArray(monteCarlo?.scenarios) ? monteCarlo.scenarios : []);
+  // Why the simulation's median usually sits below the base analysis (item 5
+  // of the 2026-11-05 review), in the figures of the bands actually set.
+  const riskLean = simulationLean(form);
+  const baseRiskMetric = result && result.strategy === form.strategy ? result.metrics?.[riskSummaryKey] : null;
   // The stress cases scale the entered high vacancy; say so when the cap stops them.
   const stressCapNotes = (caseName) => {
     if (form.strategy !== 'rental') return [];
@@ -839,7 +986,8 @@ const InvestmentCalculator = () => {
             <div className="studio-change-notice" role="status">
               <AlertCircle />
               <p>{notice.text}</p>
-              {notice.restore && <button type="button" onClick={restoreCleared}><RotateCcw /> Put the example figures back</button>}
+              {notice.restore && <button type="button" onClick={restoreCleared}><RotateCcw /> {notice.restoreLabel || 'Put the example figures back'}</button>}
+              {notice.startOver && <button type="button" onClick={startOver}><RotateCcw /> Start over with the example figures</button>}
               <button type="button" className="studio-change-notice__dismiss" aria-label="Dismiss this note" onClick={() => setNotice(null)}>×</button>
             </div>
           )}
@@ -872,7 +1020,7 @@ const InvestmentCalculator = () => {
                 <option value="mixed_use">Mixed-use</option><option value="hospitality">Hospitality</option>
                 <option value="land">Lot / land</option>
               </SelectField>
-              <AutocompleteField label="Market" name="market" value={form.market} onChange={update} suggestions={marketSuggestions} onSelect={(item) => { invalidateAnalysis(); setPropertyProvenance((current) => ({ ...current, market: { source: 'Your input', description: 'Selected market for this analysis' } })); setForm((current) => ({ ...current, market: item.label })); setMarketSuggestions([]); }} placeholder="Type one letter" />
+              <AutocompleteField label="Market" name="market" value={form.market} onChange={update} suggestions={marketSuggestions} onSelect={selectMarket} placeholder="City, state" hint="Choose from the list or type the city and state. A label on the results; it does not change the figures." />
               <Field label={form.strategy === 'land' ? 'Planned units / lots' : 'Units'} name="units" value={form.units} onChange={update} step="1" />
               <Field label={form.strategy === 'land' ? 'Buildable square feet' : 'Rentable square feet'} name="rentableSquareFeet" value={form.rentableSquareFeet} onChange={update} suffix="sf" />
               <Field label="Purchase price" name="purchasePrice" value={form.purchasePrice} onChange={update} prefix="$" />
@@ -1011,8 +1159,21 @@ const InvestmentCalculator = () => {
                 <Field label="Expected gross terminal value" name="expectedTerminalValue" value={form.expectedTerminalValue} onChange={update} prefix="$" />
                 <Field label="Stabilized NOI (alternative)" name="stabilizedNoi" value={form.stabilizedNoi} onChange={update} prefix="$" />
                 <Field label="Stabilized exit cap" name="stabilizedExitCap" value={form.stabilizedExitCap} onChange={update} suffix="%" />
+                <SelectField label="Facility funds the deal" name="landDrawOrder" value={form.landDrawOrder} onChange={update}>
+                  <option value="equity_first">After your equity is spent (most lenders)</option>
+                  <option value="pro_rata">Alongside your equity, pro rata from closing</option>
+                </SelectField>
+                <div className="studio-field-group" role="group" aria-label="A piece sold early or kept">
+                  <p>Land deals often sell a piece early or keep one, an existing house say. Enter either here instead of folding it into the exit value: an early sale lands in its month and repays the facility first; a piece kept is counted at its value at the end without selling costs, and its net income while held.</p>
+                  <div className="studio-field-grid">
+                    <Field label="Early sale of part of the site" name="earlySaleProceeds" value={form.earlySaleProceeds} onChange={update} prefix="$" hint="Gross price of the piece sold before the exit. The exit value above is then for what remains." />
+                    <Field label="Early sale month" name="earlySaleMonth" value={form.earlySaleMonth} onChange={update} suffix="month" step="1" hint="Counted from closing, within the hold." />
+                    <Field label="Value of what you keep" name="retainedValue" value={form.retainedValue} onChange={update} prefix="$" hint="Your estimate of the kept piece at the end of the hold. Not a sale, so no selling costs." />
+                    <Field label="Net monthly income from what you keep" name="retainedMonthlyIncome" value={form.retainedMonthlyIncome} onChange={update} prefix="$" hint="Rent less its own taxes, insurance and upkeep, every month of the hold." />
+                  </div>
+                </div>
               </div>
-              <p className="studio-provider-note"><ShieldCheck /> Terminal value uses the explicit gross exit value first; otherwise it capitalizes stabilized NOI. Residual land value is the land price at which the deal earns exactly the target development margin, on the same timetable. The facility is drawn as the budget is spent, carries interest on the drawn balance, and is repaid from the sales as they close; carrying costs run for the whole hold.</p>
+              <p className="studio-provider-note"><ShieldCheck /> Terminal value uses the explicit gross exit value first; otherwise it capitalizes stabilized NOI. Residual land value is the land price at which the deal earns exactly the target development margin, on the same timetable. {form.landDrawOrder === 'pro_rata' ? 'The facility funds its share of every dollar from closing' : 'Your equity funds every dollar until it is spent, then the facility funds the rest'}, carries interest on the drawn balance, and is repaid from the sales as they close; carrying costs run for the whole hold.</p>
             </fieldset>
             <fieldset className="studio-mandate">
               <legend><span>04</span> Go / no-go targets & evidence</legend>
@@ -1105,7 +1266,7 @@ const InvestmentCalculator = () => {
                 <div key={caseName} className="is-active"><CheckCircle2 /> {caseName}</div>
               ))}
             </div>
-            <p className="studio-case-note">Every run includes all three cases so the committee view is complete regardless of the result tab in focus. The simulation runs on this device and shows its progress.</p>
+            <p className="studio-case-note">Every run includes all three cases so the committee view is complete regardless of the result tab in focus. The simulation runs on this device and shows its progress.{riskLean.downside.length > 0 ? ` The bands below lean to the downside on purpose (${riskLean.downside.join('; ')}), so the Committee case's median usually sits below the base analysis; the results say so.` : ' The bands below are centred on the figures you entered, so the Committee case\'s median should sit near the base analysis.'}</p>
             {Number(form.mcIterations) > BROWSER_MONTE_CARLO_ITERATION_CAP && <p className="studio-case-note" role="note">This browser runs at most {BROWSER_MONTE_CARLO_ITERATION_CAP.toLocaleString('en-US')} iterations per case. {Number(form.mcIterations).toLocaleString('en-US')} were selected, so each case will stop at {BROWSER_MONTE_CARLO_ITERATION_CAP.toLocaleString('en-US')} and the results will say so.</p>}
             <div className="studio-field-grid">
               <SelectField label="Iterations per case" name="mcIterations" value={form.mcIterations} onChange={update}><option value="1000">1,000</option><option value="2500">2,500</option><option value="5000">5,000</option><option value="10000">10,000</option></SelectField>
@@ -1150,6 +1311,7 @@ const InvestmentCalculator = () => {
           <div className="studio-submit-row">
             <p><ShieldCheck /> Every metric includes its formula, components, assumptions, warnings, and audit version.</p>
             <div className="studio-submit-actions">
+              <button type="button" className="studio-reset-button" onClick={startOver}><RotateCcw /> Start over</button>
               <button type="button" className="studio-download-button" onClick={exportWorkbook}><FileSpreadsheet /> Download deal-specific Excel <Download /></button>
               <button type="submit" disabled={loading}>{loading ? <><Loader2 className="spin" /> Analyzing</> : <>Run base analysis <ArrowRight /></>}</button>
             </div>
@@ -1159,6 +1321,7 @@ const InvestmentCalculator = () => {
         <aside className="deal-studio-results" ref={resultsRef} tabIndex={-1} aria-label="Analysis results">
           <div className="deal-studio-results__head"><span><Sparkles /> INVESTMENT COMMITTEE OUTPUT</span>{result && <small>{decision?.version || result.formula_version}</small>}</div>
           <div className="studio-result-tabs"><button className={resultMode === 'base' ? 'is-active' : ''} onClick={() => setResultMode('base')}>IC decision</button><button className={resultMode === 'risk' ? 'is-active' : ''} onClick={() => setResultMode('risk')}>Monte Carlo</button></div>
+          <ResultsBoundary key={resultsKey} onReset={() => { invalidateAnalysis(); setResultsKey((current) => current + 1); }} render={() => (<>
           {resultMode === 'base' && loading && (
             <div className="studio-empty studio-running" role="status"><Loader2 className="spin" /><h2>Calculating…</h2><p>Working through the figures you entered.</p></div>
           )}
@@ -1281,6 +1444,13 @@ const InvestmentCalculator = () => {
           )}
           {resultMode === 'risk' && !riskLoading && !monteCarlo && !riskError && <div className="studio-empty"><BarChart3 /><h2>Distribution before decision</h2><p>Run Monte Carlo to see percentile returns, downside frequency, and the range of plausible outcomes across the three cases.</p></div>}
           {resultMode === 'risk' && monteCarlo && !riskResultIssue && !riskError && <div className="studio-risk-results">
+            <div className="studio-risk-lean" role="note">
+              <span>{riskLean.downside.length > 0 ? 'WHY THE MEDIAN SITS BELOW THE BASE ANALYSIS' : 'HOW THESE CASES RELATE TO THE BASE ANALYSIS'}</span>
+              {baseRiskMetric && Number.isFinite(baseRiskMetric.value) && <p>Base analysis {labels[riskSummaryKey] || riskSummaryKey}: {summaryFormat(riskSummaryKey, baseRiskMetric.value)}. Committee case median: {summaryFormat(riskSummaryKey, monteCarlo.scenarios[0]?.summaries?.[riskSummaryKey]?.p50)}.</p>}
+              <p>{riskLean.downside.length > 0
+                ? `The Committee case's bands lean to the downside on purpose: ${riskLean.downside.join('; ')}. ${riskLean.upside.length > 0 ? `(${riskLean.upside.join('; ')}.) ` : ''}The Downside and Severe stress cases stretch them further. To centre the simulation on your base figures, set each band's low and high the same distance either side of the figure you entered.`
+                : `The Committee case's bands are centred on the figures you entered${riskLean.upside.length > 0 ? `, except that ${riskLean.upside.join('; ')}` : ''}. The Downside and Severe stress cases stretch the worst-case ends further.`}</p>
+            </div>
             {monteCarlo.scenarios.map((scenario, index) => {
               const summary = scenario.summaries[riskSummaryKey];
               const metricLabel = labels[riskSummaryKey] || riskSummaryKey;
@@ -1290,6 +1460,7 @@ const InvestmentCalculator = () => {
             })}
             {riskWarnings.common.length > 0 && <div className="studio-risk-common-notes" role="note"><span>HOW TO READ THESE RESULTS</span>{riskWarnings.common.map((warning) => <p key={warning}>{warning}</p>)}</div>}
           </div>}
+          </>)} />
           <p className="studio-disclaimer">Illustrative analysis only. Not an appraisal, credit decision, offer, tax opinion, or investment recommendation. Verify property records and every assumption with qualified professionals.</p>
         </aside>
       </section>

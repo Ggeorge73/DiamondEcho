@@ -50,6 +50,8 @@ const building = {
 const flipOnly = { arv: '360000', rehabCost: '65000', rehabContingency: '10', monthlyHolding: '1800', otherProjectCosts: '6000' };
 
 beforeEach(async () => {
+  // What a test enters is kept on this device, as a visitor's figures are; the next test starts clean.
+  window.localStorage.clear();
   global.IS_REACT_ACT_ENVIRONMENT = true;
   axios.get.mockResolvedValue({ data: { suggestions: [], provider: 'curated' } });
   container = document.createElement('div');

@@ -52,6 +52,8 @@ const fixer = {
 };
 
 beforeEach(async () => {
+  // What a test enters is kept on this device, as a visitor's figures are; the next test starts clean.
+  window.localStorage.clear();
   global.IS_REACT_ACT_ENVIRONMENT = true;
   axios.get.mockResolvedValue({ data: { suggestions: [], provider: 'curated' } });
   container = document.createElement('div');

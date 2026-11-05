@@ -677,3 +677,64 @@ describe('a loan whose term ends before the hold is extended, not paid at maturi
     expect(land.metrics.development_profit.value).toBeCloseTo(landAt().metrics.development_profit.value, 6);
   });
 });
+
+// The 2026-11-05 review: the facility can fund the deal only after the
+// sponsor's equity is spent, a piece of the site can be sold early, and a piece
+// kept (an existing house) is valued at the end without being sold. The same
+// figures are asserted against the analysis service in
+// backend/tests/deal_intelligence/test_engine.py.
+describe('land: equity-first draws, an early sale and a piece kept', () => {
+  const serviceDeal = () => analyzeDealLocally(buildDealRequest({
+    ...landForm, units: '12', rentableSquareFeet: '18000', purchasePrice: '3000000', closingCosts: '75000',
+    dueDiligenceCosts: '25000', initialCapex: '125000', holdMonths: '60', ltv: '65', interestRate: '6.75',
+    amortizationYears: '30', interestOnlyMonths: '0', loanTermYears: '10', originationFee: '1', sellingCosts: '6',
+    discountRate: '10', developmentMonths: '24', absorptionMonths: '12', siteWorkCost: '300000',
+    hardConstructionCost: '1500000', softCosts: '200000', permitsImpactFees: '100000', developerFee: '100000',
+    landContingency: '10', annualCarryingCosts: '30000', expectedTerminalValue: '4500000', targetProfitMargin: '20',
+  })).metrics.residual_land_value.value;
+
+  test('without the new boxes the figures are the earlier ones, and the pro-rata draw is disclosed', () => {
+    expect(serviceDeal()).toBeCloseTo(188393.53109743, 6);
+    const result = landAt();
+    expect(result.warnings.some((warning) => /funding its share of every dollar from closing/.test(warning))).toBe(true);
+    expect(result.assumptions.cost_timing).toContain('for its share of every dollar');
+  });
+
+  test('equity first: the sponsor pays the acquisition and the facility starts later, so less interest but an earlier cash call', () => {
+    const proRata = landAt();
+    const equityFirst = landAt({ landDrawOrder: 'equity_first' });
+    expect(equityFirst.metrics.development_profit.value).toBeGreaterThan(proRata.metrics.development_profit.value);
+    expect(equityFirst.cash_flows[0].net_cash_flow).toBeLessThan(proRata.cash_flows[0].net_cash_flow);
+    expect(equityFirst.metrics.irr.value).toBeLessThan(proRata.metrics.irr.value);
+    expect(equityFirst.warnings.some((warning) => /funding its share of every dollar/.test(warning))).toBe(false);
+    expect(equityFirst.assumptions.cost_timing).toContain('only after the sponsor\'s equity is spent');
+    // The deal's own figures: equity requirement $1,961,750 against a $3,225,000 acquisition.
+    const request = buildDealRequest({ ...landForm, landDrawOrder: 'equity_first' });
+    expect(request.land.draw_order).toBe('equity_first');
+    expect('draw_order' in buildDealRequest(landForm).land).toBe(false);
+  });
+
+  test('an early sale lands in its month net of selling costs and repays the facility first; a piece kept is counted at the end without selling costs', () => {
+    const result = landAt({ earlySaleProceeds: '600000', earlySaleMonth: '12', retainedValue: '350000', retainedMonthlyIncome: '1500' });
+    const plain = landAt();
+    expect(result.cash_flows[12].sale_proceeds).toBeCloseTo(600000 * 0.94, 6);
+    expect(result.cash_flows[12].loan_payoff).toBeGreaterThan(0);
+    expect(result.cash_flows[1].operating_cash_flow).toBe(1500);
+    expect(result.cash_flows[24].sale_proceeds).toBeCloseTo(plain.cash_flows[24].sale_proceeds + 350000, 6);
+    expect(result.metrics.development_margin.components.gross_exit_value).toBe(4300000 + 600000 + 350000);
+    expect(result.metrics.development_profit.value).toBeGreaterThan(plain.metrics.development_profit.value);
+    expect(result.metrics.break_even_terminal_value.value).toBeLessThan(plain.metrics.break_even_terminal_value.value);
+    expect(result.warnings.some((warning) => /sold in month 12 for \$600,000/.test(warning))).toBe(true);
+    expect(result.warnings.some((warning) => /kept: valued at \$350,000 .* earning \$1,500 a month/.test(warning))).toBe(true);
+    // The request carries them only when set.
+    const request = buildDealRequest({ ...landForm, earlySaleProceeds: '600000', earlySaleMonth: '12', retainedValue: '350000', retainedMonthlyIncome: '1500' });
+    expect(request.land).toMatchObject({ early_sale_proceeds: 600000, early_sale_month: 12, retained_value: 350000, retained_monthly_income: 1500 });
+    expect(Object.keys(buildDealRequest(landForm).land)).not.toContain('early_sale_proceeds');
+  });
+
+  test('the residual land value still returns the target margin with the extras in place', () => {
+    const first = landAt({ landDrawOrder: 'equity_first', earlySaleProceeds: '600000', earlySaleMonth: '12', retainedValue: '350000' });
+    const again = landAt({ landDrawOrder: 'equity_first', earlySaleProceeds: '600000', earlySaleMonth: '12', retainedValue: '350000', purchasePrice: String(first.metrics.residual_land_value.value) });
+    expect(again.metrics.development_margin.value).toBeCloseTo(0.20, 6);
+  });
+});

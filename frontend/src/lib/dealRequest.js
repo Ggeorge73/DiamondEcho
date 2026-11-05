@@ -72,6 +72,13 @@ export const buildDealRequest = (form) => {
         contingency_rate: rate(form.landContingency), annual_carrying_costs: n(form.annualCarryingCosts),
         expected_terminal_value: n(form.expectedTerminalValue), stabilized_noi: n(form.stabilizedNoi),
         stabilized_exit_cap_rate: rate(form.stabilizedExitCap), target_profit_margin: rate(form.targetProfitMargin),
+        // The facility's draw order and the early sale and kept piece are sent
+        // only when set, so a service that does not know them yet answers the
+        // usual deal; the page calculates on the device when it refuses them.
+        ...(form.landDrawOrder === 'equity_first' ? { draw_order: 'equity_first' } : {}),
+        ...(n(form.earlySaleProceeds) > 0 ? { early_sale_proceeds: n(form.earlySaleProceeds), early_sale_month: Math.max(1, Math.round(n(form.earlySaleMonth))) } : {}),
+        ...(n(form.retainedValue) > 0 ? { retained_value: n(form.retainedValue) } : {}),
+        ...(n(form.retainedMonthlyIncome) > 0 ? { retained_monthly_income: n(form.retainedMonthlyIncome) } : {}),
       },
     };
   }

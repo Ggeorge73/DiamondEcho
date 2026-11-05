@@ -173,6 +173,7 @@ const inputRows = ({ form, request }) => {
       site_work_cost: 'USD', hard_construction_cost: 'USD', soft_costs: 'USD', permits_impact_fees: 'USD',
       environmental_remediation: 'USD', developer_fee: 'USD', contingency_rate: '%', annual_carrying_costs: 'USD',
       expected_terminal_value: 'USD', stabilized_noi: 'USD', stabilized_exit_cap_rate: '%', target_profit_margin: '%',
+      early_sale_proceeds: 'USD', early_sale_month: 'month', retained_value: 'USD', retained_monthly_income: 'USD',
     };
     Object.entries(request.land).forEach(([key, value]) => add(`land_${key}`, labelize(key), value, landUnits[key] || ''));
   }

@@ -40,6 +40,8 @@ describe('rental decision view', () => {
   let root;
   const savedBackend = process.env.REACT_APP_BACKEND_URL;
   beforeEach(async () => {
+    // What a test enters is kept on this device, as a visitor's figures are; the next test starts clean.
+    window.localStorage.clear();
     global.IS_REACT_ACT_ENVIRONMENT = true;
     delete process.env.REACT_APP_BACKEND_URL;
     container = document.createElement('div');

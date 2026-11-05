@@ -57,6 +57,8 @@ const mount = async (backend = '') => {
 };
 
 beforeEach(async () => {
+  // What a test enters is kept on this device, as a visitor's figures are; the next test starts clean.
+  window.localStorage.clear();
   global.IS_REACT_ACT_ENVIRONMENT = true;
   axios.get.mockResolvedValue({ data: { suggestions: [], provider: 'curated' } });
   container = document.createElement('div');
@@ -80,11 +82,11 @@ describe('land development Go / No-Go', () => {
     const verdict = container.querySelector('.studio-result__verdict');
     expect(verdict.className).toContain('studio-result__verdict--red');
     expect(verdict.textContent).toContain('NO-GO AT THIS PRICE — REPRICE OR PASS');
-    expect(verdict.textContent).toContain('At $985,000 the deal is modeled to earn $693,172 (16.12% of exit value), short of your 20% margin target.');
+    expect(verdict.textContent).toContain('At $985,000 the deal is modeled to earn $732,128 (17.03% of exit value), short of your 20% margin target.');
     const kpis = [...container.querySelectorAll('.studio-decision-kpis article')].map((item) => item.textContent);
-    expect(kpis[0]).toContain('MAXIMUM LAND PRICE$830,000Exact modeled ceiling $831,051');
-    expect(kpis[1]).toContain('$155,000 over');
-    expect(kpis[2]).toContain('PROFIT AT THIS PRICE$693,17216.12% of exit value; target 20%');
+    expect(kpis[0]).toContain('MAXIMUM LAND PRICE$865,000Exact modeled ceiling $866,435');
+    expect(kpis[1]).toContain('$120,000 over');
+    expect(kpis[2]).toContain('PROFIT AT THIS PRICE$732,12817.03% of exit value; target 20%');
     expect(kpis[3]).toContain('0 of 10 diligence items verified');
     expect(text()).toContain('BREAK-EVEN EXIT VALUE');
     expect(text()).toContain('SAFETY CUSHION');
@@ -99,7 +101,7 @@ describe('land development Go / No-Go', () => {
     // The downside's six extra months run past the two-year facility, which
     // is now extended at the same rate rather than paid from the pocket at
     // maturity with the interest stopping (second pass of the 2026-10-26 review).
-    expect(rows[1]).toContain('Downside$158,240');
+    expect(rows[1]).toContain('Downside$200,602');
     expect(text()).not.toContain('The downside case loses');
   });
 
@@ -107,8 +109,8 @@ describe('land development Go / No-Go', () => {
     await click('Land development');
     await enterDeal();
     await runBase();
-    expect(tile('Residual land value').querySelector('strong').textContent).toBe('$831,051');
-    expect(tile('Development margin').querySelector('strong').textContent).toBe('16.12%');
+    expect(tile('Residual land value').querySelector('strong').textContent).toBe('$866,435');
+    expect(tile('Development margin').querySelector('strong').textContent).toBe('17.03%');
     expect(text()).toContain('The modeled residual land value is below the proposed purchase price, so the deal misses the selected target margin at this price.');
   });
 
@@ -156,7 +158,7 @@ describe('the service and the page agree on land', () => {
     await enterDeal();
     await runBase();
     expect(axios.post).toHaveBeenCalledTimes(1);
-    expect(tile('Residual land value').querySelector('strong').textContent).toBe('$831,051');
+    expect(tile('Residual land value').querySelector('strong').textContent).toBe('$866,435');
     expect(text()).not.toContain('$1,013,695');
     expect(text()).not.toContain('From the service.');
     expect(text()).toContain('NO-GO AT THIS PRICE — REPRICE OR PASS');
@@ -165,17 +167,17 @@ describe('the service and the page agree on land', () => {
   test('a service on the current formula is shown as it answered', async () => {
     await act(async () => { root.unmount(); });
     await mount('https://example.test');
-    axios.post.mockResolvedValueOnce({ data: { ...oldService, formula_version: 'diamond-underwriting-1.7.0', metrics: { residual_land_value: { value: 831051.13226601, unit: 'USD', formula: 'new' } } } });
+    axios.post.mockResolvedValueOnce({ data: { ...oldService, formula_version: 'diamond-underwriting-1.8.0', metrics: { residual_land_value: { value: 866435.1, unit: 'USD', formula: 'new' } } } });
     await click('Land development');
     await enterDeal();
     await runBase();
-    expect(tile('Residual land value').querySelector('strong').textContent).toBe('$831,051');
+    expect(tile('Residual land value').querySelector('strong').textContent).toBe('$866,435');
     expect(text()).toContain('From the service.');
   });
 
   test.each([
-    ['diamond-underwriting-1.0.0', false], ['diamond-underwriting-1.1.0', false], ['diamond-underwriting-1.6.0', false],
-    ['diamond-underwriting-1.7.0', true], ['diamond-underwriting-2.0.0', true], ['diamond-underwriting-web-1.8.0', true], ['test', true], [undefined, true],
+    ['diamond-underwriting-1.0.0', false], ['diamond-underwriting-1.1.0', false], ['diamond-underwriting-1.6.0', false], ['diamond-underwriting-1.7.0', false],
+    ['diamond-underwriting-1.8.0', true], ['diamond-underwriting-2.0.0', true], ['diamond-underwriting-web-1.9.0', true], ['test', true], [undefined, true],
   ])('service formula %s is current enough for land: %s', (version, current) => {
     expect(landServiceFormulaIsCurrent(version)).toBe(current);
   });
@@ -370,9 +372,9 @@ describe('the land tab has its own example', () => {
     await runBase();
     const verdict = container.querySelector('.studio-result__verdict');
     expect(verdict.textContent).toContain('CONDITIONAL GO — VERIFY BEFORE CLOSING');
-    expect(verdict.textContent).toContain('At $375,000 the deal is modeled to earn $548,441 (24.05% of exit value), which meets your targets.');
+    expect(verdict.textContent).toContain('At $375,000 the deal is modeled to earn $561,624 (24.63% of exit value), which meets your targets.');
     const kpis = [...container.querySelectorAll('.studio-decision-kpis article')].map((item) => item.textContent);
-    expect(kpis[0]).toContain('MAXIMUM LAND PRICE$460,000Exact modeled ceiling $461,207');
+    expect(kpis[0]).toContain('MAXIMUM LAND PRICE$470,000Exact modeled ceiling $473,946');
     expect(kpis[3]).toContain('0 of 10 diligence items verified');
     expect(text()).not.toContain('THE DEAL LOSES MONEY');
   });
@@ -454,5 +456,35 @@ describe('the land tab has its own example', () => {
     expect(exampleSwap(start, 'rental', 'land', new Set(['purchasePrice'])).purchasePrice).toBeUndefined();
     expect(exampleSwap({ ...LAND_EXAMPLE_SHARED }, 'land', 'rental')).toEqual(building);
     expect(exampleSwap({ ...LAND_EXAMPLE_SHARED, holdMonths: '30' }, 'land', 'flip').holdMonths).toBeUndefined();
+  });
+});
+
+describe('the 2026-11-05 review: how the facility funds the deal, a piece sold early, a piece kept', () => {
+  test('the facility funds the deal after the equity by default, and the pro-rata choice is disclosed', async () => {
+    await click('Land development');
+    await enterDeal();
+    expect(field('landDrawOrder').value).toBe('equity_first');
+    await runBase();
+    expect(text()).toContain('Your equity funds every dollar until it is spent, then the facility funds the rest');
+    expect(text()).not.toContain('funding its share of every dollar from closing');
+    await setControl('landDrawOrder', 'pro_rata');
+    await runBase();
+    expect(text()).toContain('The facility funds its share of every dollar from closing');
+    expect(text()).toContain('Most construction lenders require the sponsor\'s equity in first');
+    // The earlier figure, from before the review, is the pro-rata one.
+    expect(tile('Residual land value').querySelector('strong').textContent).toBe('$831,051');
+  });
+
+  test('a piece sold early and a piece kept are entered in their own boxes and shown in the result', async () => {
+    await click('Land development');
+    await enterDeal({ earlySaleProceeds: '600000', earlySaleMonth: '12', retainedValue: '350000', retainedMonthlyIncome: '1500' });
+    await runBase();
+    expect(text()).toContain('A piece of the site is modeled as sold in month 12 for $600,000 gross');
+    expect(text()).toContain('kept: valued at $350,000 at the end of the hold without selling costs, earning $1,500 a month net while held');
+    expect(tile('Development margin').querySelector('p').textContent).toContain('terminal value + early sale + value of the piece kept');
+    // An early sale month outside the hold is refused before anything runs.
+    await setControl('earlySaleMonth', '40');
+    await runBase();
+    expect(text()).toContain('Early sale month must be at least 1 and no more than 24, in whole numbers.');
   });
 });

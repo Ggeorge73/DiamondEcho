@@ -13,6 +13,7 @@ const numericFields = [
   'softCosts', 'permitsImpactFees', 'environmentalRemediation', 'developerFee',
   'landContingency', 'annualCarryingCosts', 'expectedTerminalValue',
   'stabilizedNoi', 'stabilizedExitCap', 'targetProfitMargin', 'mcIterations',
+  'earlySaleProceeds', 'earlySaleMonth', 'retainedValue', 'retainedMonthlyIncome',
   'mcRentMin', 'mcRentMode', 'mcRentMax', 'mcVacancyMin', 'mcVacancyMode',
   'mcVacancyMax', 'mcExpenseMin', 'mcExpenseMode', 'mcExpenseMax',
   'mcExitCapMin', 'mcExitCapMode', 'mcExitCapMax', 'mcInterestMin',
@@ -58,6 +59,20 @@ export const FIELD_LABELS = {
   preliminaryMarketCeiling: 'Market-value ceiling', maxImmediateCapex: 'Maximum immediate capital work',
   maxAnnualTaxes: 'Maximum annual taxes', maxAnnualInsurance: 'Maximum annual insurance',
   flipMinimumProfit: 'Minimum profit', flipTargetRoi: 'Minimum return on cash',
+  earlySaleProceeds: 'Early sale of part of the site', earlySaleMonth: 'Early sale month',
+  retainedValue: 'Value of what you keep', retainedMonthlyIncome: 'Net monthly income from what you keep',
+  market: 'Market',
+};
+
+// The market is a label on the results and the workbook, never a figure. It
+// is either chosen from the list or typed in full; one letter left behind
+// while a list was open is not a market (item 4 of the 2026-11-05 review).
+export const MARKET_MINIMUM_LENGTH = 3;
+export const marketProblem = (market) => {
+  const text = String(market || '').trim();
+  if (!text) return null;
+  if (text.length < MARKET_MINIMUM_LENGTH || !/[a-z]/i.test(text)) return `Market: "${text}" is not a market. Choose one from the list or type the city and state in full, or leave the box empty.`;
+  return null;
 };
 // The same box is called something else on the land tab.
 const fieldLabel = (form, field) => (form.strategy === 'land' && field === 'rentableSquareFeet' ? 'Buildable square feet'
@@ -90,9 +105,12 @@ export const validateDealForm = (form) => {
     'wetlandsAcres', 'absorptionMonths', 'siteWorkCost', 'hardConstructionCost',
     'softCosts', 'permitsImpactFees', 'environmentalRemediation', 'developerFee',
     'annualCarryingCosts', 'stabilizedNoi', 'flipAnnualTaxes', 'flipAnnualInsurance',
-    'flipMonthlyUtilities', 'compSoldPerSf', 'lastSalePrice', 'originalListPrice', 'daysOnMarket']) {
+    'flipMonthlyUtilities', 'compSoldPerSf', 'lastSalePrice', 'originalListPrice', 'daysOnMarket',
+    'earlySaleProceeds', 'earlySaleMonth', 'retainedValue', 'retainedMonthlyIncome']) {
     if (Number(form[field] || 0) < 0) throw new Error(`${fieldLabel(form, field)} cannot be negative.`);
   }
+  const market = marketProblem(form.market);
+  if (market) throw new Error(market);
   const requiredReviewed = [
     ['closingCosts', 'Closing costs'], ['dueDiligenceCosts', 'Due diligence'],
     ['initialCapex', 'Initial capital work'], ['sellingCosts', 'Selling costs'],
@@ -154,6 +172,10 @@ export const validateDealForm = (form) => {
       throw new Error(`Hold period must be at least the development schedule plus the absorption (${Number(form.developmentMonths) + Number(form.absorptionMonths || 0)} months). Lengthen the hold or shorten the schedule.`);
     }
     requireRange(form, 'expectedTerminalValue', 'Expected terminal value', 0, Number.MAX_SAFE_INTEGER);
+    // An early sale closes inside the hold, in a month counted from closing.
+    if (Number(form.earlySaleProceeds || 0) > 0) {
+      requireRange(form, 'earlySaleMonth', 'Early sale month', 1, Number(form.holdMonths), { integer: true });
+    }
   }
   if (form.strategy === 'flip') {
     requireRange(form, 'rehabContingency', 'Rehab contingency', 0, 100);

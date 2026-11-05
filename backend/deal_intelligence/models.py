@@ -124,6 +124,16 @@ class FlipInputs(StrictModel):
     other_project_costs: float = Field(default=0, ge=0)
 
 
+class LandDrawOrder(str, Enum):
+    """When the facility funds the deal. Pro rata (the earlier behaviour and
+    the default) draws its share of every dollar from closing; equity first
+    draws nothing until the sponsor's equity requirement is spent, as most
+    construction lenders require."""
+
+    PRO_RATA = "pro_rata"
+    EQUITY_FIRST = "equity_first"
+
+
 class LandInputs(StrictModel):
     """Ground-up development inputs. Status fields are free text shown back to
     the user; only the numeric fields drive the calculation."""
@@ -157,6 +167,15 @@ class LandInputs(StrictModel):
     stabilized_noi: float = Field(default=0, ge=0)
     stabilized_exit_cap_rate: float = Field(default=0, ge=0, le=0.5)
     target_profit_margin: float = Field(default=0, ge=0, lt=1)
+    draw_order: LandDrawOrder = LandDrawOrder.PRO_RATA
+    # A piece of the site sold early: gross proceeds, in the month they close
+    # (counted from closing, kept inside the hold). 0 means no early sale.
+    early_sale_proceeds: float = Field(default=0, ge=0)
+    early_sale_month: int = Field(default=0, ge=0, le=600)
+    # A piece kept, an existing house say: its value at the end of the hold
+    # (not sold, so no selling costs) and its net income each month while held.
+    retained_value: float = Field(default=0, ge=0)
+    retained_monthly_income: float = Field(default=0, ge=0)
 
 
 class ExitInputs(StrictModel):

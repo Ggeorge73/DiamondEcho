@@ -609,7 +609,10 @@ h1, h2, h3, .display { font-family: 'Sora', 'Inter', sans-serif; }
 .studio-property-search { margin-bottom: 26px; }
 .studio-autocomplete { position: relative; z-index: 12; display: block; }
 .studio-autocomplete > div:first-of-type > svg { width: 15px; flex: none; color: var(--steel-bright); }
-.studio-autocomplete > .studio-suggestions { position: absolute; z-index: 30; top: calc(100% + 4px); right: 0; left: 0; min-height: 0; max-height: 310px; padding: 0; display: block; overflow-y: auto; border: 1px solid var(--line-strong); background: var(--panel); box-shadow: 0 18px 48px rgba(0,0,0,.5); }
+/* The list sits in the flow under its box, never over the boxes below it: a
+   list laid over the next row took a click meant for "Units" as a choice of
+   the second market (item 4 of the 2026-11-05 review). */
+.studio-autocomplete > .studio-suggestions { position: static; margin-top: 4px; min-height: 0; max-height: 310px; padding: 0; display: block; overflow-y: auto; border: 1px solid var(--line-strong); background: var(--panel); box-shadow: 0 18px 48px rgba(0,0,0,.5); }
 .studio-suggestions button { width: 100%; padding: 13px 15px; display: grid; grid-template-columns: 20px 1fr; gap: 10px; align-items: start; border: 0; border-bottom: 1px solid var(--line); background: var(--panel); color: var(--ice); text-align: left; transition: background .25s; }
 .studio-suggestions button:hover { background: var(--panel-raised); }
 .studio-suggestions button > svg { width: 15px; color: var(--steel-bright); }
@@ -641,7 +644,12 @@ h1, h2, h3, .display { font-family: 'Sora', 'Inter', sans-serif; }
 .studio-risk-actions button { min-height: 46px; padding: 0 18px; display: flex; align-items: center; gap: 10px; border: 1px solid var(--steel); background: transparent; color: var(--steel-bright); font-size: 8px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; transition: background .3s, color .3s; }
 .studio-risk-actions button:hover { background: var(--steel); color: var(--ice); }
 .studio-risk-actions button svg { width: 15px; }
-.studio-submit-actions { display: flex; align-items: stretch; gap: 9px; }
+.studio-submit-actions { display: flex; align-items: stretch; gap: 9px; flex-wrap: wrap; }
+.studio-reset-button { min-height: 52px; padding: 0 16px; display: flex; align-items: center; gap: 8px; border: 1px solid var(--line-strong); background: transparent; color: var(--mist); font-size: 8px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; cursor: pointer; transition: color .3s, border-color .3s; }
+.studio-reset-button:hover { color: var(--ice); border-color: var(--steel); }
+.studio-reset-button svg { width: 14px; }
+.studio-field-group { grid-column: 1 / -1; margin: 4px 0 0; padding: 16px 0 0; border-top: 1px solid var(--line); }
+.studio-field-group > p { margin: 0 0 14px; color: var(--mist); font-size: 11px; line-height: 1.6; }
 .studio-submit-actions > a { min-height: 52px; padding: 0 18px; display: flex; align-items: center; gap: 9px; border: 1px solid var(--steel); color: var(--steel-bright); text-decoration: none; font-size: 8px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; transition: background .3s, color .3s; }
 .studio-submit-actions > a:hover { background: var(--steel); color: var(--ice); }
 .studio-submit-actions > a svg { width: 14px; }
@@ -664,9 +672,9 @@ h1, h2, h3, .display { font-family: 'Sora', 'Inter', sans-serif; }
 .studio-risk-denominator { white-space: nowrap; }
 .studio-risk-notes { margin: 12px 0 0; padding: 10px 0 0 14px; border-top: 1px solid var(--line); color: #dca66f; font-size: 9px; line-height: 1.65; }
 .studio-risk-notes li + li { margin-top: 4px; }
-.studio-risk-common-notes { padding: 18px 23px; border: 1px solid var(--line); }
-.studio-risk-common-notes span { color: var(--steel-bright); font-size: 7px; font-weight: 600; letter-spacing: .2em; }
-.studio-risk-common-notes p { margin: 9px 0 0; color: var(--mist); font-size: 9px; line-height: 1.65; }
+.studio-risk-common-notes, .studio-risk-lean { padding: 18px 23px; border: 1px solid var(--line); }
+.studio-risk-common-notes span, .studio-risk-lean span { color: var(--steel-bright); font-size: 7px; font-weight: 600; letter-spacing: .2em; }
+.studio-risk-common-notes p, .studio-risk-lean p { margin: 9px 0 0; color: var(--mist); font-size: 9px; line-height: 1.65; }
 .studio-mandate { padding: 30px !important; border: 1px solid rgba(94,156,208,.3) !important; background: rgba(45,98,140,.07); }
 .studio-evidence-grid { margin-top: 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
 .studio-evidence-grid label { min-height: 54px; padding: 12px 14px; display: flex; align-items: center; border: 1px solid var(--line); background: rgba(3,15,29,.35); cursor: pointer; transition: border-color .25s, background .25s; }
