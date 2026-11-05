@@ -37,9 +37,12 @@ export default defineConfig(({ mode }) => {
     esbuild: { loader: 'jsx', include: /src\/.*\.jsx?$/, exclude: [] },
     optimizeDeps: { esbuildOptions: { loader: { '.js': 'jsx' } } },
     server: { host: process.env.HOST || '127.0.0.1', port: Number(process.env.PORT) || 3000 },
-    // Same folder and source maps as the Create React App build, so the Pages
-    // project settings do not change.
-    build: { outDir: 'build', emptyOutDir: true, sourcemap: true },
+    // Same output folder as the Create React App build, so the Pages project
+    // settings do not change. No source maps: a .js.map file is the readable
+    // blueprint of the bundle, and the 2026-11-05 Cloudflare traffic report
+    // showed a scanner fetching one from the live site. Set VITE_SOURCEMAP=true
+    // for a local build that needs them.
+    build: { outDir: 'build', emptyOutDir: true, sourcemap: process.env.VITE_SOURCEMAP === 'true' },
     test: {
       environment: 'jsdom',
       globals: true,
