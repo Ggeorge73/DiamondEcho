@@ -98,6 +98,35 @@ one page test asserts the $831,051 there.
   on the IC decision tab on every tab; after it, the base result appears, the
   button is enabled, the simulation finishes.
 
+## Retest on the deployed build (2026-11-05, after the merge)
+
+PR #112 merged as `d728ded`; Cloudflare Pages built it the same day
+(`/assets/index-C6BZ-9Ib.js`, page formula 1.9.0). The API was still on
+formula 1.7.0 at the time of this retest, so the land tab calculated on the
+device, which is the fallback the page is meant to take. Both checks ran from
+a cloud session in headless Chromium emulating an iPhone 13 (390 x 844,
+touch, mobile user agent) with the CPU throttled four times, against
+`https://diamondecho.com/investment-calculator`. It is not an iPhone and not
+Safari; the real-phone check in "Still to do" stands until Gbenga or the
+reviewer does it.
+
+**Items 1 and 2.** On each tab (rental, land, flip): Run base analysis, then
+Run Monte Carlo 150 ms later while the service was still answering; wait for
+both; open the IC decision tab, then the Monte Carlo tab; run the base
+analysis again; open the Monte Carlo tab. Every time: the base result was
+shown, the submit button read "Run base analysis" again, no "Calculating…"
+was left behind, the simulation finished and its three cases were still
+there after the base re-run, the page never went blank and no page error was
+raised. The only console errors were the land tab's expected 422s from the
+old service.
+
+**Item 3.** On the land tab, a price, acres, a market and an evidence box
+were entered. Closing the tab and opening the page in a new one, and then
+closing the whole browser (a persistent profile) and opening it again, both
+brought the figures back on the land tab with the "restored from this
+device" note; "Start over" cleared them and emptied the storage. The only
+removal of the draft during the run was that button's.
+
 ## Still to do before launch
 
 - The service must be redeployed from this commit for the API to know the
@@ -105,7 +134,8 @@ one page test asserts the $831,051 there.
   service's land answer (it needs formula 1.8.0) and calculates on the device,
   and says so. DE-13 records redeploys.
 - The reviewer's blank page (item 2) was not reproduced; the stuck state it
-  most likely came from is gone and the results panel is now contained. A
-  retest on the reviewer's phone, on the deployed build, is the evidence that
-  closes it. A QA pass should also confirm the draft survives a tab closed on
-  iOS Safari, where storage can be cleared under memory pressure.
+  most likely came from is gone and the results panel is now contained. The
+  emulated-phone retest above passed on the deployed build; a retest on the
+  reviewer's own phone is the evidence that closes it. The same goes for the
+  draft on iOS Safari, where storage can be cleared under memory pressure:
+  the relaunched-browser check above passed in Chromium, not WebKit.

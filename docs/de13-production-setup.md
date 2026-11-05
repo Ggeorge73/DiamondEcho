@@ -303,6 +303,32 @@ the device until this redeploy.
 Not done: the same list as the two redeploys above. The times are from the
 chat.
 
+### API redeploy from `d728ded` (prepared 2026-11-05, not yet run)
+
+PR #112 (the 2026-11-05 Deal Studio review) merged into `main` at `d728ded`.
+Cloudflare Pages built the public site from it the same day:
+`diamondecho.com/investment-calculator` serves `/assets/index-C6BZ-9Ib.js`,
+page formula `diamond-underwriting-web-1.9.0`. The API is still revision 28
+(`90739bd`, formula 1.7.0): it refuses the land request's new fields
+(`draw_order`, `early_sale_proceeds`, `early_sale_month`, `retained_value`,
+`retained_monthly_income`) with 422 "Extra inputs are not permitted", so the
+page calculates every land deal on the device and says so. The rental and
+flip tabs are answered by the service as before. This redeploy ends the
+mismatch. Every earlier redeploy was run from Gbenga's Cloud Shell; the
+cloud session that prepared this one has no Google sign-in, so it is written
+here to be run the same way.
+
+1. In Cloud Shell: `git clone https://github.com/Ggeorge73/DiamondEcho && cd DiamondEcho && git log --oneline -1` reads `d728ded`.
+2. `gcloud run deploy diamondecho-api --source backend --project diamondecho-prod --region us-east1 --no-traffic --tag candidate --quiet`. Expect `diamondecho-api-00031-xxx`, serving 0 percent (28 + two traffic-only changes + 1).
+3. Candidate checks at the `candidate---` address the deploy prints: `/health` 200; an empty request 422; then the reference land request with the equity-first facility, `backend/tests/deal_intelligence/candidate_land_equity_first.json`:
+   `curl -sS -X POST "$CANDIDATE/api/v1/deals/analyze" -H 'Content-Type: application/json' -d @backend/tests/deal_intelligence/candidate_land_equity_first.json`
+   must answer `formula_version` `diamond-underwriting-1.8.0`, residual land value 221,050.14, development profit -2,406,352.18, margin -0.5347, IRR -0.2891 (the figures `test_land_equity_first_draw_order_matches_the_browser_engine` asserts, and what a local run of the engine at `d728ded` answered on 2026-11-05). The same request to the serving revision answers 422 on `draw_order`.
+4. `gcloud run services update-traffic diamondecho-api --to-latest --project diamondecho-prod --region us-east1`, then `--remove-tags candidate`. One entry: latest revision, 100 percent.
+5. After: `https://diamondecho.com/investment-calculator`, Land development tab, Run base analysis. The warnings no longer say "The analysis service answered with formula diamond-underwriting-1.7.0, older than this page needs"; the result is the service's.
+6. Record here: the revision name, the times, and the candidate figures read back. Add the row to the table in section 1.
+
+Not done: the same list as the redeploys above; a return to revision 28 is not rehearsed.
+
 ## Proven by the owner
 
 | Date | What Gbenga did | Result |
