@@ -24,6 +24,18 @@ const topics = {
   },
 };
 
+// The simulator's "Include my figures" box adds a plain-text summary of the
+// estimate to the pre-approval message, only when the visitor ticks it. The
+// text is held to figures and the words the simulator writes, and to a length.
+const FIGURES_MAX = 600;
+export const figuresFromSearch = (params) => {
+  const raw = params.get('figures');
+  if (!raw) return '';
+  const clean = raw.replace(/[^A-Za-z0-9 $,.%()\-:;/\u2212]/g, '').trim();
+  if (!clean || clean.length > FIGURES_MAX || !/\$\d/.test(clean)) return '';
+  return clean;
+};
+
 // What the page says while no inquiry service is connected to this build.
 const closedCopy = {
   buyer: { title: 'Buyer inquiries are not open yet.', what: 'buyer inquiries' },
@@ -70,6 +82,8 @@ const Inquire = () => {
   const requestedTopic = params.get('topic');
   const topic = Object.prototype.hasOwnProperty.call(topics, requestedTopic) && topics[requestedTopic].kind === kind ? topics[requestedTopic] : null;
   const openCopy = topic ? { eyebrow: topic.eyebrow, title: topic.title, intro: topic.intro } : copy[kind];
+  const figures = topic ? figuresFromSearch(params) : '';
+  const startingMessage = topic ? `${topic.message}${figures ? `\n\nFrom the mortgage simulator: ${figures}` : ''}` : '';
   const content = open ? openCopy : { ...copy[kind], title: closedCopy[kind].title, intro: `This page will take ${closedCopy[kind].what} once online requests open.` };
 
   return (
@@ -85,7 +99,7 @@ const Inquire = () => {
             <Link to="/inquire?type=tour" aria-current={kind === 'tour' ? 'page' : undefined}>Tour request</Link>
           </div>
         </div>
-        {open ? <InquiryForm key={`${kind}:${topic ? requestedTopic : ''}`} kind={kind} initialMessage={topic ? topic.message : ''} /> : <InquiryClosed kind={kind} />}
+        {open ? <InquiryForm key={`${kind}:${topic ? requestedTopic : ''}`} kind={kind} initialMessage={startingMessage} /> : <InquiryClosed kind={kind} />}
       </div>
     </main>
   );

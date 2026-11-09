@@ -111,6 +111,22 @@ fieldset > .calc-quiet-note { margin-top: 18px; }
 .calc-footnote { margin: 12px 0 0; color: var(--mist); font-size: 10px; line-height: 1.6; }
 .calc-cta { margin-top: 34px; display: flex; flex-wrap: wrap; gap: 10px; }
 .calc-cta .mf-btn { text-decoration: none; }
+.calc-cta button.mf-btn { font-family: inherit; cursor: pointer; }
+.calc-block h3 { display: flex; align-items: center; gap: 8px; }
+.calc-block h3 svg { width: 16px; flex: none; color: var(--steel-bright); }
+.calc-quiet-note--block { margin-top: 22px; }
+.calc-check--share { margin-top: 18px; min-height: 0; align-items: flex-start; color: var(--mist); font-size: 11px; }
+.calc-check--share input { margin-top: 2px; }
+.studio-field-grid > .calc-check { grid-column: 1 / -1; align-self: start; }
+.calc-field-stack > .calc-check { min-height: 0; }
+
+/* Printing the estimate: the form and site chrome go, the results stay. */
+@media print {
+  .mf-header, .mf-footer, .studio-tools, .deal-studio-form, .calc-cta, .calc-check--share, .calc-sticky-total, .calc-table-scroll { display: none !important; }
+  .calc-shell, .calc-results { display: block !important; width: 100% !important; max-width: none !important; min-height: 0 !important; padding: 0 !important; background: #fff !important; color: #000 !important; }
+  .calc-results * { color: #000 !important; background: transparent !important; box-shadow: none !important; }
+  .calc-hero strong { font-size: 36px !important; }
+}
 
 /* Waterfall: sale price down to net proceeds */
 .calc-waterfall__key { margin: 0 0 12px; padding: 0; display: flex; flex-wrap: wrap; gap: 8px 18px; list-style: none; color: var(--mist); font-size: 10px; }

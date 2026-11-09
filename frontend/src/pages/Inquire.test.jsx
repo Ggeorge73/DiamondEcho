@@ -1,7 +1,7 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
-import Inquire from './Inquire';
+import Inquire, { figuresFromSearch } from './Inquire';
 
 let container;
 let root;
@@ -69,6 +69,22 @@ describe('a request about mortgage pre-approval', () => {
     const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
     await act(async () => { setValue.call(message, 'Different words.'); message.dispatchEvent(new Event('input', { bubbles: true })); });
     expect(container.querySelector('#inquiry-message').value).toBe('Different words.');
+  });
+
+  test('figures from the simulator join the message only when the link carries them, cleaned and bounded', async () => {
+    await open(`/inquire?type=buyer&topic=pre-approval&figures=${encodeURIComponent('Price $450,000, 5% down ($22,500), Conventional 30-year fixed at 6.5%. Estimated monthly payment $3,408.')}`);
+    const message = container.querySelector('#inquiry-message').value;
+    expect(message.startsWith('I would like to get pre-approved for a mortgage.')).toBe(true);
+    expect(message).toContain('From the mortgage simulator: Price $450,000, 5% down ($22,500), Conventional 30-year fixed at 6.5%. Estimated monthly payment $3,408.');
+    expect(figuresFromSearch(new URLSearchParams('?figures=<script>alert(1)</script>'))).toBe('');
+    expect(figuresFromSearch(new URLSearchParams('?figures=hello there'))).toBe('');
+    expect(figuresFromSearch(new URLSearchParams(`?figures=${'$1 '.repeat(300)}`))).toBe('');
+    expect(figuresFromSearch(new URLSearchParams('?figures=Price%20%24450%2C000%20%3Cb%3Ex%3C%2Fb%3E'))).toBe('Price $450,000 bx/b');
+  });
+
+  test('figures without the pre-approval topic are ignored', async () => {
+    await open(`/inquire?type=buyer&figures=${encodeURIComponent('Price $450,000.')}`);
+    expect(container.querySelector('#inquiry-message').value).toBe('');
   });
 
   test('an ordinary buyer request is unchanged', async () => {
