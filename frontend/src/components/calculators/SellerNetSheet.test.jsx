@@ -44,19 +44,18 @@ test('opens on a labelled example, with transfer tax on the buyer and no commiss
   expect(text()).toContain('Georgia transfer tax and deed preparation are shown as the buyer\'s, the GAR contract default.');
 });
 
-test('the listing rate has quick picks and a typed figure; the buyer\'s rate is typed', async () => {
-  const picks = group('Listing rate');
-  expect([...picks.querySelectorAll('button')].map((button) => button.textContent)).toEqual(['2.5%', '2.75%', '3%', 'Other']);
-  await press('2.75%', picks);
-  expect(field('listingPct').value).toBe('2.75');
-  expect(itemRows()).toContain('Listing brokerage commission−$12,375.002.75%');
-  await type('listingPct', '3.2');
-  expect(picks.querySelector('[aria-pressed="true"]').textContent).toBe('Other');
-  await press('3%', picks);
+test('commission is entered as two rates and totalled, with no rate suggested', async () => {
+  expect(group('Listing rate')).toBeNull();
+  expect(container.querySelectorAll('button[aria-pressed]').length).toBeGreaterThan(0);
+  expect([...container.querySelectorAll('button')].some((button) => /^2\.5%|2\.75%|^3%$/.test(button.textContent))).toBe(false);
+  await type('listingPct', '3');
   await type('buyerPct', '2.5');
   expect(container.querySelector('.calc-total-box').textContent).toBe('Total commission5.5%$24,750');
   expect(hero()).toBe('$175,025');
-  expect(text()).toContain('The quick picks are common rates, not a price list');
+  expect(text()).not.toContain('No commission is entered.');
+  expect(itemRows()).toContain('Listing brokerage commission−$13,500.003%');
+  expect(itemRows()).toContain('Buyer brokerage compensation−$11,250.002.5%');
+  expect(text()).toContain('Enter the rates in your listing agreement.');
 });
 
 test('the payoff adds interest to the closing day once a date is chosen, or takes the lender\'s letter', async () => {
@@ -164,7 +163,7 @@ test('a seller who is not a US resident also sees FIRPTA, by price and the buyer
 });
 
 test('the ring shows where the sale price goes, by group', async () => {
-  await press('3%', group('Listing rate'));
+  await type('listingPct', '3');
   await type('concessions', '5000');
   const picture = container.querySelector('.calc-donut svg');
   expect(picture.getAttribute('aria-label')).toContain('Sale price of $450,000 by part.');
@@ -178,7 +177,7 @@ test('the ring shows where the sale price goes, by group', async () => {
 test('a second offer is compared on net', async () => {
   expect(container.querySelector('[aria-label="Offer comparison"]')).toBeNull();
   await type('closingDate', '2026-06-15');
-  await press('3%', group('Listing rate'));
+  await type('listingPct', '3');
   await type('buyerPct', '2.5');
   await type('concessions', '5000');
   await check('compare', true);
@@ -195,7 +194,7 @@ test('a second offer is compared on net', async () => {
 });
 
 test('the staircase runs from the sale price to the net, one named row per line', async () => {
-  await press('3%', group('Listing rate'));
+  await type('listingPct', '3');
   await type('concessions', '5000');
   const rows = waterfall().map((row) => row.textContent);
   expect(rows[0]).toBe('Sale price$450,000');

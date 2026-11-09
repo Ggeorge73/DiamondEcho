@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { AlertCircle, ArrowRight, Info, Printer, Scale, Wallet } from 'lucide-react';
 import { amount } from '../../lib/mortgage';
 import {
-  calculateNetProceeds, compareOffers, georgiaTransferTax, HOA_PERIODS, LISTING_RATE_OPTIONS, RECORDING_FEE, RESIDENCY, summarizeNetSheet,
+  calculateNetProceeds, compareOffers, georgiaTransferTax, HOA_PERIODS, RECORDING_FEE, RESIDENCY, summarizeNetSheet,
 } from '../../lib/netProceeds';
 import { CalcField, CalcSelect, percent, Segmented, StickyTotal, tidy, usd, usdCents } from './fields';
 import PaymentDonut from './PaymentDonut';
@@ -11,8 +11,9 @@ import ProceedsWaterfall from './ProceedsWaterfall';
 import './calculators.css';
 
 // Example figures only: not a valuation of anyone's home and not a lender's or
-// attorney's figures. The listing rate starts empty; the quick picks beside it
-// are Gbenga's (2026-11-09), and the page says commission is negotiable.
+// attorney's figures. The commission boxes start empty on purpose: what a
+// brokerage charges is agreed with each seller, so the page suggests no rate
+// (Gbenga, 2026-11-09, reversing a same-day idea of quick picks).
 export const EXAMPLE_NET_SHEET = {
   salePrice: '450000',
   closingDate: '',
@@ -112,7 +113,6 @@ const SellerNetSheet = ({ hidden = false }) => {
   const summary = summarizeNetSheet(result);
   const valuationLink = `/inquire?type=seller&topic=net-sheet${shareFigures && summary ? `&figures=${encodeURIComponent(summary)}` : ''}`;
   const print = () => { if (typeof window !== 'undefined' && typeof window.print === 'function') window.print(); };
-  const listingPick = LISTING_RATE_OPTIONS.includes(String(form.listingPct)) ? String(form.listingPct) : 'custom';
 
   return (
     <section className="deal-studio-shell calc-shell" aria-label="Seller net proceeds calculator" hidden={hidden}>
@@ -176,12 +176,8 @@ const SellerNetSheet = ({ hidden = false }) => {
               <strong>{percent(result.commission.totalPct)}</strong>
               <small>{usd.format(result.commission.total)}</small>
             </div>
-            <div className="calc-span-all">
-              <span>Listing rate quick picks</span>
-              <Segmented label="Listing rate" value={listingPick} onChange={(value) => set('listingPct')(value === 'custom' ? '' : value)} options={[...LISTING_RATE_OPTIONS.map((rate) => ({ value: rate, label: `${rate}%` })), { value: 'custom', label: 'Other' }]} />
-            </div>
           </div>
-          <p className="calc-quiet-note"><Info /> Commission is negotiable and is not set by law. The quick picks are common rates, not a price list: enter the rate in your listing agreement. Whether to offer anything toward the buyer's brokerage is your choice.</p>
+          <p className="calc-quiet-note"><Info /> Commission is negotiable and is not set by law. Enter the rates in your listing agreement. Whether to offer anything toward the buyer's brokerage is your choice.</p>
         </fieldset>
 
         <fieldset>

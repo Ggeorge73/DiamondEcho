@@ -52,11 +52,6 @@ export const RESIDENCY = [
   { key: 'foreign', label: 'Not a US resident' },
 ];
 
-// Quick-pick listing rates. Gbenga, 2026-11-09: VPR has no flat seller fee; the
-// rate is negotiated, so the sheet offers these and a typed figure. The page
-// still says commission is negotiable and not set by law.
-export const LISTING_RATE_OPTIONS = ['2.5', '2.75', '3'];
-
 export const HOA_PERIODS = [
   { key: 'month', label: 'a month' },
   { key: 'quarter', label: 'a quarter' },

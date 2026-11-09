@@ -3,9 +3,11 @@
 Written by Claude acting as the Engineering and QA agent, 2026-11-09, with the
 `super-agent-realtor` and `ga-closing-attorney` skills loaded. Gbenga asked for
 a closing-expert review of the Seller Net Sheet after the Mortgage Simulator's,
-then: VPR charges no flat seller fee, the listing rate is negotiated, so offer
-2.5%, 2.75% and 3% as quick picks; and use the ring chart as on the mortgage
-page. This file records what changed, the rule and source behind each figure,
+then: VPR charges no flat seller fee, the listing rate is negotiated; and use
+the ring chart as on the mortgage page. He first asked for 2.5%, 2.75% and 3%
+quick picks on the listing rate, then the same afternoon decided to leave the
+field as it was, "which leaves room for negotiation instead of suggesting 3
+options". No rate is suggested. This file records what changed, the rule and source behind each figure,
 which figures are examples, and what is still not modelled. Version 1 is in
 `docs/buyer-seller-calculators.md`, which still holds for the rest.
 
@@ -102,12 +104,13 @@ withholding certificate to the closing attorney and a CPA.
 
 ### Commission
 
-Listing rate quick picks 2.5%, 2.75%, 3% and "Other" (typed), starting empty.
-Gbenga, 2026-11-09: "VPR doesn't charge a flat fee for Seller, it's based on
-negotiation... use 2.5%, 2.75%, and 3% as the 3 options." The note beside them
-says commission is negotiable and not set by law and that the picks are common
-rates, not a price list, in line with the practice changes of 2024-08-17. The
-buyer's brokerage rate is typed, with a hint that it differs offer by offer.
+Both rates are typed and start empty, as in version 1. Gbenga, 2026-11-09:
+"VPR doesn't charge a flat fee for Seller, it's based on negotiation", and
+later the same day, on the quick picks he had first asked for: "leave the Real
+Estate Commission toggle as it is, which leaves room for negotiation instead of
+suggesting 3 options." The note says commission is negotiable and not set by
+law, in line with the practice changes of 2024-08-17. The buyer's brokerage
+rate carries a hint that it differs offer by offer.
 
 ### Offer comparison
 
@@ -135,7 +138,7 @@ is zero and left out.
 | Release and statement fees | $50 | Placeholder |
 | Payoff processing | $150 | Placeholder |
 | Deed preparation | $150, buyer's by default | Placeholder, only counted if the seller pays |
-| Listing, buyer rates | empty | No suggested rate; quick picks beside |
+| Listing, buyer rates | empty | No suggested rate |
 | Residency | Georgia resident, principal residence | The usual case |
 | Everything else | empty | |
 
