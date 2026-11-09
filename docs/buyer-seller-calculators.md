@@ -70,7 +70,7 @@ again; the tool does not model that and says so beside the field.
 | Field | Starts at | Why |
 | --- | --- | --- |
 | Price | $450,000 | An example, labelled as one above the form |
-| Down payment | 20% | The point at which PMI stops applying |
+| Down payment | 5% since version 2 (was 20%) | The realistic case for most buyers; it keeps the mortgage insurance line on screen |
 | Interest rate | 6.5% | An example; the hint says to use a lender's quote. It is not a statement of today's rates |
 | Rate after the fixed years | Starting rate plus 2 points, filled in when an adjustable term is first chosen | An example so the later payment is not shown as unchanged |
 | Property taxes | 1.2% of the price | Gbenga's request ("default estimate ~1.2% if missing"). The hint calls it a placeholder, not a county's rate |
@@ -234,9 +234,9 @@ Colour is never the only cue: every part and every row is named.
 
 - Price, taxes and HOA from a listing (needs listing pages or listing data).
 - A lender referral or pre-approval path (needs a lender Gbenga names).
-- FHA, VA and USDA loans, points, lender fees, cash to close, extra payments.
-- An adjustable rate that moves more than once.
-- County-specific property tax rates or recording fees.
+- FHA, VA and USDA loans, points, lender fees, cash to close, extra payments,
+  county tax rates and an adjustable worst case: **added in version 2 on
+  2026-11-09; see `docs/mortgage-simulator-v2.md`.**
 - Capital gains or any income tax on a sale.
 - Printing or saving a result.
 - Not tested on a real phone, Safari or Firefox.

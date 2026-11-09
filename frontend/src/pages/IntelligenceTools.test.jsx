@@ -57,7 +57,7 @@ test.each(['/mortgage-calculator', '/investment-calculator?tool=mortgage'])('the
   expect(tools()[1].getAttribute('aria-current')).toBe('page');
   expect(container.querySelector('h1').textContent).toBe('Know the paymentbefore the offer.');
   expect(container.querySelector('.deal-studio-hero__seal').textContent).toBe('AN ESTIMATENOT A LOAN OFFER');
-  expect(container.querySelector('.calc-hero strong').textContent).toBe('$2,875');
+  expect(container.querySelector('.calc-hero strong').textContent).toBe('$3,408');
 });
 
 test.each(['/seller-net-sheet', '/investment-calculator?tool=net-proceeds'])('the address %s opens the seller net sheet directly', async (address) => {
@@ -87,7 +87,7 @@ test('moving between the tools keeps what was typed in each of them', async () =
   expect(shell('Buyer mortgage simulator').hidden).toBe(false);
   expect(dealShell().hidden).toBe(true);
   await type('price', '610000');
-  expect(container.querySelector('.calc-hero strong').textContent).toBe('$3,844');
+  expect(container.querySelector('.calc-hero strong').textContent).toBe('$4,567');
 
   await open('Seller net sheet');
   expect(shell('Seller net proceeds calculator').hidden).toBe(false);
