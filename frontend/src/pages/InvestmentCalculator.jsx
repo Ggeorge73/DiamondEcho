@@ -78,7 +78,7 @@ const TOOL_HERO = {
   'net-proceeds': {
     eyebrow: 'DIAMOND ECHO SELLER TOOLS',
     title: <>See what you keep<br /><em>after closing.</em></>,
-    text: 'Estimate your net proceeds: the sale price less your mortgage payoff, commission, closing costs, Georgia transfer tax, concessions and prorations, from the figures you enter.',
+    text: 'Estimate your net proceeds: the sale price less your mortgage payoff with interest to closing, commission, your closing costs, credits to the buyer, prorated taxes and association dues, and any nonresident withholding, from the figures you enter. Compare two offers on net.',
     seal: <>AN ESTIMATE<br />NOT A CLOSING STATEMENT</>,
   },
 };

@@ -82,6 +82,20 @@ describe('a request about mortgage pre-approval', () => {
     expect(figuresFromSearch(new URLSearchParams('?figures=Price%20%24450%2C000%20%3Cb%3Ex%3C%2Fb%3E'))).toBe('Price $450,000 bx/b');
   });
 
+  test('the net sheet\'s valuation request starts the seller message and takes its figures', async () => {
+    await open(`/inquire?type=seller&topic=net-sheet&figures=${encodeURIComponent('Sale price $450,000. Estimated net proceeds $167,059 (37% of price).')}`);
+    expect(container.querySelector('h1').textContent).toBe('Ask what your home could sell for.');
+    expect(container.textContent).toContain('It is not an appraisal.');
+    const message = container.querySelector('#inquiry-message').value;
+    expect(message.startsWith('I would like a valuation of my home')).toBe(true);
+    expect(message).toContain('From the seller net sheet: Sale price $450,000. Estimated net proceeds $167,059 (37% of price).');
+    // The seller topic does not open on the buyer form.
+    await act(async () => { root.unmount(); });
+    root = createRoot(container);
+    await open('/inquire?type=buyer&topic=net-sheet');
+    expect(container.querySelector('#inquiry-message').value).toBe('');
+  });
+
   test('figures without the pre-approval topic are ignored', async () => {
     await open(`/inquire?type=buyer&figures=${encodeURIComponent('Price $450,000.')}`);
     expect(container.querySelector('#inquiry-message').value).toBe('');

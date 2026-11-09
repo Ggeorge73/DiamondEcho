@@ -21,6 +21,17 @@ const topics = {
     title: 'Ask about getting pre-approved.',
     intro: 'DiamondEcho is not a lender, and pre-approval comes from a lender. Send this request and an agent can introduce you to one and explain what they will ask for.',
     message: 'I would like to get pre-approved for a mortgage.',
+    figuresFrom: 'the mortgage simulator',
+  },
+  // The seller net sheet's "Request a home valuation" button. A valuation is
+  // an agent's opinion of price from comparable sales, not an appraisal.
+  'net-sheet': {
+    kind: 'seller',
+    eyebrow: 'Home valuation',
+    title: 'Ask what your home could sell for.',
+    intro: 'An advisor can prepare an opinion of price from comparable sales and talk through your net. It is not an appraisal.',
+    message: 'I would like a valuation of my home and to talk through what I would net from a sale.',
+    figuresFrom: 'the seller net sheet',
   },
 };
 
@@ -83,7 +94,7 @@ const Inquire = () => {
   const topic = Object.prototype.hasOwnProperty.call(topics, requestedTopic) && topics[requestedTopic].kind === kind ? topics[requestedTopic] : null;
   const openCopy = topic ? { eyebrow: topic.eyebrow, title: topic.title, intro: topic.intro } : copy[kind];
   const figures = topic ? figuresFromSearch(params) : '';
-  const startingMessage = topic ? `${topic.message}${figures ? `\n\nFrom the mortgage simulator: ${figures}` : ''}` : '';
+  const startingMessage = topic ? `${topic.message}${figures ? `\n\nFrom ${topic.figuresFrom}: ${figures}` : ''}` : '';
   const content = open ? openCopy : { ...copy[kind], title: closedCopy[kind].title, intro: `This page will take ${closedCopy[kind].what} once online requests open.` };
 
   return (
