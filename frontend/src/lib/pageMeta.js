@@ -56,7 +56,7 @@ export const PAGES = Object.freeze([
     'Estimate a monthly house payment: principal and interest, property taxes, insurance, HOA fees and mortgage insurance. Free; nothing you type is sent or saved.'),
   page(TOOL_PATHS['net-proceeds'], 'Seller net sheet',
     'Georgia Seller Net Sheet & Proceeds Calculator | DiamondEcho',
-    'Estimate what you keep when you sell a home in Georgia: mortgage payoff, the commission you enter, closing costs, transfer tax, concessions and prorations.'),
+    'Estimate what you keep when you sell a Georgia home: payoff with interest, commission, closing costs, prorations, withholding, and two offers compared on net.'),
   page('/agents', 'Advisory',
     'Buy, Sell or Invest With a Georgia Agent | DiamondEcho',
     'Search Georgia MLS, work through the numbers, then tell DiamondEcho what you need. Working with buyers, sellers and investors across metro Atlanta, Georgia.'),

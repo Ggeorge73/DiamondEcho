@@ -13,6 +13,14 @@ export const PART_COLORS = {
   insurance: '#008300',
   hoa: '#c98500',
   pmi: '#d55181',
+  // The seller net sheet: where the sale price goes.
+  net: '#3987e5',
+  liens: '#7a8aa6',
+  commission: '#c98500',
+  closing: '#008300',
+  credits: '#e66767',
+  prorations: '#8f6bd6',
+  withholding: '#d55181',
 };
 
 const SIZE = 200;
@@ -46,7 +54,10 @@ export const donutSegments = (parts) => {
   });
 };
 
-const PaymentDonut = ({ parts, total }) => {
+// `labels` lets the seller net sheet reuse the ring: what the total is called,
+// what the center says, and the column headings of the table beside it.
+const PaymentDonut = ({ parts, total, labels = {} }) => {
+  const words = { subject: 'Monthly payment', center: 'per month', caption: 'Payment breakdown', part: 'Part', value: 'Per month', ...labels };
   const [active, setActive] = useState(null);
   const segments = donutSegments(parts);
   const current = segments.find((segment) => segment.key === active);
@@ -55,7 +66,7 @@ const PaymentDonut = ({ parts, total }) => {
   return (
     <div className="calc-donut">
       <div className="calc-donut__figure">
-        <svg viewBox={`0 0 ${SIZE} ${SIZE}`} role="img" aria-label={`Monthly payment of ${usd.format(total)} by part. ${summary}.`}>
+        <svg viewBox={`0 0 ${SIZE} ${SIZE}`} role="img" aria-label={`${words.subject} of ${usd.format(total)} by part. ${summary}.`}>
           <circle cx={CENTER} cy={CENTER} r={RADIUS} fill="none" stroke="var(--line)" strokeWidth={THICKNESS} />
           {segments.map((segment) => (segment.whole
             ? <circle key={segment.key} cx={CENTER} cy={CENTER} r={RADIUS} fill="none" stroke={PART_COLORS[segment.key]} strokeWidth={THICKNESS} onPointerEnter={() => setActive(segment.key)} onPointerLeave={() => setActive(null)} />
@@ -69,12 +80,12 @@ const PaymentDonut = ({ parts, total }) => {
         </svg>
         <div className="calc-donut__center" aria-hidden="true">
           <strong>{usd.format(current ? current.value : total)}</strong>
-          <span>{current ? `${current.label} · ${percent(Math.round(current.share))}` : 'per month'}</span>
+          <span>{current ? `${current.label} · ${percent(Math.round(current.share))}` : words.center}</span>
         </div>
       </div>
       <table className="calc-legend">
-        <caption>Payment breakdown</caption>
-        <thead><tr><th scope="col">Part</th><th scope="col">Per month</th><th scope="col">Share</th></tr></thead>
+        <caption>{words.caption}</caption>
+        <thead><tr><th scope="col">{words.part}</th><th scope="col">{words.value}</th><th scope="col">Share</th></tr></thead>
         <tbody>
           {/* Every figure the ring shows on hover is already in these rows, so they are not extra keyboard stops. */}
           {segments.map((segment) => (

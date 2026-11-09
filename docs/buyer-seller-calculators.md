@@ -119,6 +119,11 @@ one address in `MortgageSimulator.jsx`.
 
 ## Seller net sheet
 
+**Version 2 (2026-11-09) changed the allocation and added payoff, association,
+withholding and offer-comparison lines; see `docs/seller-net-sheet-v2.md`. The
+transfer tax now defaults to the buyer, as the GAR contract has it.** The
+rest of this section describes version 1.
+
 ### What it calculates
 
 Net proceeds are the sale price, less every deduction, plus any credit.

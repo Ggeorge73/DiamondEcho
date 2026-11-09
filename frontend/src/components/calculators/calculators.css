@@ -34,6 +34,11 @@
 .calc-segmented button.is-active { background: var(--steel); color: var(--ice); }
 .calc-field-stack { min-width: 0; display: grid; gap: 10px; align-content: start; justify-items: start; }
 .calc-field-stack > .calc-field { width: 100%; }
+.calc-field-stack > .calc-segmented { max-width: 100%; flex-wrap: wrap; }
+.calc-field-stack > .calc-segmented button { padding: 0 11px; }
+/* The net sheet's listing-rate quick picks sit on their own row under the three columns. */
+.calc-span-all { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.calc-span-all > span { color: var(--mist); font-size: 11px; }
 .calc-quiet-note { margin: 0; display: flex; align-items: flex-start; gap: 9px; align-self: center; color: var(--mist); font-size: 11px; line-height: 1.6; }
 .calc-quiet-note svg { width: 14px; flex: none; margin-top: 2px; color: var(--steel-bright); }
 fieldset > .calc-quiet-note { margin-top: 18px; }
