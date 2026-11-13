@@ -267,6 +267,38 @@ test("monitoring gaps: missing hours and whole days are listed, low coverage is 
   assert.match(look, /No hourly probe ran this week/);
 });
 
+test("a week of blind runs: not counted as probes, and reported as its own finding", async () => {
+  // A healthy month up to the start of the week, then every run blind: the
+  // monitor ran on schedule but reached nothing (state.mjs files c: {}, blind: N).
+  const blindLine = (t) => JSON.stringify({ t: new Date(t).toISOString(), suite: "fast", region: "eastus", c: {}, blind: 17 });
+  const history = [...series({ from: END - 28 * DAY + 5 * MIN, to: START })];
+  for (let t = START + 5 * MIN; t <= NOW; t += 5 * MIN) history.push(blindLine(t));
+  const report = await reportFor({ history, files: { "incidents.json": noIncidents } });
+  const gaps = section(report, "Monitoring gaps");
+  assert.match(gaps, /No five-minute probe measured anything this week\.\*\* All 2016 runs that happened were blind \(reached nothing\)\./);
+  assert.doesNotMatch(gaps, /of the 2016 scheduled/);
+  const look = section(report, "What to look at this week");
+  assert.match(look, /Not one five-minute run measured the site this week: every run that happened was blind/);
+  assert.match(look, /2016 monitor runs were blind this week \(the first at 2026-11-09 00:05 UTC, the last at 2026-11-16 00:00 UTC\)/);
+  assert.match(look, /monitoring-is-blind\.md/);
+  // "This week" has no data; the 28-day figure still stands on the earlier weeks.
+  assert.match(section(report, "Service level objectives"), /\| Website availability \| 99\.9% \(proposed\), 40 min \| no data \| 100% \|/);
+});
+
+test("a few blind runs among good ones: coverage counts only the measured ones", async () => {
+  const history = series({ from: START + 5 * MIN, to: END }).map((text, i) => (i % 4 === 0 ? JSON.stringify({ ...JSON.parse(text), c: {}, blind: 17 }) : text));
+  const report = await reportFor({ history, files: { "incidents.json": noIncidents } });
+  assert.match(section(report, "Monitoring gaps"), /Five-minute probes: 1512 of the 2016 scheduled \(75%\)\.[^\n]* 504 more runs were blind \(reached nothing\) and are not counted\./);
+  assert.match(section(report, "What to look at this week"), /504 monitor runs were blind this week/);
+  assert.match(section(report, "What to look at this week"), /The monitor ran only 75% of its scheduled five-minute probes/);
+});
+
+test("checks Cloudflare refused to the monitor are reported, not counted", async () => {
+  const history = series({ from: START + 5 * MIN, to: END }).map((text, i) => (i < 3 ? JSON.stringify({ ...JSON.parse(text), refused: 9 }) : text));
+  const report = await reportFor({ history, files: { "incidents.json": noIncidents } });
+  assert.match(section(report, "What to look at this week"), /Cloudflare refused 27 of the monitor's checks in 3 runs this week/);
+});
+
 test("monitoring that started mid-window: the 28-day figure says it covers less, and is not judged yet", async () => {
   const report = await reportFor({ history: series({ from: END - 2 * DAY, to: NOW }), files: { "incidents.json": noIncidents } });
   const table = section(report, "Service level objectives");

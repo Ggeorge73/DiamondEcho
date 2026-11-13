@@ -12,8 +12,9 @@
 - The form tells visitors "Too many requests were sent from this
   connection" (429, one sender's limit) or "Online requests are busy right
   now" (503, the hourly limit), both with "call or email us".
-- Deal Studio's analysis fails with "The analysis could not be completed",
-  or pages that use the API are slow.
+- Deal Studio's analysis fails with "The analysis service could not be
+  reached, so nothing was calculated" (or "Request failed with status code
+  …"), or pages that use the API are slow.
 - Many inquiry alert emails in a short time, or junk in the staff queue.
 - The Google Cloud budget alert email, or a usage email from RentCast or
   Mapbox.

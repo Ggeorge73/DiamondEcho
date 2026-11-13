@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeCheck, makeRun } from "./lib/schema.mjs";
-import { evaluate, judgeCheck, readComments, statusText, OPEN_AFTER, RESOLVE_AFTER, ESCALATION, isBlindRun, incidentTitle, runbooksFor, duration } from "./alert-policy.mjs";
+import { evaluate, isTrusted, judgeCheck, isOutsideCheck, oneLine, cloudflareRefusal, readComments, statusText, OPEN_AFTER, RESOLVE_AFTER, ESCALATION, isBlindRun, incidentTitle, runbooksFor, duration } from "./alert-policy.mjs";
 
 const MIN = 60_000;
 const T0 = Date.parse("2026-11-13T00:00:00.000Z");
@@ -91,9 +91,11 @@ test("a single good run does not resolve; RESOLVE_AFTER good runs in a row do, w
   const resolved = out.doc.recent[0];
   assert.equal(resolved.key, "public-site");
   assert.equal(resolved.duration_minutes, 25);
-  assert.match(resolved.updates.at(-1).text, /^Resolved: .*It lasted 25 minutes\.$/);
+  // Failures at 00:00 (first) to 00:15 (last); confirmed, then closed after a stable recovery.
+  assert.equal(resolved.updates.at(-1).text, "Resolved: every check has passed at least 3 runs in a row. Checks failed from 00:00 to 00:15 UTC; the incident was open for 25 minutes.");
+  assert.ok(resolved.updates.every((update) => !/\.\./.test(update.text)), "no double full stop");
   const close = kinds(out.actions, "close-issue")[0];
-  assert.match(close.body, /Duration: 25 minutes/);
+  assert.match(close.body, /the incident was open for 25 minutes/);
   assert.equal(close.issue_number, 101);
   // It was announced on the chat webhook, so its end is too.
   assert.match(kinds(out.actions, "webhook").at(-1).text, /Resolved after 25 minutes/);
@@ -152,10 +154,15 @@ test("burn alerts open budget incidents, are folded into a component incident, a
   const down = (ok) => makeCheck({ id: "api-health", name: "API is up", component: "api", severity: "sev2", ok, status: ok ? 200 : 502, slis: [] });
   const both = replay(Array.from({ length: 16 }, () => [down(false)]), { slo: (at) => sloDoc(at, [burn]) });
   assert.deepEqual(both.doc.open.map((item) => item.key), ["api"]);
-  // The budget incident seen first is merged into the API's own incident.
-  const merged = kinds(both.actions, "close-issue");
-  assert.equal(merged.length, 1);
-  assert.match(merged[0].body, /^\*\*Merged:\*\* the same problem is now followed in the API is not working properly incident \[\[issue:api\]\]\./);
+  // The budget incident seen first hands its issue over to the API's own
+  // incident: one issue, retitled and continued, never closed and replaced.
+  assert.equal(kinds(both.actions, "close-issue").length, 0);
+  assert.equal(kinds(both.actions, "open-issue").length, 1);
+  const takeover = kinds(both.actions, "take-over-issue");
+  assert.deepEqual(takeover.map((action) => [action.key, action.from_key, action.from_severity, action.severity]), [["api", "budget:api-availability", "sev2", "sev2"]]);
+  assert.match(takeover[0].body, /^\*\*Now followed here as: API is not working properly\.\*\*/);
+  assert.equal(both.doc.open[0].issue_number, both.steps[0].incidents.open[0].issue_number, "the same issue number");
+  assert.match(both.doc.recent[0].updates.at(-1).text, /^Followed from now on in the API is not working properly incident, on the same issue\.$/);
   assert.equal(kinds(both.actions, "webhook").filter((action) => /budget|Resolved/.test(action.text)).length, 0);
   const noted = kinds(both.actions, "comment").filter((action) => /Error budget/.test(action.body));
   assert.equal(noted.length, 0, "already known from the merged incident: not repeated");
@@ -250,6 +257,9 @@ test("issue text is public-safe and says what to do", () => {
 
 test("runbooks: one per component, bad-deploy first after a deploy of that part", () => {
   assert.deepEqual(runbooksFor("search"), ["docs/sre/runbooks/search-provider-down.md"]);
+  // A Cloudflare refusal shows up as the website or staff site failing.
+  assert.deepEqual(runbooksFor("public-site"), ["docs/sre/runbooks/site-down.md", "docs/sre/runbooks/cloudflare-outage.md"]);
+  assert.deepEqual(runbooksFor("staff-site"), ["docs/sre/runbooks/site-down.md", "docs/sre/runbooks/cloudflare-outage.md"]);
   assert.deepEqual(runbooksFor("api", { recentDeploy: true })[0], "docs/sre/runbooks/bad-deploy.md");
   assert.deepEqual(runbooksFor("tls", { recentDeploy: true }), ["docs/sre/runbooks/tls-certificate.md"]);
   assert.deepEqual(runbooksFor("monitoring"), ["docs/sre/runbooks/monitoring-is-blind.md"]);
@@ -271,7 +281,7 @@ test("small helpers", () => {
 
 test("acknowledgement needs 'ack' or 'Acknowledged' from a person; any other comment does not count", () => {
   const opened = "2026-11-13T00:10:00.000Z";
-  const say = (first_line, extra = {}) => ({ login: "someone", bot: false, created_at: "2026-11-13T00:20:00.000Z", first_line, ...extra });
+  const say = (first_line, extra = {}) => ({ login: "someone", bot: false, author_association: "COLLABORATOR", created_at: "2026-11-13T00:20:00.000Z", first_line, ...extra });
   for (const line of ["ack", "Ack: on it", "ACK.", "Acknowledged", "acknowledged, rolling back"]) assert.equal(readComments([say(line)], opened).acknowledged, true, line);
   // The old rule counted every one of these; an AI agent posting through a
   // person's account would have silenced a sev1.
@@ -291,9 +301,9 @@ test("a person's 'Status:' line reaches the status page once, as one short publi
   assert.equal(status.text, "Rolling back to the previous version bnow/b");
   assert.equal(statusText(`Status: ${"x".repeat(400)}`).length, 280);
   const said = readComments([
-    { login: "p", bot: false, created_at: "2026-11-13T00:12:00.000Z", first_line: "status:   Rolling back" },
-    { login: "b", bot: true, created_at: "2026-11-13T00:13:00.000Z", first_line: "Status: from a bot" },
-    { login: "p", bot: false, created_at: "2026-11-13T00:14:00.000Z", first_line: "Status:" },
+    { login: "p", bot: false, author_association: "OWNER", created_at: "2026-11-13T00:12:00.000Z", first_line: "status:   Rolling back" },
+    { login: "b", bot: true, author_association: "OWNER", created_at: "2026-11-13T00:13:00.000Z", first_line: "Status: from a bot" },
+    { login: "p", bot: false, author_association: "OWNER", created_at: "2026-11-13T00:14:00.000Z", first_line: "Status:" },
   ], "2026-11-13T00:10:00.000Z");
   assert.deepEqual(said.statuses, [{ at: "2026-11-13T00:12:00.000Z", text: "Rolling back" }]);
 
@@ -317,4 +327,245 @@ test("a slow budget burn (sev4) opens no issue; it stays a note for the weekly r
   assert.equal(out.steps[0].incidents.open[0].key, "budget:public-availability");
   assert.equal(out.steps[0].incidents.open[0].severity, "sev3");
   assert.equal(out.doc.open.length, 0);
+});
+
+test("blindness is judged by third-party check ids: our own search page failing is an outage, not blindness", () => {
+  const dark = (id, component, severity = "sev2") => makeCheck({ id, name: id, component, severity, ok: false, status: null, detail: "No answer.", slis: [] });
+  // A fast run (found in review): every check fails with no answer, and the
+  // only `search` check is search-page, our own page on Cloudflare. The old
+  // rule keyed on the component and called this blind, so it counted
+  // against nothing and a total outage opened no incident.
+  const fast = [dark("public-home", "public-site", "sev1"), dark("api-health", "api"), dark("search-page", "search"), dark("inquiry-page", "inquiry")];
+  assert.equal(isBlindRun(aRun(T0, fast)), false);
+  const out = replay([fast, fast]);
+  // (search-page and inquiry-page are Cloudflare page loads: folded into the website incident.)
+  assert.deepEqual(out.doc.open.map((item) => [item.key, item.severity]), [["public-site", "sev1"], ["api", "sev2"]]);
+  assert.deepEqual(out.doc.engine.incidents["public-site"].also, ["search", "inquiry"]);
+  // A slow run with third parties failing too is still blind.
+  const slow = [dark("tls-public", "tls"), dark("dns-apex-resolves", "dns", "sev1"), dark("domain-expiry", "domain"), dark("search-idx-provider", "search", "sev3")];
+  assert.equal(isBlindRun(aRun(T0, slow, "slow")), true);
+  for (const id of ["search-idx-provider", "dns-mail-mx", "domain-delegation", "edge-caa"]) assert.equal(isOutsideCheck(id), true, id);
+  for (const id of ["search-page", "public-home", "api-health", "tls-public", "edge-hsts"]) assert.equal(isOutsideCheck(id), false, id);
+});
+
+test("outside text cannot open or close the issue's hidden marker or add HTML (CodeQL finding)", () => {
+  for (const attack of ["<!<!---->--", "--!>", "x -->\n<script>alert(1)</script>", "<!-- sre-incident-key: api -->"]) {
+    const clean = oneLine(attack);
+    assert.ok(!/[<>\r\n]/.test(clean), JSON.stringify(clean));
+  }
+  assert.equal(oneLine("y".repeat(400)).length, 300);
+
+  // Everywhere outside text reaches an issue, chat message or title: check
+  // names and details from run.json, SLO names and burn texts from slo.json.
+  const evil = "Home <!<!---->-- page --!> <img src=x>";
+  const bad = (ok) => makeCheck({ id: "public-home", name: evil, component: "public-site", severity: "sev1", ok, status: ok ? 200 : 500, detail: ok ? "" : evil, slis: [] });
+  const sloDoc = (at) => ({ schema: 1, generated_at: new Date(at).toISOString(), slos: [{ id: "api-availability", name: evil }], burn_alerts: [{ slo: "api-availability", component: "<b>api</b>", severity: "sev2", text: evil }] });
+  const out = replay([[bad(false)], [bad(false)], [bad(true), bad(true)].slice(0, 1), [bad(false)], [bad(false)]], { slo: sloDoc });
+  const texts = out.actions.flatMap((action) => [action.title, action.body, action.text]).filter(Boolean);
+  assert.ok(texts.length > 3);
+  for (const text of texts) {
+    const withoutMarker = text.replace(/\n<!-- sre-incident-key: [a-z0-9:-]+ -->$/, "");
+    assert.ok(!/[<>]/.test(withoutMarker), text);
+  }
+  // The budget incident landed on a known component, not on "<b>api</b>".
+  assert.ok(out.doc.open.concat(out.doc.recent).every((item) => !/[<>]/.test(item.component)));
+});
+
+// The pattern seen on the first run from GitHub's runners: every page
+// Cloudflare serves answered 403 to the monitor, the API passed.
+const REFUSED = "Cloudflare refused the request (403, error 1010: the browser signature check). See docs/sre/runbooks/cloudflare-outage.md.";
+function cloudflareRun({ realFailure = false } = {}) {
+  const page = (id, component, severity) => makeCheck({ id, name: id, component, severity, ok: false, status: 403, latency_ms: 90, detail: REFUSED, slis: ["public-availability"] });
+  const notMade = (id) => makeCheck({ id, name: id, component: "public-site", severity: "sev1", ok: false, status: null, latency_ms: null, detail: "The home page did not load, so the file it asks for is not known.", slis: [] });
+  const api = (id, component) => makeCheck({ id, name: id, component, severity: "sev2", ok: true, status: id === "inquiry-route" ? 405 : 200, latency_ms: 150, slis: [] });
+  return [
+    page("public-home", "public-site", "sev1"), page("public-page-about", "public-site", "sev2"), notMade("public-asset-js"),
+    page("search-page", "search", "sev2"), page("calculators-deal-page", "calculators", "sev2"), page("inquiry-page", "inquiry", "sev2"),
+    page("staff-home", "staff-site", "sev2"), api("api-health", "api"), api("inquiry-route", "inquiry"), api("staff-api-auth", "staff-site"),
+    ...(realFailure ? [makeCheck({ id: "public-page-terms", name: "Terms", component: "public-site", severity: "sev3", ok: false, status: 500, latency_ms: 80, detail: "Answered 500.", slis: [] })] : []),
+  ];
+}
+
+test("Cloudflare refusing the monitor is one sev2 'monitoring' incident, not six outages, and counts against nothing", () => {
+  const refusal = cloudflareRefusal(aRun(T0, cloudflareRun()));
+  assert.equal(refusal.refused, 6);
+  assert.ok(refusal.ids.has("public-asset-js"), "a check not made because its page was refused goes with it");
+  assert.ok(!refusal.ids.has("api-health"));
+
+  const one = replay([cloudflareRun()]);
+  assert.deepEqual(one.doc.open, [], "one refused run is not enough");
+  const okPage = makeCheck({ id: "public-home", name: "Home page", component: "public-site", severity: "sev1", ok: true, status: 200, latency_ms: 100, slis: [] });
+  const out = replay([cloudflareRun(), cloudflareRun(), cloudflareRun(), [okPage], [okPage]]);
+  const opened = out.steps[1].incidents.open;
+  assert.deepEqual(opened.map((item) => [item.key, item.component, item.severity, item.title]), [["monitoring", "monitoring", "sev2", "Cloudflare is refusing the monitor"]]);
+  const issue = kinds(out.actions, "open-issue");
+  assert.equal(issue.length, 1);
+  assert.match(issue[0].body, /may be working for visitors, but Cloudflare is refusing the monitor/);
+  assert.match(issue[0].body, /cloudflare-outage\.md.*monitoring-is-blind\.md/);
+  assert.equal(kinds(out.actions, "webhook")[0].text.startsWith("[sev2] New: Cloudflare is refusing the monitor."), true);
+  assert.ok(out.steps.every((step) => step.incidents.open.every((item) => item.key === "monitoring")), "no per-component incident");
+  assert.equal(out.steps[2].incidents.engine.checks["public-home"], undefined, "refused results are not remembered as failures");
+  // Pages answer again: closed after two clean runs.
+  assert.equal(out.doc.open.length, 0);
+  assert.equal(out.doc.recent[0].key, "monitoring");
+});
+
+test("if one Cloudflare page fails for another reason, the normal per-component rules apply", () => {
+  assert.equal(cloudflareRefusal(aRun(T0, cloudflareRun({ realFailure: true }))), null);
+  const out = replay([cloudflareRun({ realFailure: true }), cloudflareRun({ realFailure: true }), cloudflareRun({ realFailure: true })]);
+  const keys = out.doc.open.map((item) => item.key);
+  assert.ok(keys.includes("public-site"));
+  assert.ok(!keys.includes("monitoring"));
+  assert.equal(out.doc.open.find((item) => item.key === "public-site").severity, "sev1");
+});
+
+test("a burn alert whose failing checks belong to an open incident is that incident, not a second page", () => {
+  const sloDoc = (at, alerts) => ({ schema: 1, generated_at: new Date(at).toISOString(), slos: [{ id: "public-availability", name: "Website availability" }, { id: "api-availability", name: "API availability" }], burn_alerts: alerts });
+  // /search failing burns the website's budget: one incident (search), not search + a website budget incident.
+  const page = (ok) => makeCheck({ id: "search-page", name: "Property search page", component: "search", severity: "sev2", ok, status: ok ? 200 : 500, latency_ms: 100, slis: ["public-availability"] });
+  const websiteBurn = { slo: "public-availability", component: "public-site", severity: "sev2", window: "1h", text: "Website budget burning.", checks: ["search-page"] };
+  const search = replay(Array.from({ length: 8 }, () => [page(false), home(true)]), { slo: (at, i) => sloDoc(at, i >= 1 ? [websiteBurn] : []) });
+  assert.deepEqual(search.doc.open.map((item) => item.key), ["search"]);
+  assert.ok(!search.actions.some((action) => action.key.startsWith("budget:")));
+
+  // A sev3 calculator check burning the API's budget does not become a sev2 page.
+  const calc = (ok) => makeCheck({ id: "calculators-api-analyze", name: "Deal analysis service", component: "calculators", severity: "sev3", ok, status: ok ? 200 : 500, latency_ms: 100, slis: ["api-availability"] });
+  const apiBurn = { slo: "api-availability", component: "api", severity: "sev2", window: "1h", text: "API budget burning.", checks: ["calculators-api-analyze"] };
+  const calcs = replay(Array.from({ length: 8 }, () => [calc(false)]), { slo: (at, i) => sloDoc(at, i >= 2 ? [apiBurn] : []) });
+  assert.deepEqual(calcs.doc.open.map((item) => [item.key, item.severity]), [["calculators", "sev3"]]);
+  assert.equal(kinds(calcs.actions, "webhook").length, 0, "no chat page for a sev3 problem");
+
+  // The burn alert arriving before the check's own incident: its issue is taken over when it opens.
+  const early = replay(Array.from({ length: 4 }, () => [calc(false)]), { slo: (at) => sloDoc(at, [apiBurn]) });
+  assert.deepEqual(early.doc.open.map((item) => item.key), ["calculators"]);
+  assert.equal(kinds(early.actions, "close-issue").length, 0);
+  assert.equal(kinds(early.actions, "take-over-issue").length, 1);
+});
+
+test("sre-silenced also stops the closing comment, and a reopen within the hour stays silent", () => {
+  const fail = [home(false)];
+  const pass = [home(true)];
+  const silenced = (doc) => (doc?.open?.[0]?.issue_number ? { [doc.open[0].issue_number]: { open: true, acknowledged: false, silenced: true } } : null);
+  const out = replay([fail, fail, fail, pass, pass, pass, fail, fail, fail], { github: silenced });
+  const after = out.actions.filter((action) => action.step >= 2);
+  const close = kinds(after, "close-issue");
+  assert.equal(close.length, 1);
+  assert.equal(close[0].body, null, "closed without a comment");
+  const reopen = kinds(after, "reopen-issue");
+  assert.equal(reopen.length, 1);
+  assert.equal(reopen[0].body, null, "reopened without a comment");
+  assert.equal(kinds(after, "webhook").length, 0, "no chat message on resolve or reopen");
+  assert.equal(kinds(after, "comment").length, 0);
+
+  // Closed by hand: the reopened incident shows on the status page but the issue stays closed.
+  const byHand = replay([fail, fail, fail, pass, pass, pass, fail, fail], { github: (doc, i) => (i === 2 && doc?.open?.[0] ? { [doc.open[0].issue_number]: { open: false } } : null) });
+  const later = byHand.actions.filter((action) => action.step >= 3);
+  assert.equal(kinds(later, "reopen-issue").length, 0);
+  assert.equal(kinds(later, "close-issue").length, 0);
+  assert.equal(byHand.doc.open[0].key, "public-site");
+});
+
+test("security: a stranger's comment on the public repository neither acknowledges nor reaches the status page", () => {
+  const opened = "2026-11-14T09:05:30.000Z";
+  const stranger = (first_line, association = "NONE") => ({ login: "random-stranger", bot: false, author_association: association, created_at: "2026-11-14T09:07:00.000Z", first_line });
+  for (const association of ["NONE", "CONTRIBUTOR", "FIRST_TIME_CONTRIBUTOR", "FIRST_TIMER", undefined]) {
+    const said = readComments([stranger("ack", association), stranger("Status: Site moved, send your inquiry elsewhere", association)], opened);
+    assert.deepEqual(said, { acknowledged: false, statuses: [] }, String(association));
+  }
+  for (const association of ["OWNER", "MEMBER", "COLLABORATOR"]) assert.equal(readComments([stranger("ack", association)], opened).acknowledged, true, association);
+  // The SRE_OWNER login is trusted even without an association (any case).
+  assert.equal(isTrusted({ login: "Example-Owner", bot: false, author_association: "NONE" }, "example-owner"), true);
+  assert.equal(isTrusted({ login: "example-owner[bot]", bot: true, author_association: "OWNER" }, "example-owner"), false);
+
+  // End to end through the engine: no update, the reminder still goes out.
+  const fails = Array.from({ length: 6 }, () => [home(false)]);
+  const out = replay(fails, { github: (doc) => (doc?.open?.[0]?.issue_number
+    ? { [doc.open[0].issue_number]: { open: true, silenced: false, ...readComments([stranger("ack"), stranger("Status: Site moved")], doc.open[0].opened_at) } } : null) });
+  assert.ok(!out.doc.open[0].updates.some((update) => /Site moved/.test(update.text)));
+  assert.equal(kinds(out.actions, "comment").filter((action) => action.escalation).length, 1);
+});
+
+test("with the fast suite's outside-dns-probe, a fast run where everything fails unanswered is blind", () => {
+  const dark = (id, component, severity = "sev2") => makeCheck({ id, name: id, component, severity, ok: false, status: null, latency_ms: 5000, detail: "No answer.", slis: component === "dns" ? [] : ["public-availability"] });
+  const site = [dark("public-home", "public-site", "sev1"), dark("api-health", "api"), dark("search-page", "search")];
+  const withProbe = [...site, dark("outside-dns-probe", "dns", "sev4")];
+  assert.equal(isOutsideCheck("outside-dns-probe"), true);
+  assert.equal(isBlindRun(aRun(T0, site)), false, "without the probe: not blind (counts against the site)");
+  assert.equal(isBlindRun(aRun(T0, withProbe)), true);
+  const out = replay([withProbe, withProbe, withProbe]);
+  assert.deepEqual(out.doc.open.map((item) => [item.key, item.severity]), [["monitoring", "sev3"]], "no false 'Website is down'");
+  // The probe answering while our hosts do not is a real outage.
+  const probeOk = [...site, makeCheck({ id: "outside-dns-probe", name: "Outside DNS probe", component: "dns", severity: "sev4", ok: true, status: 200, latency_ms: 40, slis: [] })];
+  assert.equal(isBlindRun(aRun(T0, probeOk)), false);
+});
+
+test("a reason that ends in a full stop gets no second one", () => {
+  const sloDoc = (at) => ({ schema: 1, generated_at: new Date(at).toISOString(), slos: [{ id: "api-availability", name: "API availability" }], burn_alerts: [{ slo: "api-availability", component: "api", severity: "sev2", text: "Burning 16 times too fast: 4 of 12 probes were bad." }] });
+  const out = replay([[home(true)]], { slo: sloDoc });
+  assert.equal(out.doc.open[0].updates[0].text, "Opened: Burning 16 times too fast: 4 of 12 probes were bad.");
+});
+
+// A Cloudflare Pages outage as the website's checks and the other parts'
+// page loads see it; the API (not on Cloudflare) keeps passing.
+function pagesOutage(down) {
+  const page = (id, component, severity) => makeCheck({ id, name: id, component, severity, ok: !down, status: down ? 522 : 200, latency_ms: 200, detail: down ? "Answered 522." : "", slis: ["public-availability"] });
+  return [
+    page("public-home", "public-site", "sev1"), page("public-page-about", "public-site", "sev2"), page("search-page", "search", "sev2"),
+    page("calculators-deal-page", "calculators", "sev2"), page("calculators-mortgage-page", "calculators", "sev2"), page("inquiry-page", "inquiry", "sev2"),
+    makeCheck({ id: "api-health", name: "API is up", component: "api", severity: "sev2", ok: true, status: 200, latency_ms: 150, slis: [] }),
+    makeCheck({ id: "inquiry-route", name: "Inquiry route exists", component: "inquiry", severity: "sev2", ok: true, status: 405, latency_ms: 150, slis: [] }),
+  ];
+}
+
+test("one cause, one page: a 20-minute Pages outage opens 1 issue and posts at most 2 chat messages", () => {
+  // 09:00 to 09:20 down (4 runs), then up.
+  const runs = [...Array.from({ length: 4 }, () => pagesOutage(true)), ...Array.from({ length: 6 }, () => pagesOutage(false))];
+  const out = replay(runs);
+  assert.equal(kinds(out.actions, "open-issue").length, 1);
+  const chat = kinds(out.actions, "webhook");
+  assert.ok(chat.length <= 2, chat.map((action) => action.text).join(" | "));
+  assert.match(chat[0].text, /^\[sev1\] New: Website is down/);
+  assert.match(chat.at(-1).text, /Resolved/);
+  const body = kinds(out.actions, "open-issue")[0].body;
+  assert.match(body, /\*\*Also affected:\*\* Property search, Intelligence calculators, Inquiry form\./);
+  const site = out.doc.recent.find((item) => item.key === "public-site");
+  assert.ok(site.updates.some((update) => update.text.startsWith("Also affected: Property search.")));
+  // At 09:15 every check passed, so the 15-minute reminder was skipped.
+  assert.equal(kinds(out.actions, "comment").filter((action) => action.escalation).length, 0);
+  assert.equal(out.doc.open.length, 0);
+});
+
+test("a folded part gets its own incident only if it still fails once the website recovers", () => {
+  const site = (ok) => makeCheck({ id: "public-home", name: "Home page", component: "public-site", severity: "sev1", ok, status: ok ? 200 : 522, latency_ms: 100, slis: [] });
+  const search = (ok) => makeCheck({ id: "search-page", name: "Property search page", component: "search", severity: "sev2", ok, status: ok ? 200 : 500, latency_ms: 100, slis: [] });
+  const out = replay([[site(false), search(false)], [site(false), search(false)], [site(true), search(false)], [site(true), search(false)], [site(true), search(false)], [site(true), search(false)]]);
+  assert.equal(out.steps[1].incidents.open.map((item) => item.key).join(), "public-site");
+  assert.deepEqual(out.doc.open.map((item) => item.key), ["search"], "search still failing after the website closed");
+  assert.equal(kinds(out.actions, "open-issue").length, 2);
+  // A sev3 website incident does not fold anything.
+  const terms = (ok) => makeCheck({ id: "public-page-terms", name: "Terms", component: "public-site", severity: "sev3", ok, status: ok ? 200 : 500, latency_ms: 100, slis: [] });
+  const minor = replay(Array.from({ length: 4 }, () => [terms(false), search(false)]));
+  assert.deepEqual(minor.doc.open.map((item) => item.key).sort(), ["public-site", "search"]);
+});
+
+test("a reminder is skipped while every check of the incident passes, and comes when it fails again", () => {
+  const runs = [[home(false)], [home(false)], [home(false)], [home(false)], [home(true)], [home(false)]];
+  const out = replay(runs);
+  const reminders = kinds(out.actions, "comment").filter((action) => action.escalation);
+  // Opened at 00:05; 15 minutes later (00:20) the home page passed: skipped. At 00:25 it failed again: sent.
+  assert.deepEqual(reminders.map((action) => action.step), [5]);
+  // One good run in the middle does not lower a sev1 to "on and off".
+  assert.equal(out.doc.open[0].severity, "sev1");
+  assert.equal(out.doc.open[0].title, "Website is down");
+});
+
+test("the flapping home page that first burns the budget yields one issue", () => {
+  const sloDoc = (at, alerts) => ({ schema: 1, generated_at: new Date(at).toISOString(), slos: [{ id: "public-availability", name: "Website availability" }], burn_alerts: alerts });
+  const burn = { slo: "public-availability", component: "public-site", severity: "sev2", window: "1h", text: "Website availability is burning fast.", checks: ["public-home"] };
+  // Fails one run in three for an hour (as in the SLO engineer's replay), then steady.
+  const runs = Array.from({ length: 24 }, (_, i) => [home(!(i < 12 && i % 3 === 0))]);
+  const out = replay(runs, { slo: (at, i) => sloDoc(at, i >= 6 && i < 14 ? [burn] : []) });
+  const opened = out.actions.filter((action) => action.kind === "open-issue" || action.kind === "reopen-issue");
+  assert.equal(opened.length, 1, opened.map((action) => action.key).join());
+  assert.equal(kinds(out.actions, "close-issue").length <= 1, true);
 });

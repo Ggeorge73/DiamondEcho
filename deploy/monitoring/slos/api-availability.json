@@ -1,5 +1,5 @@
 {
-  "displayName": "API availability, real requests: 99.5% not answered with a 5xx over 28 days (proposed, not accepted)",
+  "displayName": "API availability, real requests: 99.5% not answered with a 5xx over 28 days",
   "goal": 0.995,
   "rollingPeriod": "2419200s",
   "serviceLevelIndicator": {
@@ -13,6 +13,6 @@
   "userLabels": {
     "sli": "api-availability",
     "view": "real-requests",
-    "accepted": "false"
+    "status": "proposed"
   }
 }

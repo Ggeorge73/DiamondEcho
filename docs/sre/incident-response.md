@@ -24,14 +24,17 @@ Keep this open during an incident. Times in the incident issue are in UTC.
    This is the one production change that does not need a separate decision.
 5. **Tell visitors** if it will last more than a few minutes. The status page
    already shows the incident; add a comment whose first line starts with
-   `Status:` (wording below). It appears on the status page within about 15
-   minutes.
+   `Status:` (wording below). It appears on the status page within about 25
+   minutes: up to 15 for the monitor to read it, and up to about 10 for
+   GitHub Pages to serve the new page.
 6. **Ask for help.** Ask the `sre-lead` agent to diagnose and prepare a fix.
    For anything that looks like an attack or a leak, also ask
    `security-lead`.
 7. **Keep the timeline.** One comment per decision or finding.
-8. **Confirm it is over.** The monitor closes the issue after 15 minutes of
-   passing checks. Look again as a visitor.
+8. **Confirm it is over.** The monitor closes the issue once the failing
+   checks pass 3 runs in a row: about 15 minutes for the 5-minute checks
+   (pages, API, form), about 3 hours for the hourly ones (certificates, DNS,
+   domain). Look again as a visitor.
 9. **Review.** For a sev1, or a sev2 over an hour or touching inquiries,
    open a postmortem within 5 business days
    ([postmortem-template.md](postmortem-template.md)).
@@ -143,10 +146,17 @@ data.
 
 **Human updates** go on the monitor's incident issue as a comment whose
 first line starts with `Status:`. The monitor copies that one line (up to 280
-characters, without markup) onto the status page within about 15 minutes:
-it reads comments every run while a sev1 or sev2 is unacknowledged, and
-otherwise at most every 15 minutes. Only the first line is published;
-nothing else from the issue is. A person-reported incident (made with the
+characters, without markup) onto the status page. It reads comments every
+run while a sev1 or sev2 is unacknowledged, and otherwise at most every 15
+minutes; GitHub Pages then takes up to about 10 minutes to serve the change.
+So allow about 25 minutes. Only the first line is published; nothing else
+from the issue is.
+
+After the monitor closes the issue it still reads `Status:` lines for 24
+hours, so post the closing "Resolved" update **within 24 hours of the
+close**. If a person closes the issue by hand, post the update **before**
+closing it. A line posted later never reaches the page. A person-reported
+incident (made with the
 issue template) is not on the status page, so post its `Status:` lines on a
 monitor issue for the same part if there is one.
 
@@ -172,11 +182,14 @@ details of an attack, or a time the problem "will be fixed by".
 ## Resolve
 
 A monitor incident resolves itself once every failing check has passed 3
-runs in a row (15 minutes); the issue closes with the duration. Before
-leaving it:
+runs in a row (about 15 minutes for the 5-minute checks, about 3 hours for
+the hourly certificate, DNS and domain checks); the issue closes with the
+duration. Before leaving it:
 
 - Look at the site again as a visitor.
-- Post the "Resolved" status comment.
+- Post the "Resolved" status comment within 24 hours of the close (before
+  closing, if you close the issue yourself), or it will not reach the status
+  page.
 - Undo anything temporary from the runbook's "Afterwards" list (a pinned
   revision, a queue switched off, a silenced alert).
 

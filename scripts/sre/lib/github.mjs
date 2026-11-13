@@ -110,7 +110,9 @@ export function githubClient({
     // started failing again. They follow the same rules: dry run without a
     // token.
 
-    // Who commented, when, and the first line only (at most 300 characters).
+    // Who commented, their standing in the repository (GitHub's
+    // author_association: OWNER, MEMBER, COLLABORATOR, CONTRIBUTOR, NONE …),
+    // when, and the first line only (at most 300 characters).
     // The engine needs that line for two things: "ack" / "Acknowledged" at
     // its start acknowledges, and "Status:" at its start is a public update
     // a person wrote for the status page. The rest of a comment is never
@@ -121,6 +123,7 @@ export function githubClient({
       return rows.map((row) => ({
         login: row.user?.login || "",
         bot: row.user?.type === "Bot" || /\[bot\]$/.test(row.user?.login || ""),
+        author_association: typeof row.author_association === "string" ? row.author_association : "NONE",
         created_at: row.created_at,
         first_line: String(row.body ?? "").trim().split(/\r?\n/, 1)[0].trim().slice(0, 300),
       }));

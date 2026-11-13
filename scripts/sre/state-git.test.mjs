@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
 
 const exec = promisify(execFile);
@@ -147,6 +148,27 @@ test("refuses main, a non-empty folder, an unreachable remote and a foreign fold
     assert.match(foreign.stderr, /not sre-status|not a checkout/);
     assert.equal(await t.git("--git-dir", t.origin, "rev-parse", "main"), t.mainBefore);
   } finally {
+    await t.cleanup();
+  }
+});
+
+test("with a token, exactly one Authorization header is sent even if the checkout stored its own", async () => {
+  const t = await setup();
+  const seen = [];
+  const server = createServer((req, res) => { seen.push(req.headersDistinct.authorization ?? []); res.writeHead(404); res.end(); });
+  await new Promise((done) => server.listen(0, "127.0.0.1", done));
+  try {
+    const prefix = `http://127.0.0.1:${server.address().port}/`;
+    // What actions/checkout leaves behind when it persists credentials.
+    await exec("git", ["-C", t.repo, "config", `http.${prefix}.extraheader`, "AUTHORIZATION: basic b2xkOm9sZA=="], { env: { ...process.env, ...GIT_ENV } });
+    const out = await t.sh(["checkout", path.join(t.root, "state")], { GITHUB_TOKEN: "tok-123", SRE_STATE_REMOTE: `${prefix}x.git`, SRE_STATE_AUTH_PREFIX: prefix }).catch((error) => error);
+    assert.equal(out.code, 2); // the fake server has no repository
+    assert.ok(seen.length >= 1);
+    const expected = `AUTHORIZATION: basic ${Buffer.from("x-access-token:tok-123").toString("base64")}`.split(": ")[1];
+    for (const headers of seen) assert.deepEqual(headers, [expected]);
+    assert.ok(!`${out.stdout}${out.stderr}`.includes("tok-123"), "the token is never printed");
+  } finally {
+    server.close();
     await t.cleanup();
   }
 });

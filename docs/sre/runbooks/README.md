@@ -18,11 +18,11 @@ see below.
 | The staff site at staff.diamondecho.com does not load | [site-down.md](site-down.md) |
 | "This site can't be reached", "server IP address could not be found" | [dns-problem.md](dns-problem.md) |
 | **Mail to realtor@diamondecho.com bounces or stops** | [dns-problem.md](dns-problem.md), then [domain-expiry.md](domain-expiry.md) |
-| A Cloudflare-branded error or "checking your browser" page | [cloudflare-outage.md](cloudflare-outage.md) |
+| A Cloudflare-branded error or "checking your browser" page, or the incident "Cloudflare is refusing the monitor" | [cloudflare-outage.md](cloudflare-outage.md) |
 | "Your connection is not private", a certificate warning | [tls-certificate.md](tls-certificate.md) |
 | The domain is expiring, has expired, a lock is off, or it is being moved | [domain-expiry.md](domain-expiry.md) |
 | **Something broke right after a merge or an API deploy** | [bad-deploy.md](bad-deploy.md) |
-| **The form fails to send**, or Deal Studio says "The analysis could not be completed" | [api-down.md](api-down.md) |
+| **The form fails to send**, or Deal Studio says "The analysis service could not be reached, so nothing was calculated" | [api-down.md](api-down.md) |
 | The form or Deal Studio is slow, or says it is busy | [api-slow-or-saturated.md](api-slow-or-saturated.md) |
 | The form errors and staff cannot open the queue, while the API's health page is fine | [database-unavailable.md](database-unavailable.md) |
 | **A visitor says they sent a request, but it is not in the queue or no alert email came** | [inquiry-not-delivered.md](inquiry-not-delivered.md) |
@@ -47,7 +47,7 @@ DNS, then Cloudflare, then a recent deploy, then the part itself.
 | `dns` (DNS) | [dns-problem.md](dns-problem.md) |
 | `tls` (TLS certificates) | [tls-certificate.md](tls-certificate.md) |
 | `domain` (Domain registration) | [domain-expiry.md](domain-expiry.md) |
-| Monitoring | [monitoring-is-blind.md](monitoring-is-blind.md) |
+| Monitoring | [monitoring-is-blind.md](monitoring-is-blind.md); [cloudflare-outage.md](cloudflare-outage.md) first when the title is "Cloudflare is refusing the monitor" |
 | Any part, within two hours of a deploy | [bad-deploy.md](bad-deploy.md) first |
 
 ## All runbooks

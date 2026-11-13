@@ -118,7 +118,12 @@ test("the Cloud Monitoring SLO files agree with the configuration", async () => 
     assert.equal(doc.goal, slo.target, `${name} goal`);
     assert.equal(doc.rollingPeriod, `${WINDOW_DAYS * 86400}s`);
     assert.equal(doc.userLabels.sli, id);
-    assert.equal(doc.userLabels.accepted, String(slo.accepted));
+    // apply.sh matches an SLO by userLabels.sli, so the name may change (a
+    // new target) without a second SLO being created. Whether the target is
+    // accepted lives in a label, not in the name.
+    assert.equal(doc.userLabels.status, slo.accepted ? "accepted" : "proposed");
+    assert.doesNotMatch(doc.displayName, /proposed|accepted/i);
+    for (const [key, value] of Object.entries(doc.userLabels)) assert.match(`${key}=${value}`, /^[a-z][a-z0-9_-]{0,62}=[a-z0-9_-]{0,63}$/, "Cloud Monitoring label rules");
     // The only placeholder is the project id; apply.sh fills it in.
     assert.deepEqual([...new Set(text.match(/\$\{[^}]*\}/g))], ["${PROJECT_ID}"]);
     assert.match(text, /resource\.labels\.service_name=\\"diamondecho-api\\"/);

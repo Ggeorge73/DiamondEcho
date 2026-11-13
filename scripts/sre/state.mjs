@@ -21,7 +21,7 @@ import { mkdir, readFile, readdir, rename, unlink, writeFile, appendFile } from 
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { COMPONENTS, SCHEMA_VERSION, runProblems } from "./lib/schema.mjs";
-import { OPEN_AFTER, FORGET_CHECK_DAYS, isBlindRun, staleLimitMinutes } from "./alert-policy.mjs";
+import { OPEN_AFTER, FORGET_CHECK_DAYS, isBlindRun, measuredChecks, staleLimitMinutes } from "./alert-policy.mjs";
 
 const MINUTE = 60_000;
 const DAY = 24 * 60 * MINUTE;
@@ -112,7 +112,12 @@ export function recordRun({ status: before, uptime: uptimeBefore, run, now }) {
 
   const at = run.finished_at;
   const blind = isBlindRun(run);
-  status.last_runs[run.suite] = { at: run.started_at, region: run.vantage?.region ?? null, ...(blind ? { blind: true } : {}) };
+  // When Cloudflare refused the monitor (alert-policy.mjs cloudflareRefusal),
+  // the refused checks measured the monitor's access, not the site: they are
+  // left out of streaks, history results and uptime, like a blind run.
+  const measured = blind ? [] : measuredChecks(run);
+  const refused = blind ? 0 : run.checks.length - measured.length;
+  status.last_runs[run.suite] = { at: run.started_at, region: run.vantage?.region ?? null, ...(blind ? { blind: true } : {}), ...(refused ? { cloudflare_refused: refused } : {}) };
 
   // One compact history line. A blind run (the monitor reached nothing, not
   // even outside services) measured nothing about the site: it is kept as a
@@ -123,10 +128,11 @@ export function recordRun({ status: before, uptime: uptimeBefore, run, now }) {
     line: { t: run.started_at, suite: run.suite, region: run.vantage?.region ?? null, c: {} },
   };
   if (blind) history.line.blind = run.checks.length;
+  if (refused) history.line.refused = refused;
 
   const deploys = [];
   if (!blind) {
-    for (const check of run.checks) {
+    for (const check of measured) {
       history.line.c[check.id] = [check.ok ? 1 : 0, check.latency_ms ?? null, check.slis];
       const previous = isObject(status.checks[check.id]) ? status.checks[check.id] : null;
       const observedBefore = isObject(previous?.observed) ? previous.observed : {};
@@ -165,8 +171,8 @@ export function recordRun({ status: before, uptime: uptimeBefore, run, now }) {
     // Day-by-day bars: a run counts for every component it looked at, and as
     // failed for a component when one of its sev1 or sev2 checks failed.
     const day = dayOf(run.started_at);
-    for (const component of new Set(run.checks.map((check) => check.component))) {
-      const mine = run.checks.filter((check) => check.component === component);
+    for (const component of new Set(measured.map((check) => check.component))) {
+      const mine = measured.filter((check) => check.component === component);
       const failed = mine.some((check) => !check.ok && (check.severity === "sev1" || check.severity === "sev2"));
       const days = isObject(uptime[component]) ? uptime[component] : (uptime[component] = {});
       const entry = isObject(days[day]) ? days[day] : (days[day] = { runs: 0, failed: 0 });

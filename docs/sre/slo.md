@@ -22,7 +22,7 @@ the end of this page.
 | Website speed | That page's HTML arrives in under 1.5 seconds | 99% | 1 probe in 100 may be slow |
 | API availability | The API's health, identity and deal-analysis routes answer correctly | 99.5% | about 3 hours 22 minutes |
 | API speed | The API answers in under 1 second | 95% | 1 probe in 20 may be slow |
-| Calculators | The Deal Studio, mortgage simulator and seller net sheet pages load | 99.5% | about 3 hours 22 minutes |
+| Calculators | The Deal Studio, mortgage simulator and seller net sheet pages load (Deal Studio's analysis itself counts under API availability) | 99.5% | about 3 hours 22 minutes |
 | Inquiry form | The contact page loads and the inquiry route is open (nothing is ever submitted) | 99.5% | about 3 hours 22 minutes |
 | Staff site | The staff sign-in page loads with its protections and the staff API asks for sign-in | 99.5% | about 3 hours 22 minutes |
 
@@ -93,8 +93,19 @@ before the website figures are trusted. It is listed under blind spots below.
   (us-east1), up to three copies, each taking one request at a time, and
   deployed by hand. A bad deploy, a Google Cloud problem in us-east1 or a
   burst that fills all three copies takes it down. 99.5% (about 3 h 22 min a
-  month) is honest for that. The calculators fall back to the browser when
-  the API is down, so most visitors would not notice a short API outage.
+  month) is what this setup can honestly be expected to deliver; a stricter
+  number would only be met by luck.
+  An API outage is felt, though. The inquiry form cannot send, the staff queue
+  cannot load, and Deal Studio cannot produce its analysis: it shows "The
+  analysis service could not be reached, so nothing was calculated" (or
+  "Request failed with status code …"). Only its Monte Carlo risk run, the
+  mortgage simulator and the seller net sheet work fully in the browser. So
+  the 3 h 22 min are lost inquiries and failed analyses, not an invisible
+  blip. 99.5% is still the right proposal. The causes above are what limit
+  it, and raising it means paying to remove them (next section), not
+  choosing a bigger number. If lost inquiries in that budget are not
+  acceptable, the answer is the always-on copy and the other steps in the
+  next section.
 - **API speed, 1 s, 95%.** A warm API answered in 0.12 to 0.29 s; a cold
   start took 7.7 s. The one-second line therefore separates "warm" from
   "cold", and this SLI mostly measures how often someone meets a cold start.
@@ -140,7 +151,7 @@ deciding.
 | Website speed | Little to gain: the pages are already prebuilt and cached | none |
 | API availability to 99.9% | At least one copy always running, more than three copies at peak, automatic rollback switched on, and later a second region with a load balancer in front | One always-on instance is billed every hour, idle or not; a load balancer has a standing monthly charge; a second region doubles the service and needs the database question answered first |
 | API speed to 99% | Keeping one copy always warm (`min-instances 1`) removes most cold starts; faster start-up helps a little | The same always-on charge as above. The $25 budget alert would likely need raising |
-| Calculators | Already fall back to the browser. Raising it means raising the website target | as the website |
+| Calculators | The pages: as the website. Deal Studio's analysis needs the API, so raising what a Deal Studio visitor gets means raising API availability | as the website, and as the API |
 | Inquiry form | Higher API availability, and a test of real delivery to the staff queue (which this SLO does not measure) | as the API, plus a safe test path agreed with Gbenga |
 | Staff site | Not worth it for one user | none |
 
@@ -181,23 +192,20 @@ Off until then. It needs a person signed in to Google Cloud with permission
 to edit monitoring in `diamondecho-prod` (the project owner has it). It
 creates no alert and changes nothing the site uses. It uses only Cloud
 Run's built-in metrics; check the billing page afterwards to confirm nothing
-new is charged. `deploy/monitoring/apply.sh` (observability) is meant to do
-this; until it does, these are the exact steps in Cloud Shell from a checkout
-of the repository:
+new is charged. `deploy/monitoring/apply.sh` (observability) applies the
+`slos/` folder together with the rest of `deploy/monitoring/`. It matches
+each SLO by its `sli` label, so a later change of target updates it rather
+than adding a second one. In Cloud Shell, from a checkout of the repository,
+first print the plan, which changes nothing, then apply:
 
 ```bash
-PROJECT_ID=diamondecho-prod
-API=https://monitoring.googleapis.com/v3/projects/$PROJECT_ID
-curl -sS -X POST -H "Authorization: Bearer $(gcloud auth print-access-token)" \
-  -H "Content-Type: application/json" \
-  "$API/services?serviceId=diamondecho-api" --data @deploy/monitoring/slos/service.json
-for id in api-availability api-latency; do
-  sed "s/\${PROJECT_ID}/$PROJECT_ID/g" "deploy/monitoring/slos/$id.json" |
-    curl -sS -X POST -H "Authorization: Bearer $(gcloud auth print-access-token)" \
-      -H "Content-Type: application/json" \
-      "$API/services/diamondecho-api/serviceLevelObjectives?serviceLevelObjectiveId=$id" --data @-
-done
+PROJECT_ID=diamondecho-prod NOTIFICATION_CHANNEL=… bash deploy/monitoring/apply.sh
+PROJECT_ID=diamondecho-prod NOTIFICATION_CHANNEL=… bash deploy/monitoring/apply.sh --apply
 ```
+
+`NOTIFICATION_CHANNEL` is needed for the alert policies in the same folder;
+`docs/sre/observability.md` explains it. Read the plan before applying: it
+covers every monitoring definition, not only these SLOs.
 
 The files follow the Cloud Monitoring API's published shape but have not
 been sent to it yet: the SRE team has no Google Cloud sign-in. The first
@@ -246,8 +254,11 @@ missed.
 - **The inquiry SLO never sends an inquiry** (that would use up real
   visitors' allowance and store a fake request). Delivery to the staff queue
   and the arrival email are not measured here.
-- **Property search is not in any SLO.** It is the Georgia MLS frame, a third
-  party; the search check watches it as a dependency only.
+- **Property search results are not in any SLO.** The `/search` page itself
+  counts toward website availability and speed. The Georgia MLS frame inside
+  it (a third party) is watched by its own check as a dependency only, so a
+  search that loads its page but shows no listings is not counted against
+  any target.
 - **Capacity refusals.** When all three copies are busy, Cloud Run refuses
   extra requests with 429. The real-request SLO counts only 5xx as failures,
   so those refusals are not counted (the API also answers 429 on purpose
@@ -266,7 +277,10 @@ missed.
 3. Gbenga accepts it, or not. For an accepted target the pull request sets
    `accepted: true`, `accepted_on` (the date) and `accepted_record` (the Jira
    key or link where he said so), and adds a row below. The tests refuse
-   `accepted: true` without the other two.
+   `accepted: true` without the other two. If the SLO also has a
+   real-request file in `deploy/monitoring/slos/`, the same pull request sets
+   its `goal` and its `status` label to `accepted`; the tests check that the
+   file and the configuration agree.
 4. Gbenga merges it. Only he merges.
 
 ## Accepted targets

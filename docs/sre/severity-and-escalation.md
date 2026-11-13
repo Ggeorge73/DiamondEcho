@@ -33,14 +33,14 @@ marked "declared by a person".
 | --- | --- | --- | --- | --- |
 | Website (`public-site`) | Home page or the site script does not load (`public-home`, `public-asset-js`) | Advisory or About page, the stylesheet, or `www` redirect broken | Podcast, Privacy or Terms page broken; unknown addresses no longer answer "page not found" | |
 | Property search (`search`) | | The `/search` page itself does not load (`search-page`) | The Georgia MLS search inside it is down (`search-idx-provider`): a third party, we can only tell visitors and wait | |
-| Intelligence calculators (`calculators`) | | Deal Studio, mortgage simulator or seller net sheet page does not load | Deal Studio's analysis service fails or gives figures that differ from the reference case (`calculators-api-analyze`). Visitors then see "The analysis could not be completed", or those figures; Deal Studio's risk simulation, the mortgage simulator and the seller net sheet run in the browser and still work. (With the whole API down, the API incident is the sev2.) | |
+| Intelligence calculators (`calculators`) | | Deal Studio, mortgage simulator or seller net sheet page does not load | Deal Studio's analysis service fails or gives figures that differ from the reference case (`calculators-api-analyze`). Visitors then see "The analysis service could not be reached, so nothing was calculated" (or "Request failed with status code …"), or those figures; Deal Studio's risk simulation, the mortgage simulator and the seller net sheet run in the browser and still work. (With the whole API down, the API incident is the sev2.) | |
 | Inquiry form (`inquiry`) | Declared by a person: requests were confirmed on screen but are missing from the staff queue | The form cannot send (`inquiry-route`, `inquiry-preflight`) or the queue is switched off (`inquiry-queue`): the visitor sees an error and nothing is stored | Declared by a person: requests arrive but the arrival email to realtor@diamondecho.com does not | |
 | API (`api`) | | Not answering, or wrong build (`api-health`, `api-identity`, `api-cors-allowed`) | Answers calls from other sites, or publishes its route list (`api-cors-refused`, `api-docs-off`) | |
 | Staff site (`staff-site`) | | Staff cannot open the queue, or the staff API stops asking for sign-in (`staff-home`, `staff-api-auth`) | | |
 | DNS (`dns`) | `diamondecho.com` does not resolve (`dns-apex-resolves`) | Mail records (MX, SPF) wrong, staff address or nameservers wrong | Microsoft 365 or DMARC records wrong | Other records carried over from GoDaddy changed |
 | TLS certificates (`tls`) | A certificate has expired, or expires in under 2 days | Expires in under 7 days; or a connection older than TLS 1.2 | Expires in under 21 days and not yet renewed | |
 | Domain registration (`domain`) | Expired, expires in under 7 days, on hold, or no longer registered | Expires in under 30 days; a transfer to another registrar is under way, or the registry names a different registrar (refuse it at GoDaddy at once if nobody started it) | Expires in under 60 days, or the transfer lock is off | |
-| Monitoring | | | The monitor cannot see the site, or a suite has not run (see "When the monitor itself fails") | |
+| Monitoring | | Cloudflare is refusing the monitor: every page it serves turns the monitor away while nothing else fails (see "When the monitor itself fails") | The monitor cannot see the site, or a suite has not run | |
 | Error budget | | A fast burn (1-hour window): failing so often that the 28-day allowance would be gone in about two days ([error-budget-policy.md](error-budget-policy.md)) | A medium burn (6-hour window) | A slow burn (3-day window): opens no issue; shown in `slo.json` and the weekly report only |
 
 A suspected attack or leak is handled with the security playbook as well,
@@ -81,8 +81,9 @@ All of this is automatic, in `scripts/sre/alert-policy.mjs`:
 - **One incident per part.** Failures in the same component share one
   incident and one GitHub issue. Its severity is the worst of its failing
   checks, and it moves up or down as they change.
-- **Resolving.** Every failing check must pass **3 runs in a row** (15
-  minutes). The issue then closes itself.
+- **Resolving.** Every failing check must pass **3 runs in a row**: about
+  15 minutes for the 5-minute checks, about 3 hours for the hourly
+  certificate, DNS and domain checks. The issue then closes itself.
 - **Coming back.** A component that fails again within 60 minutes of closing
   reopens the same issue instead of starting a new one.
 - **Error budget.** A fast (sev2) or medium (sev3) burn alert from
@@ -103,7 +104,7 @@ phones to say the form ate their request): open an issue with the
 | GitHub's email about that issue | Yes | Yes | Yes | Yes | Arrives only if Gbenga **watches** the repository with issues included (GitHub, the repository, Watch, Custom, Issues) and has email notifications on in his own GitHub settings. Nobody else can check this for him. |
 | Chat message (`SRE_ALERT_WEBHOOK_URL`) | Yes | Yes | No | No | Optional; a Slack or Teams incoming webhook Gbenga sets as a repository secret. New, worse, reminders and resolved. |
 | Mention of `SRE_OWNER` on reminders | Yes | Yes | No | No | A repository variable with Gbenga's GitHub name. A mention is a stronger notification than a watched issue. |
-| Public status page | Yes | Yes | Yes | Yes | Updated every run from `incidents.json`. Shows the title, severity in words, the engine's update lines, and a person's `Status:` comments (within about 15 minutes). |
+| Public status page | Yes | Yes | Yes | Yes | Updated every run from `incidents.json`. Shows the title, severity in words, the engine's update lines, and a person's `Status:` comments (within about 25 minutes: up to 15 for the monitor, about 10 for GitHub Pages). |
 | Cloud Monitoring email to realtor@diamondecho.com | | | | | **Not an outage alert.** It announces each new inquiry. Its silence proves nothing. It is described in [DE-31](../de31-inquiry-routing.md). |
 | Google Cloud budget email ($25) | | | | | A cost notice, not an outage alert. A surprise one may mean abuse: see [traffic-spike-or-abuse.md](runbooks/traffic-spike-or-abuse.md). |
 
@@ -126,9 +127,17 @@ severity:
 
 A comment whose first line starts with `ack` or `Acknowledged`, or the
 `acknowledged` label, stops the reminders. Other comments (questions, notes,
-`Status:` updates) do not. The `sre-silenced` label stops all further comments and chat
-messages; the incident still shows on the status page and still closes by
-itself. A rise in severity restarts the ladder.
+`Status:` updates) do not.
+
+The `sre-silenced` label stops the engine's updates, reminders and chat
+messages for that incident. It still shows on the status page, and when it
+resolves the engine still posts its one closing comment and closes the
+issue (only closing the issue by hand stops that comment too). If the same
+part fails again within 60 minutes, the reopened incident starts fresh: it
+is no longer silenced or acknowledged, and it comments and messages again.
+
+A change of severity, up or down, restarts the ladder at reminder 1, unless
+the incident is already acknowledged.
 
 What keeps happening while nobody answers:
 
@@ -169,10 +178,22 @@ practice:
 
 ## When the monitor itself fails
 
-- **It reached nothing** for 2 runs in a row (not even the Georgia MLS search
-  or public DNS): the monitor's own network failed, not the site. It opens a
-  sev3 "Monitoring cannot see the site" incident. The status page says the
-  latest check measured nothing.
+- **It reached nothing** for 2 runs in a row, not even the outside services
+  (the Georgia MLS search, the public DNS resolvers, the domain registry):
+  the monitor's own network failed, not the site. Only the hourly checks
+  include outside services, so only they can show this. It opens a sev3
+  "Monitoring cannot see the site" incident, and the status page says a
+  recent check measured nothing. When the 5-minute checks reach nothing,
+  that counts against the site as usual.
+- **Cloudflare turns the monitor away**: in 2 runs in a row, every failing
+  check of the parts Cloudflare serves (website, search page, calculator
+  pages, contact page, staff site) was refused by Cloudflare, and nothing
+  else failed. Those checks are left out, so they cause no outage of their
+  own. Instead one sev2 "Cloudflare is refusing the monitor" incident opens,
+  pointing at [cloudflare-outage.md](runbooks/cloudflare-outage.md): visitors
+  may be blocked too. The status page says a recent check was turned away.
+  If any of those checks failed for another reason, the normal rules
+  apply.
 - **A suite has not run** for 45 minutes (5-minute checks) or 3 hours (hourly
   checks): same sev3 incident. GitHub sometimes starts scheduled runs late.
 - **The whole GitHub workflow stops** (paused, broken, or GitHub down): no

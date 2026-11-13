@@ -325,14 +325,51 @@ test("an unknown severity never becomes a class name", () => {
   assert.match(html.incidents, /<article class="incident incident--open">/);
 });
 
-test("a blind latest run is said plainly, and only then", () => {
-  assert.ok(!page(fixture("incident")).view.banner.lines.some((line) => /could not reach anything/.test(line)));
-  const loaded = fixture("incident");
-  loaded.status.data.last_runs.fast.blind = true;
-  const { view } = page(loaded);
-  assert.equal(view.banner.tone, "outage", "the states still come from earlier checks");
-  assert.match(view.banner.lines.at(-1), /^The latest automatic check could not reach anything, including outside services/);
+test("a blind run in either suite is said plainly, and only then", () => {
+  assert.ok(!page(fixture("incident")).view.banner.lines.some((line) => /could not reach anything|turned away/.test(line)));
+  for (const suite of ["fast", "slow"]) {
+    const loaded = fixture("incident");
+    loaded.status.data.last_runs[suite] = { ...(loaded.status.data.last_runs[suite] ?? { at: "2026-11-12T15:01:00.000Z" }), blind: true };
+    const { view } = page(loaded);
+    assert.equal(view.banner.tone, "outage", "the states still come from earlier checks");
+    assert.match(view.banner.lines.at(-1), /^A recent automatic check could not reach anything, including outside services/, suite);
+  }
 });
+
+test("checks Cloudflare turned away are said plainly, and a zero count is not", () => {
+  const loaded = fixture("healthy");
+  loaded.status.data.last_runs.fast.cloudflare_refused = 0;
+  assert.ok(!page(loaded).view.banner.lines.some((line) => /turned away/.test(line)));
+  loaded.status.data.last_runs.fast.cloudflare_refused = 7;
+  assert.match(page(loaded).view.banner.lines.at(-1), /^A recent automatic check was turned away before it reached some pages/);
+  loaded.status.data.last_runs.fast.cloudflare_refused = "7";
+  assert.ok(!page(loaded).view.banner.lines.some((line) => /turned away/.test(line)), "only a whole number counts");
+});
+
+test("an open incident is never hidden behind an all-clear banner", () => {
+  // Every part operational, as with a failure that comes and goes or a
+  // spent error budget, but an incident is open.
+  const loaded = fixture("healthy");
+  assert.equal(page(loaded).view.banner.title, "All services are working");
+  loaded.incidents.data.open = [{
+    key: "budget:public-availability", component: "public-site", severity: "sev2",
+    title: "TEST DATA: Website availability: failing more often than its target allows",
+    opened_at: "2026-11-12T14:00:00.000Z", updates: [],
+  }];
+  let { view, html } = page(loaded);
+  assert.equal(view.banner.title, "Most services are working");
+  assert.equal(view.banner.tone, "degraded");
+  assert.equal(view.banner.lines[0], "1 open incident: TEST DATA: Website availability: failing more often than its target allows.");
+  assert.doesNotMatch(html.banner, /All services are working/);
+  loaded.incidents.data.open.push({ key: "monitoring", component: "monitoring", severity: "sev3", title: "TEST DATA: Monitoring cannot see the site", opened_at: "2026-11-12T15:00:00.000Z" });
+  ({ view } = page(loaded));
+  assert.match(view.banner.lines[0], /^2 open incidents: /);
+  // When incidents cannot be read, the page does not pretend to know there are none.
+  const broken = fixture("healthy");
+  broken.incidents = { state: "error" };
+  assert.ok(page(broken).view.banner.lines.includes("Incident information could not be loaded."));
+});
+
 
 test("a summary that disagrees with the components cannot read as 'all working'", () => {
   const loaded = fixture("incident");

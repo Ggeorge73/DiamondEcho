@@ -98,7 +98,7 @@ export const SLOS = [
     threshold_ms: null,
     accepted: false,
     severity_cap: "sev2",
-    definition: "A probe of a calculator page (Deal Studio, mortgage simulator, seller net sheet) is good when the page loads with its own content. The calculator pages are served by Cloudflare, not the API, so the API's answer counts toward API availability instead.",
+    definition: "A probe of a calculator page (Deal Studio, mortgage simulator, seller net sheet) is good when the page loads with its own content. The calculator pages are served by Cloudflare, not the API, so the API's answer counts toward API availability instead. Deal Studio's analysis needs the API; the mortgage simulator and seller net sheet run fully in the browser.",
   },
   {
     id: "inquiry-availability",

@@ -187,3 +187,18 @@ test("arguments are checked", () => {
   assert.throws(() => parseArgs(["other"]), /usage/);
   assert.deepEqual(parseArgs(["record", "--run", "r.json", "--state-dir", "d"]), { runFile: "r.json", stateDir: "d" });
 });
+
+test("a run where Cloudflare refused the monitor files only what was measured (no streaks, no SLO, no uptime for the refused checks)", () => {
+  const refusedText = "Cloudflare refused the request (403): a Cloudflare security setting is blocking the monitor.";
+  const page = (id, component) => makeCheck({ id, name: id, component, severity: "sev1", ok: false, status: 403, latency_ms: 90, detail: refusedText, slis: ["public-availability"] });
+  const api = makeCheck({ id: "api-health", name: "API is up", component: "api", severity: "sev2", ok: true, status: 200, latency_ms: 150, slis: ["api-availability"] });
+  const { status, uptime, outputs } = replay([[check(), api], [page("public-home", "public-site"), page("search-page", "search"), api]]);
+  const line = outputs[1].history.line;
+  assert.equal(line.refused, 2);
+  assert.deepEqual(Object.keys(line.c), ["api-health"]);
+  assert.equal(status.checks["public-home"].ok, true, "the last measured result stands");
+  assert.equal(status.checks["public-home"].consecutive_failures, 0);
+  assert.equal(status.last_runs.fast.cloudflare_refused, 2);
+  assert.deepEqual(uptime["public-site"]["2026-11-13"], { runs: 1, failed: 0 });
+  assert.deepEqual(uptime.api["2026-11-13"], { runs: 2, failed: 0 });
+});

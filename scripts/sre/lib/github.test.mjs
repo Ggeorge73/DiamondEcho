@@ -99,13 +99,13 @@ test("comment, close and reopen go to the right place", async () => {
 test("listComments reports who, when and only the first line, and marks bots", async () => {
   const { client } = live([[200, [
     { user: { login: "github-actions[bot]", type: "Bot" }, created_at: "2026-11-13T00:10:00Z", body: "opened" },
-    { user: { login: "someone", type: "User" }, created_at: "2026-11-13T00:20:00Z", body: "  Status: rolling back now\r\nprivate words below" },
+    { user: { login: "someone", type: "User" }, author_association: "OWNER", created_at: "2026-11-13T00:20:00Z", body: "  Status: rolling back now\r\nprivate words below" },
     { user: { login: "long", type: "User" }, created_at: "2026-11-13T00:30:00Z", body: "x".repeat(500) },
   ]]]);
   const comments = await client.listComments(12);
   assert.deepEqual(comments.slice(0, 2), [
-    { login: "github-actions[bot]", bot: true, created_at: "2026-11-13T00:10:00Z", first_line: "opened" },
-    { login: "someone", bot: false, created_at: "2026-11-13T00:20:00Z", first_line: "Status: rolling back now" },
+    { login: "github-actions[bot]", bot: true, author_association: "NONE", created_at: "2026-11-13T00:10:00Z", first_line: "opened" },
+    { login: "someone", bot: false, author_association: "OWNER", created_at: "2026-11-13T00:20:00Z", first_line: "Status: rolling back now" },
   ]);
   assert.equal(comments[2].first_line.length, 300);
   assert.ok(!JSON.stringify(comments).includes("private words"));

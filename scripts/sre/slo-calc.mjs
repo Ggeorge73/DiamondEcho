@@ -29,9 +29,13 @@ const DAY = 24 * 60 * MINUTE;
 const HISTORY_FILE = /^(\d{4}-\d{2}-\d{2})\.jsonl$/;
 const SEVERITIES = ["sev1", "sev2", "sev3", "sev4"];
 
-// One history line becomes { t, suite, region, checks: [{ id, ok, latency_ms, slis }] },
+// One history line becomes { t, suite, region, checks: [{ id, ok, latency_ms, slis }], blind, refused },
 // with `t` in milliseconds. A line that cannot be read returns null: a damaged
 // line must cost one probe, not the whole calculation.
+// `blind` (state.mjs) is how many checks ran in a run that reached nothing at
+// all, not even outside services: such a line has no results and measured
+// nothing about the site. `refused` is how many checks Cloudflare refused to
+// the monitor; they were left out of `c`. Both are 0 when absent.
 export function parseHistoryLine(line) {
   let doc;
   try {
@@ -55,11 +59,14 @@ export function parseHistoryLine(line) {
       slis: Array.isArray(slis) ? slis.filter((sli) => typeof sli === "string") : [],
     });
   }
+  const count = (value) => (Number.isInteger(value) && value > 0 ? value : 0);
   return {
     t,
     suite: typeof doc.suite === "string" ? doc.suite : null,
     region: typeof doc.region === "string" ? doc.region : null,
     checks,
+    blind: count(doc.blind),
+    refused: count(doc.refused),
   };
 }
 
@@ -126,9 +133,11 @@ export async function readHistory(stateDir, { fromMs, toMs }) {
 // `runs` is how many separate probe runs had an event for this SLO and
 // `bad_runs` how many of those saw at least one bad event. The alert rules
 // use the run counts, so that five page checks failing in one run still
-// count as one failed probe.
+// count as one failed probe. `bad_checks` names every check that had a bad
+// event (failed, or slow for a speed SLO), sorted.
 export function tally(runs, slo, fromMs, toMs) {
-  const out = { good: 0, total: 0, runs: 0, bad_runs: 0, first: null, last: null };
+  const out = { good: 0, total: 0, runs: 0, bad_runs: 0, first: null, last: null, bad_checks: [] };
+  const badChecks = new Set();
   for (const run of runs) {
     if (!(run.t > fromMs && run.t <= toMs)) continue;
     let seen = false;
@@ -146,7 +155,10 @@ export function tally(runs, slo, fromMs, toMs) {
       seen = true;
       out.total += 1;
       if (good) out.good += 1;
-      else bad = true;
+      else {
+        bad = true;
+        badChecks.add(check.id);
+      }
     }
     if (!seen) continue;
     out.runs += 1;
@@ -154,6 +166,7 @@ export function tally(runs, slo, fromMs, toMs) {
     if (out.first === null) out.first = run.t;
     out.last = run.t;
   }
+  out.bad_checks = [...badChecks].sort();
   return out;
 }
 
@@ -215,6 +228,12 @@ export function burnAlertFor(runs, slo, now, policy = BURN_POLICY) {
       short_burn_rate: round(shortRate, 2),
       bad_runs: long.bad_runs,
       runs: long.runs,
+      // The checks that were bad in the long window. A check can belong to
+      // another component than the SLO (the /search page counts toward the
+      // website; the deal analysis toward the API), so the alert engine
+      // matches these against an open incident's failing_checks to avoid
+      // opening a second incident for the same failure.
+      checks: long.bad_checks,
       accepted: slo.accepted,
       text: `${slo.name} is using its error budget ${round(longRate, 1)} times faster than the ${percent(slo.target)} target${proposed} allows: ${long.bad_runs} of ${long.runs} probes in the last ${rule.window} were bad.`,
     };

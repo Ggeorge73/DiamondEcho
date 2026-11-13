@@ -66,6 +66,11 @@ const day = (ms) => iso(ms).slice(0, 10);
 const when = (ms) => `${iso(ms).slice(0, 16).replace("T", " ")} UTC`;
 const inPeriod = (ms, period) => ms > period.start && ms <= period.end;
 
+// A run counts as a probe only when it measured something: a blind run (the
+// monitor reached nothing) is filed with no results and is reported on its
+// own, never as coverage.
+const measured = (r) => r.checks.length > 0;
+
 export function minutesText(minutes) {
   const m = Math.round(minutes);
   if (m < 60) return `${m} min`;
@@ -162,7 +167,7 @@ export function sloSection({ runs, period, weekDoc }) {
   const findings = [];
   lines.push("## Service level objectives");
   lines.push("");
-  if (!weekDoc.slos.some((s) => s.total > 0) && !runs.some((r) => inPeriod(r.t, period))) {
+  if (!weekDoc.slos.some((s) => s.total > 0) && !runs.some((r) => measured(r) && inPeriod(r.t, period))) {
     lines.push("No probe results were recorded in the last 28 days, so there is nothing to measure the targets against.");
     lines.push("");
     return { lines, findings };
@@ -369,20 +374,42 @@ export function slowestSection(runs, period, names = {}) {
   return { lines, findings: [] };
 }
 
+export function blindFindings(runs, period) {
+  const week = runs.filter((r) => inPeriod(r.t, period));
+  const blind = week.filter((r) => r.blind > 0 && !measured(r));
+  const refusedRuns = week.filter((r) => r.refused > 0);
+  const refused = refusedRuns.reduce((sum, r) => sum + r.refused, 0);
+  const findings = [];
+  if (blind.length) {
+    findings.push(`${blind.length} monitor run${blind.length === 1 ? " was" : "s were"} blind this week (the first at ${when(blind[0].t)}, the last at ${when(blind[blind.length - 1].t)}): the monitor reached nothing, not even outside services, so ${blind.length === 1 ? "it" : "they"} measured nothing about the site and ${blind.length === 1 ? "is" : "are"} not counted as probes. See \`docs/sre/runbooks/monitoring-is-blind.md\`.`);
+  }
+  if (refused) {
+    findings.push(`Cloudflare refused ${refused} of the monitor's checks in ${refusedRuns.length} run${refusedRuns.length === 1 ? "" : "s"} this week. Those checks measured the monitor's access, not the site, and were left out of the figures.`);
+  }
+  return { blind: blind.length, refusedRuns: refusedRuns.length, refused, findings };
+}
+
 export function gapSection(runs, period) {
   const lines = ["## Monitoring gaps", ""];
   const findings = [];
-  const fast = runs.filter((r) => r.suite === "fast" && inPeriod(r.t, period)).map((r) => r.t);
-  const slow = runs.filter((r) => r.suite === "slow" && inPeriod(r.t, period)).length;
-  const postDeploy = runs.filter((r) => r.suite === "post-deploy" && inPeriod(r.t, period)).length;
+  const fast = runs.filter((r) => r.suite === "fast" && measured(r) && inPeriod(r.t, period)).map((r) => r.t);
+  const slow = runs.filter((r) => r.suite === "slow" && measured(r) && inPeriod(r.t, period)).length;
+  const postDeploy = runs.filter((r) => r.suite === "post-deploy" && measured(r) && inPeriod(r.t, period)).length;
+  const blindRuns = runs.filter((r) => !measured(r) && r.blind > 0 && inPeriod(r.t, period)).length;
+  const blindText = blindRuns ? ` ${blindRuns} more run${blindRuns === 1 ? " was" : "s were"} blind (reached nothing) and ${blindRuns === 1 ? "is" : "are"} not counted.` : "";
   const expected = (PERIOD_DAYS * 24 * 60) / PROBE_INTERVAL_MINUTES;
   if (!fast.length) {
-    lines.push("**No five-minute probe ran this week.** The site was not watched, and every figure above that depends on probes is missing for that reason.", "");
-    findings.push("The monitor did not record a single five-minute run this week. Check the SRE monitor workflow first (`docs/sre/runbooks/monitoring-is-blind.md`).");
+    if (blindRuns) {
+      lines.push(`**No five-minute probe measured anything this week.** All ${blindRuns} run${blindRuns === 1 ? " that happened was" : "s that happened were"} blind (reached nothing). The site was not watched, and every figure above that depends on probes is missing for that reason.`, "");
+      findings.push("Not one five-minute run measured the site this week: every run that happened was blind. Check the monitor's network first (`docs/sre/runbooks/monitoring-is-blind.md`).");
+    } else {
+      lines.push("**No five-minute probe ran this week.** The site was not watched, and every figure above that depends on probes is missing for that reason.", "");
+      findings.push("The monitor did not record a single five-minute run this week. Check the SRE monitor workflow first (`docs/sre/runbooks/monitoring-is-blind.md`).");
+    }
     return { lines, findings, coverage: 0 };
   }
   const coverage = Math.min(1, fast.length / expected);
-  lines.push(`Five-minute probes: ${fast.length} of the ${expected} scheduled (${percent(coverage, 1)}). Hourly probes: ${slow} of ${PERIOD_DAYS * 24}. After-deploy checks: ${postDeploy}.`);
+  lines.push(`Five-minute probes: ${fast.length} of the ${expected} scheduled (${percent(coverage, 1)}). Hourly probes: ${slow} of ${PERIOD_DAYS * 24}. After-deploy checks: ${postDeploy}.${blindText}`);
   // Gaps: from the start of the week to the first run, between runs, and from
   // the last run to the end of the week.
   const points = [period.start, ...fast, period.end];
@@ -433,7 +460,8 @@ export function buildReport(state, generatedAt) {
   const slowest = slowestSection(runs, period, names);
   const gaps = gapSection(runs, period);
 
-  const findings = [...gaps.findings, ...slo.findings, ...incidents.findings, ...fixes.findings];
+  const blind = blindFindings(runs, period);
+  const findings = [...gaps.findings, ...blind.findings, ...slo.findings, ...incidents.findings, ...fixes.findings];
   if (history.skipped) findings.push(`${history.skipped} line${history.skipped === 1 ? "" : "s"} of probe history could not be read and were left out.`);
   if (weekDoc.inputs.unknown_slis.length) findings.push(`The probe history names measures that \`slo.config.mjs\` does not define: ${weekDoc.inputs.unknown_slis.map((s) => code(s)).join(", ")}. A check and the configuration disagree.`);
   const unaccepted = weekDoc.slos.filter((s) => !s.accepted);

@@ -24,6 +24,8 @@
 #                       local bare repository.
 #   SRE_STATUS_BRANCH   default sre-status. main and master are refused.
 #   SRE_STATE_RETRY_SLEEP  seconds between push attempts (default 2; tests use 0).
+#   SRE_STATE_AUTH_PREFIX  tests only: the address the token is sent to when
+#                       the remote is not https://github.com (a local server).
 #
 # Two writers at once. The workflows share one concurrency group, so this is
 # the exception, but a push can still lose a race. Then:
@@ -57,13 +59,18 @@ git check-ref-format --branch "$BRANCH" >/dev/null 2>&1 || fail "'$BRANCH' is no
 
 # Run a git command that talks to the remote. The token goes to git through
 # GIT_CONFIG_* variables, which are not shown in the process list or the log.
+# A checkout made by actions/checkout may still hold its own stored header for
+# github.com; git would then send two Authorization headers, which GitHub may
+# refuse. An empty value first clears any stored one, then ours is added.
 net() {
-  if [ -n "${GITHUB_TOKEN:-}" ] && [[ "$REMOTE" == https://github.com/* ]]; then
+  local prefix=""
+  if [[ "$REMOTE" == https://github.com/* ]]; then prefix="https://github.com/"; else prefix="${SRE_STATE_AUTH_PREFIX:-}"; fi
+  if [ -n "${GITHUB_TOKEN:-}" ] && [ -n "$prefix" ]; then
     local auth
     auth="$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 | tr -d '\n')"
-    GIT_TERMINAL_PROMPT=0 GIT_CONFIG_COUNT=1 \
-      GIT_CONFIG_KEY_0="http.https://github.com/.extraheader" \
-      GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $auth" \
+    GIT_TERMINAL_PROMPT=0 GIT_CONFIG_COUNT=2 \
+      GIT_CONFIG_KEY_0="http.${prefix}.extraheader" GIT_CONFIG_VALUE_0="" \
+      GIT_CONFIG_KEY_1="http.${prefix}.extraheader" GIT_CONFIG_VALUE_1="AUTHORIZATION: basic $auth" \
       git "$@"
   else
     GIT_TERMINAL_PROMPT=0 git "$@"

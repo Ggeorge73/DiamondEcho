@@ -196,7 +196,7 @@ test("comments: read only when needed; 'Looking' does not acknowledge, 'ack' doe
     const env = { GITHUB_TOKEN: "t", GITHUB_REPOSITORY: "owner/repo", SRE_OWNER: "example-owner" };
     const at = (minutes) => T0 + minutes * MIN;
     const reads = () => server.calls.filter((call) => call.method === "GET" && call.url.includes("/issues/12/comments")).length;
-    const human = (minutes, body) => ({ user: { login: "someone", type: "User" }, created_at: new Date(at(minutes)).toISOString(), body });
+    const human = (minutes, body, association = "COLLABORATOR") => ({ user: { login: "someone", type: "User" }, author_association: association, created_at: new Date(at(minutes)).toISOString(), body });
     for (let m = 0; m <= 5; m += 5) await w.run(at(m), [home(false)], { apply: true, fetch: server.fetcher, env });
     assert.equal((await w.incidents()).open[0].issue_number, 12);
 
@@ -217,6 +217,61 @@ test("comments: read only when needed; 'Looking' does not acknowledge, 'ack' doe
     for (let m = 30; m <= 70; m += 5) await w.run(at(m), [home(false)], { apply: true, fetch: server.fetcher, env });
     assert.ok(reads() - before <= 3, `${reads() - before} comment reads in 45 minutes`);
     assert.equal(server.calls.filter((call) => call.method === "POST" && /Reminder 2/.test(call.body?.body ?? "")).length, 0);
+  } finally {
+    await w.cleanup();
+  }
+});
+
+test("a person's Status: line written after the incident closed still reaches incidents.json (within a day)", async () => {
+  const w = await workspace();
+  try {
+    const server = fakeServer();
+    const env = { GITHUB_TOKEN: "t", GITHUB_REPOSITORY: "owner/repo" };
+    const at = (minutes) => T0 + minutes * MIN;
+    for (const [m, ok] of [[0, false], [5, false], [10, true], [15, true], [20, true]]) await w.run(at(m), [home(ok)], { apply: true, fetch: server.fetcher, env });
+    const closed = (await w.incidents()).recent[0];
+    assert.equal(closed.issue_number, 12);
+    server.state.comments["12"] = [
+      { user: { login: "someone", type: "User" }, author_association: "OWNER", created_at: new Date(at(30)).toISOString(), body: "Status: Fixed. The previous version is back." },
+      { user: { login: "stranger", type: "User" }, author_association: "NONE", created_at: new Date(at(31)).toISOString(), body: "Status: Not from us." },
+    ];
+    await w.run(at(40), [home(true)], { apply: true, fetch: server.fetcher, env });
+    await w.run(at(45), [home(true)], { apply: true, fetch: server.fetcher, env });
+    const updates = (await w.incidents()).recent[0].updates.map((update) => update.text);
+    assert.equal(updates.filter((text) => text === "Fixed. The previous version is back.").length, 1);
+    assert.ok(!updates.includes("Not from us."), "a stranger's line is never published");
+    // A day later the closed issue is no longer read.
+    const before = server.calls.filter((call) => call.method === "GET" && call.url.includes("/issues/12/comments")).length;
+    await w.run(at(26 * 60), [home(true)], { apply: true, fetch: server.fetcher, env });
+    assert.equal(server.calls.filter((call) => call.method === "GET" && call.url.includes("/issues/12/comments")).length, before);
+  } finally {
+    await w.cleanup();
+  }
+});
+
+test("a component incident takes over the budget incident's issue: relabelled, retitled, commented, never closed", async () => {
+  const w = await workspace();
+  try {
+    const server = fakeServer();
+    const env = { GITHUB_TOKEN: "t", GITHUB_REPOSITORY: "owner/repo" };
+    const at = (minutes) => T0 + minutes * MIN;
+    const sloFile = path.join(w.dir, "slo.json");
+    const burn = (minutes) => writeFile(sloFile, JSON.stringify({ schema: 1, generated_at: new Date(at(minutes)).toISOString(), slos: [{ id: "public-availability", name: "Website availability" }],
+      burn_alerts: [{ slo: "public-availability", component: "public-site", severity: "sev3", window: "6h", text: "Burning.", checks: ["public-home"] }] }));
+    await burn(0);
+    await w.run(at(0), [home(true)], { apply: true, fetch: server.fetcher, env, slo: sloFile });
+    assert.equal((await w.incidents()).open[0].key, "budget:public-availability");
+    assert.equal(server.state.issues.length, 1);
+    for (const m of [5, 10]) { await burn(m); await w.run(at(m), [home(false)], { apply: true, fetch: server.fetcher, env, slo: sloFile }); }
+    const doc = await w.incidents();
+    assert.deepEqual(doc.open.map((item) => [item.key, item.issue_number]), [["public-site", 12]]);
+    assert.equal(server.state.issues.length, 1, "no second issue");
+    assert.equal(server.state.issues[0].state, "open");
+    assert.equal(server.state.issues[0].title, "Website is down");
+    const calls = server.calls.filter((call) => call.url.includes("/issues/12"));
+    assert.ok(calls.some((call) => call.method === "DELETE" && call.url.endsWith("/labels/sev3")));
+    assert.ok(calls.some((call) => call.method === "POST" && call.url.endsWith("/labels") && call.body.labels[0] === "sev1"));
+    assert.ok(calls.some((call) => call.method === "POST" && call.url.endsWith("/comments") && /^\*\*Now followed here as: Website is down\.\*\*/.test(call.body.body)));
   } finally {
     await w.cleanup();
   }

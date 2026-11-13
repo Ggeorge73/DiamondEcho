@@ -50,9 +50,14 @@ How that maps onto how this site ships:
 - **Security fixes always ship**, whatever the budget. So do changes that
   only add monitoring or tests.
 
-Burn alerts are separate from the levels. A fast burn alert (`sev2`) is an
-incident now and follows `incident-response.md`, whatever budget is left. A
-slow burn alert (`sev4`) is a note for the weekly review.
+Burn alerts are separate from the levels (the rules are in `slo.md`,
+"Burn-rate alerts"):
+
+- A fast burn alert (`sev2`) is an incident now and follows
+  `incident-response.md`, whatever budget is left.
+- A medium burn alert (`sev3`) opens an issue. Look at it the same working
+  day; it does not page anyone.
+- A slow burn alert (`sev4`) is a note for the weekly review.
 
 ## What counts against the budget
 

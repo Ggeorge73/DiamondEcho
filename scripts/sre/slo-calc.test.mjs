@@ -75,7 +75,20 @@ test("a history line is read as the contract writes it", () => {
   assert.deepEqual(parsed, {
     t: Date.parse("2026-11-13T00:00:00.000Z"), suite: "fast", region: "eastus",
     checks: [{ id: "public-home", ok: true, latency_ms: 212, slis: ["public-availability", "public-latency"] }],
+    blind: 0, refused: 0,
   });
+});
+
+test("a blind line (state.mjs: the monitor reached nothing) is kept, with no results, and counts toward nothing", () => {
+  const parsed = parseHistoryLine('{"t":"2026-11-13T00:00:00.000Z","suite":"fast","region":"eastus","c":{},"blind":17}');
+  assert.equal(parsed.blind, 17);
+  assert.deepEqual(parsed.checks, []);
+  assert.equal(parseHistoryLine('{"t":"2026-11-13T00:00:00Z","c":{},"blind":"x","refused":-1}').blind, 0);
+  assert.equal(parseHistoryLine('{"t":"2026-11-13T00:00:00Z","c":{},"refused":3}').refused, 3);
+  const runs = runsOf([NOW - 10 * MIN, NOW - 5 * MIN, NOW].map((t) => JSON.stringify({ t: new Date(t).toISOString(), suite: "fast", c: {}, blind: 17 })));
+  const doc = computeSlo({ runs, now: NOW });
+  for (const s of doc.slos) assert.equal(s.total, 0, s.id);
+  assert.deepEqual(doc.burn_alerts, []);
 });
 
 test("damaged lines cost one line, never the calculation", () => {
@@ -192,6 +205,7 @@ test("full outage of the website for the last two hours: budget overspent, fast 
   assert.equal(alert.window, "1h");
   assert.equal(alert.burn_rate, 1000);
   assert.equal(alert.rule, "fast");
+  assert.deepEqual(alert.checks, ["public-home"]);
   assert.match(alert.text, /Website availability is using its error budget 1000 times faster than the 99\.9% target \(a proposed target, not yet accepted\) allows: 12 of 12 probes/);
   // Other SLOs are untouched.
   assert.equal(find(doc, "api-availability").budget_remaining, 1);
@@ -214,6 +228,32 @@ test("three failed probes in an hour, the latest within 15 minutes, alert at sev
   assert.equal(alert.bad_runs, 3);
   assert.equal(alert.runs, 12);
   assert.equal(alert.burn_rate, 250);
+});
+
+test("a burn alert names the checks that failed, even when they belong to another component", () => {
+  // The /search page (component "search") counts toward website availability,
+  // and the deal analysis (component "calculators") toward the API. The alert
+  // engine matches these ids against open incidents so one failure opens one
+  // incident, not two.
+  const runs = runsOf(series({ from: NOW - 2 * HOUR, to: NOW }).map((text) => {
+    const doc = JSON.parse(text);
+    const failing = Date.parse(doc.t) > NOW - HOUR;
+    doc.c["search-page"] = [failing ? 0 : 1, failing ? null : 300, ["public-availability", "public-latency"]];
+    doc.c["calculators-api-analyze"] = [failing ? 0 : 1, failing ? null : 200, ["api-availability"]];
+    return JSON.stringify(doc);
+  }));
+  const doc = computeSlo({ runs, now: NOW });
+  const bySlo = Object.fromEntries(doc.burn_alerts.map((a) => [a.slo, a]));
+  assert.deepEqual(bySlo["public-availability"].checks, ["search-page"]);
+  assert.equal(bySlo["public-availability"].component, "public-site");
+  assert.deepEqual(bySlo["api-availability"].checks, ["calculators-api-analyze"]);
+  // A failed probe is not counted as slow, so no speed alert and no ids there.
+  assert.equal(bySlo["public-latency"], undefined);
+});
+
+test("a speed burn alert names the checks that were slow", () => {
+  const runs = runsOf(series({ from: NOW - 8 * HOUR, to: NOW, shape: (t, i) => (i % 3 === 0 ? { slow: ["api-latency"] } : {}) }));
+  assert.deepEqual(burnAlertFor(runs, slo("api-latency"), NOW).checks, ["api-health"]);
 });
 
 test("an outage that has stopped stops alerting (the short window is clean)", () => {

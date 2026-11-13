@@ -154,7 +154,13 @@ are in `scripts/sre/README.md`; the rules are here.
   domain registry). That is the monitor's network, not the site. It is kept
   in the history as a line with no results, so it counts against no check
   and no SLO, and the alert engine opens a "Monitoring cannot see the site"
-  incident if it happens twice in a row.
+  incident if it happens twice in a row. Those outside checks run only in
+  the hourly suite, so a 5-minute run is never called blind.
+- **Cloudflare refusing the monitor.** When every failing check on the parts
+  Cloudflare serves was refused by Cloudflare (or not made because its page
+  was), those checks are left out the same way: the history line keeps only
+  the rest and notes `"refused": N`, and the page shows the last measured
+  result until it goes stale. See [alerting.md](alerting.md).
 - **Deploys.** When a check reports a different `revision` or `commit` than
   last time, a line goes into `deploys.jsonl`. The first sighting is not a
   deploy, and a failed check that could not read the facts does not erase

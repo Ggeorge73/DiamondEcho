@@ -1,5 +1,5 @@
 {
-  "displayName": "API speed, real requests: 95% answered in under 1,000 ms over 28 days (proposed, not accepted)",
+  "displayName": "API speed, real requests: 95% answered in under 1,000 ms over 28 days",
   "goal": 0.95,
   "rollingPeriod": "2419200s",
   "serviceLevelIndicator": {
@@ -16,6 +16,6 @@
   "userLabels": {
     "sli": "api-latency",
     "view": "real-requests",
-    "accepted": "false"
+    "status": "proposed"
   }
 }

@@ -25,7 +25,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { runProblems } from "./lib/schema.mjs";
 import { githubClient } from "./lib/github.mjs";
-import { evaluate, normalizeIncidents, readComments, LABELS, READ_COMMENTS_EVERY_MINUTES } from "./alert-policy.mjs";
+import { evaluate, normalizeIncidents, readComments, LABELS, READ_COMMENTS_EVERY_MINUTES, STATUS_AFTER_CLOSE_HOURS } from "./alert-policy.mjs";
 import { nowFrom } from "./state.mjs";
 
 const WEBHOOK_TIMEOUT_MS = 10_000;
@@ -79,7 +79,9 @@ async function writeJson(file, value) {
 // null when it cannot be read: then nothing is assumed either way.
 // `engine` is incidents.json's engine memory: it records when each issue's
 // comments were last read, so they are not fetched on every run.
-export async function readGithubFacts(client, open, log, { engine = { incidents: {} }, now = Date.now() } = {}) {
+export async function readGithubFacts(client, open, log, { engine = { incidents: {}, comment_reads: {} }, now = Date.now(), recent = [], owner = null } = {}) {
+  const reads = engine.comment_reads || (engine.comment_reads = {});
+  const readDue = (number) => !(now - Date.parse(reads[number] ?? "") < READ_COMMENTS_EVERY_MINUTES * 60_000);
   if (client.dryRun) return null;
   try {
     const listed = await client.listOpenIssues(LABELS.incident.name);
@@ -98,16 +100,22 @@ export async function readGithubFacts(client, open, log, { engine = { incidents:
       // Comments are read every run where a reminder could still be due, and
       // otherwise at most every READ_COMMENTS_EVERY_MINUTES (for "Status:").
       const reminderDue = !acknowledged && !memo?.acknowledged && (incident.severity === "sev1" || incident.severity === "sev2");
-      const lastRead = Date.parse(memo?.comments_read_at ?? "");
-      const readDue = !(now - lastRead < READ_COMMENTS_EVERY_MINUTES * 60_000);
       let statuses = [];
-      if (reminderDue || readDue) {
-        const said = readComments(await client.listComments(number), incident.opened_at);
+      if (reminderDue || readDue(number)) {
+        const said = readComments(await client.listComments(number), incident.opened_at, { owner });
         acknowledged = acknowledged || said.acknowledged;
         statuses = said.statuses;
-        if (memo) memo.comments_read_at = new Date(now).toISOString();
+        reads[number] = new Date(now).toISOString();
       }
       facts[number] = { open: true, acknowledged, silenced: issue.labels.includes(LABELS.silenced.name), statuses };
+    }
+    // Issues of incidents closed in the last day: only for "Status:" lines.
+    for (const incident of recent) {
+      const number = incident.issue_number;
+      if (!Number.isInteger(number) || facts[number] || !(now - Date.parse(incident.resolved_at) <= STATUS_AFTER_CLOSE_HOURS * 3_600_000)) continue;
+      if (!readDue(number)) continue;
+      facts[number] = { statuses: readComments(await client.listComments(number), incident.opened_at, { owner }).statuses };
+      reads[number] = new Date(now).toISOString();
     }
     return facts;
   } catch (error) {
@@ -180,7 +188,28 @@ export async function execute({ actions, incidents, client, apply, webhookUrl, f
           record.result = sent.ok ? "done" : `failed: ${sent.why}`;
           if (!sent.ok) log(`alert: the chat webhook ${sent.why}; the issue is still the record.`);
         }
-      } else if (action.kind === "open-issue") {
+      } else if (action.kind === "take-over-issue" && Number.isInteger(byKey(action.from_key)?.issue_number)) {
+        // The error-budget incident's issue continues as this incident's:
+        // relabelled, retitled, and a comment with the new text.
+        const inherited = byKey(action.from_key).issue_number;
+        record.issue_number = inherited;
+        if (incident) {
+          incident.issue_number = inherited;
+          incident.issue_url = byKey(action.from_key).issue_url ?? incident.issue_url;
+        }
+        if (!apply) record.result = "dry-run";
+        else {
+          await ensureLabels();
+          if (action.from_severity !== action.severity) {
+            await client.removeLabel(inherited, action.from_severity);
+            await client.addLabels(inherited, [action.severity]);
+          }
+          await client.editIssue(inherited, { title: action.title });
+          await client.comment(inherited, action.body);
+          record.result = writes ? "done" : "dry-run";
+        }
+      } else if (action.kind === "open-issue" || action.kind === "take-over-issue") {
+        // (A take-over whose budget incident never got an issue opens one.)
         if (!apply) record.result = "dry-run";
         else {
           // An issue for this incident may already exist (an earlier run
@@ -216,10 +245,10 @@ export async function execute({ actions, incidents, client, apply, webhookUrl, f
         record.result = writes ? "done" : "dry-run";
       } else if (action.kind === "reopen-issue") {
         await client.reopenIssue(number);
-        await client.comment(number, action.body);
+        if (action.body) await client.comment(number, action.body); // none when silenced
         record.result = writes ? "done" : "dry-run";
       } else if (action.kind === "close-issue") {
-        await client.comment(number, action.body);
+        if (action.body) await client.comment(number, action.body); // none when silenced
         await client.closeIssue(number);
         record.result = writes ? "done" : "dry-run";
       } else {
@@ -248,7 +277,7 @@ async function retryCloses({ incidents, client, apply, now, log }) {
       continue;
     }
     try {
-      await client.comment(item.issue_number, item.body);
+      if (item.body) await client.comment(item.issue_number, item.body);
       await client.closeIssue(item.issue_number);
     } catch (error) {
       log(`alert: closing issue #${item.issue_number} failed again: ${error.message}`);
@@ -296,7 +325,7 @@ export async function runAlert({ args, env = process.env, fetch: fetcher = globa
   const client = githubClient({ fetch: fetcher, log, token: env.GITHUB_TOKEN, repository: env.GITHUB_REPOSITORY });
   if (args.apply && client.dryRun) log("alert: no GitHub token or repository, so --apply is a dry run for GitHub.");
   const notify = args.apply && !client.dryRun;
-  const facts = notify ? await readGithubFacts(client, incidentsBefore.open, log, { engine: incidentsBefore.engine, now }) : null;
+  const facts = notify ? await readGithubFacts(client, incidentsBefore.open, log, { engine: incidentsBefore.engine, now, recent: incidentsBefore.recent, owner: env.SRE_OWNER?.trim() || null }) : null;
   await retryCloses({ incidents: incidentsBefore, client, apply: args.apply, now, log });
 
   const { incidents, actions, notes } = evaluate({

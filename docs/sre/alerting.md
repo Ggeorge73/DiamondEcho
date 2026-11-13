@@ -33,8 +33,8 @@ the same public text: what visitors notice, the failing checks, the runbook.
 
 ## When an incident opens, and why these numbers
 
-- **Two failed runs in a row for sev1 and sev2.** Every check already retries
-  inside a run, so one failed run is two failed attempts. That can still be a
+- **Two failed runs in a row for sev1 and sev2.** A check is retried within
+  the run only when nothing answered, so one failed run can still be a
   hiccup on GitHub's shared runner; two runs in a row (5 to 10 minutes) is not.
   The automatic rollback uses the same two-run rule.
 - **Three for sev3, six for sev4.** They are not urgent, so they wait longer
@@ -49,9 +49,24 @@ the same public text: what visitors notice, the failing checks, the runbook.
   one incident and one issue. Its severity is the worst of its failing checks.
 - **The monitor's own blindness is not the site's outage.** If a run reached
   nothing at all, not even outside services (the Georgia MLS search, public
-  DNS, the domain registry), the monitor's network failed. That run counts
-  against nothing. Two in a row open a sev3 "Monitoring cannot see the site"
-  incident, never a false "Website is down".
+  DNS, the domain registry, recognised by their check names), the monitor's
+  network failed. That run counts against nothing. Two in a row open a sev3
+  "Monitoring cannot see the site" incident, never a false "Website is down".
+  Those outside checks run only in the hourly suite, so a 5-minute run is
+  never called blind: if nothing answers there, it counts against the site.
+- **Cloudflare refusing the monitor is one problem, not six.** On the first
+  run from GitHub's runners every page Cloudflare serves answered 403 to the
+  monitor ("Cloudflare refused the request …") while browsers got the pages
+  and the API passed. When, in a run, every failing check on the parts
+  Cloudflare serves (website, search page, calculator pages, contact page,
+  staff site) failed with that refusal, or was not made because its page was
+  refused, those checks measured the monitor's access, not the site. They
+  count against no check, uptime bar or SLO, and two such runs in a row open
+  one sev2 incident, "Cloudflare is refusing the monitor", pointing at
+  [cloudflare-outage.md](runbooks/cloudflare-outage.md). If even one of those
+  checks failed for any other reason, nothing is set aside and the normal
+  per-part incidents open. The incident closes after two runs once a page
+  answers the monitor again.
 
 ## While it is open
 
@@ -64,7 +79,12 @@ the same public text: what visitors notice, the failing checks, the runbook.
 - **Error budget.** A fast (sev2) or medium (sev3) burn alert from
   `slo.json` (the share of the 28-day allowance of failures being used up too
   fast; see [slo.md](slo.md)) opens a `budget:<slo>` incident at the alert's
-  severity. A slow burn (sev4) opens nothing: as
+  severity. It is not opened when its failing checks (named in the burn
+  alert) already belong to an open incident, or the component has, or had in
+  the last 6 hours, its own incident: then it is the same trouble seen
+  another way and is noted once on that incident. So a sev3 calculator check
+  that also burns the API's budget stays one sev3 incident, not a sev2 page.
+  A slow burn (sev4) opens nothing: as
   [error-budget-policy.md](error-budget-policy.md) says, it is a note for the
   weekly review, and it appears in `slo.json` and the weekly report only. If the component has its
   own incident, or had one in the last 6 hours, the burn is the same trouble
@@ -114,7 +134,9 @@ used (at most 280 characters, without `<` and `>`); nothing else from the
 issue is ever copied to the status page. It is public: no visitor details,
 no internal names. The engine reads comments on every run while a reminder
 could still be due, and otherwise at most every 15 minutes, so an update can
-take up to 15 minutes to appear.
+take up to 15 minutes to appear. Comments on an incident's issue are still
+read for a day after it closes, so a closing update ("Status: Fixed, here is
+what happened") reaches the page too.
 
 ## Quiet hours
 
@@ -129,9 +151,12 @@ or ask for sev2 chat messages to be held outside business hours (a change to
 ## How to silence safely
 
 - **One incident:** add the `sre-silenced` label. The engine stops commenting
-  and stops chat messages for that incident. It still shows on the status
-  page and still closes itself when the checks pass. Closing the issue by
-  hand has the same effect and is treated as an acknowledgement.
+  and stops chat messages for that incident, including the closing comment.
+  It still shows on the status page and the issue still closes itself when
+  the checks pass. If it fails again within the hour, the issue is reopened
+  without a comment or chat message: it stays silenced. Closing the issue by
+  hand has the same effect and is treated as an acknowledgement; then the
+  engine does not reopen it.
 - **Never** silence by disabling the "SRE monitor" workflow: that also stops
   the status page and the history, and nothing tells you it is off.
 - **Never** silence by deleting the issue or editing `incidents.json` on the

@@ -215,9 +215,10 @@ export function buildView(loaded, { now, timeZone, locale } = {}) {
     }))
     : [];
 
+  const incidents = describeIncidents(loaded?.incidents, names, now, mode, format);
   return {
     mode,
-    banner: describeBanner(mode, status, checkedAt, format),
+    banner: describeBanner(mode, status, checkedAt, format, incidents),
     updated: checkedAt === null ? null : {
       iso: new Date(checkedAt).toISOString(),
       text: formatDateTime(checkedAt, format),
@@ -230,7 +231,7 @@ export function buildView(loaded, { now, timeZone, locale } = {}) {
       firstDay: uptime.firstDay && uptime.firstDay > dayKey(now - (DAYS_SHOWN - 1) * DAY)
         ? { day: uptime.firstDay, text: formatDay(uptime.firstDay, format) } : null,
     },
-    incidents: describeIncidents(loaded?.incidents, names, now, mode, format),
+    incidents,
     reliability: describeReliability(loaded?.slo, format),
   };
 }
@@ -248,8 +249,13 @@ function readStatus(loaded) {
   if (checkedAt === null) return { ok: false, problem: "format" };
   // state.mjs marks a run "blind" when the monitor reached nothing at all,
   // not even outside services: its own network failed, so that run measured
-  // nothing about the site and the states still come from earlier runs.
-  const blind = data.last_runs?.fast?.blind === true;
+  // nothing about the site and the states still come from earlier runs. Only
+  // the hourly suite has outside services, so a blind run is usually there.
+  // It also counts the checks it left out because Cloudflare refused the
+  // monitor (`cloudflare_refused`): those parts were not seen either.
+  const runs = [data.last_runs?.fast, data.last_runs?.slow].filter(isObject);
+  const blind = runs.some((run) => run.blind === true);
+  const refused = runs.some((run) => Number.isInteger(run.cloudflare_refused) && run.cloudflare_refused > 0);
 
   const names = {};
   const components = [];
@@ -271,7 +277,7 @@ function readStatus(loaded) {
   // component state, so a malformed summary cannot read as "all working".
   const worst = ["outage", "degraded", "unknown", "operational"].find((state) => components.some((component) => component.state === state));
   const overall = Object.hasOwn(STATE_LABELS, data.overall) ? data.overall : (worst ?? "unknown");
-  return { ok: true, checkedAt, overall, components, names, blind };
+  return { ok: true, checkedAt, overall, components, names, blind, refused };
 }
 
 function describeComponent(component, mode, format) {
@@ -292,7 +298,7 @@ function describeComponent(component, mode, format) {
   };
 }
 
-function describeBanner(mode, status, checkedAt, format) {
+function describeBanner(mode, status, checkedAt, format, incidents) {
   if (mode === "no-data") {
     return {
       tone: "unknown", title: "No monitoring data yet",
@@ -325,7 +331,10 @@ function describeBanner(mode, status, checkedAt, format) {
   if (named("degraded").length) lines.push(`Degraded: ${named("degraded").join(", ")}.`);
   if (named("unknown").length) lines.push(`No current result for: ${named("unknown").join(", ")}.`);
   if (status.blind) {
-    lines.push("The latest automatic check could not reach anything, including outside services, so it says nothing about the website. The states shown come from earlier checks.");
+    lines.push("A recent automatic check could not reach anything, including outside services, so it says nothing about the website. The states shown come from earlier checks.");
+  }
+  if (status.refused) {
+    lines.push("A recent automatic check was turned away before it reached some pages, so it says nothing about them. Their states shown come from earlier checks.");
   }
   const titles = {
     operational: "All services are working",
@@ -333,6 +342,18 @@ function describeBanner(mode, status, checkedAt, format) {
     outage: "There is an outage",
     unknown: "The current state is not known",
   };
+  // Every part can read "operational" while an incident is open: a failure
+  // that comes and goes, an error budget spent too fast, or a monitor that
+  // cannot see. The headline must never be an all-clear then.
+  const open = incidents?.state === "ok" ? incidents.open : [];
+  if (status.overall === "operational" && open.length) {
+    const titlesList = open.map((incident) => incident.title).join("; ");
+    lines.unshift(`${open.length === 1 ? "1 open incident" : `${open.length} open incidents`}: ${titlesList}.`);
+    return { tone: "degraded", title: "Most services are working", lines };
+  }
+  if (status.overall === "operational" && incidents?.state === "error") {
+    lines.push("Incident information could not be loaded.");
+  }
   return { tone: status.overall, title: titles[status.overall], lines };
 }
 
