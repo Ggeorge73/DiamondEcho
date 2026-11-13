@@ -81,6 +81,7 @@ export function safeText(value, max = 200) {
   const text = String(value ?? "")
     .replace(/[\r\n\t]+/g, " ")
     .replace(/[<>]/g, "")
+    .replace(/\\/g, "\\\\")
     .replace(/\|/g, "\\|")
     .replace(/@/g, "(at)")
     .replace(/\s+/g, " ")

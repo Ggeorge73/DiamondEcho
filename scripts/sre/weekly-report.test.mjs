@@ -299,6 +299,8 @@ test("damaged history lines and unknown SLI names are reported", async () => {
 
 test("public text is made safe for a Markdown issue", () => {
   assert.equal(safeText("a|b\n@c <script>"), "a\\|b (at)c script");
+  // A backslash in the input cannot cancel the escape of a table bar.
+  assert.equal(safeText("a\\|b"), "a\\\\\\|b");
   assert.equal(safeText("x".repeat(300), 10).length, 10);
   assert.equal(code("r1`|x"), "`r1x`");
   assert.equal(code(""), "(none)");

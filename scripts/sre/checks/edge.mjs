@@ -21,10 +21,16 @@ const WWW_PROBE_PATH = "/search";
 
 // Scripts that would break the Privacy page's promise if they showed up in
 // the page as served.
+// Plain text markers, searched for in the page as served (case-insensitive):
+// a substring search, not a URL check, so nothing here decides what a host is.
 export const ANALYTICS_MARKERS = [
-  { name: "the Cloudflare analytics beacon", pattern: /cloudflareinsights\.com|data-cf-beacon/i },
-  { name: "a Google Analytics or Tag Manager script", pattern: /googletagmanager\.com|google-analytics\.com/i },
+  { name: "the Cloudflare analytics beacon", texts: ["cloudflareinsights.com", "data-cf-beacon"] },
+  { name: "a Google Analytics or Tag Manager script", texts: ["googletagmanager.com", "google-analytics.com"] },
 ];
+const hasMarker = (html, marker) => {
+  const page = String(html || "").toLowerCase();
+  return marker.texts.some((text) => page.includes(text));
+};
 // Cloudflare's bot-detection script. Not analytics, but worth knowing about:
 // it only appears while a bot setting such as Bot Fight Mode is on.
 const BOT_SCRIPT = /\/cdn-cgi\/challenge-platform\//;
@@ -99,7 +105,7 @@ function analyticsCheck(home, origin) {
   const refused = cloudflareRefusal(home);
   if (refused) return makeCheck({ ...base, ok: false, detail: refused.text, observed: { "cloudflare-refusal": refused.code } });
   if (home.status !== 200) return makeCheck({ ...base, ok: false, detail: `${origin} answered ${home.status}, so the page was not read.` });
-  const found = ANALYTICS_MARKERS.filter((marker) => marker.pattern.test(home.body)).map((marker) => marker.name);
+  const found = ANALYTICS_MARKERS.filter((marker) => hasMarker(home.body, marker)).map((marker) => marker.name);
   const botScript = BOT_SCRIPT.test(home.body);
   const observed = { "bot-script": botScript ? "present" : "absent" };
   if (found.length) return makeCheck({ ...base, ok: false, observed, detail: `The home page as served contains ${found.join(" and ")}. The Privacy page says the site uses no analytics. At Cloudflare: Speed, Real User Monitoring, "Disable completely".` });
