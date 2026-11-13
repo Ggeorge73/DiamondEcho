@@ -142,8 +142,9 @@ the problem is the data and not Firestore being unreachable.
      --image SERVING_IMAGE --update-env-vars INQUIRY_STAFF_QUEUE_ENABLED=VALUE,APP_COMMIT=SERVING_COMMIT
    bash scripts/sre/cloudrun/status.sh            # the newest revision: SERVING_IMAGE, ready
    ```
-   `VALUE` is `false` to close, `true` to reopen. Leave out `APP_COMMIT=…` if
-   `/api/` names no commit. Passing the serving revision's image matters: after
+   `VALUE` is `false` to close, `true` to reopen. If `/api/` names no commit,
+   drop `,APP_COMMIT=SERVING_COMMIT` and add `--remove-env-vars APP_COMMIT`
+   (leaving it out would keep the refused revision's commit from the template). Passing the serving revision's image matters: after
    a rollback the service is pinned and its template names the broken image.
    If the newest revision is not at 100 percent (the service was pinned), and
    only then, move the traffic to it:
