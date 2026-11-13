@@ -137,6 +137,17 @@ test("parts with no automatic fix are logged with their runbook", () => {
   expectSkip(input, "no-automatic-fix");
 });
 
+test("a monitoring incident (Cloudflare refusing the monitor) never touches the API", () => {
+  const input = scenario();
+  input.incidents.open = [{ key: "monitoring", component: "monitoring", severity: "sev2", opened_at: at(10) }];
+  const decision = expectSkip(input, "no-automatic-fix");
+  assert.equal(decision.action, "none");
+  assert.match(decision.runbook, /cloudflare-outage\.md/);
+  const text = summarize(decision);
+  assert.match(text, /Monitoring/);
+  assert.equal(text.match(/A person follows/g).length, 1, text);
+});
+
 test("a failure seen once is not confirmed", () => {
   const input = scenario();
   input.status.checks["api-health"].consecutive_failures = 1;

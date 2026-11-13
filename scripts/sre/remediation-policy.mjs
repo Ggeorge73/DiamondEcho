@@ -78,6 +78,9 @@ export const CATALOGUE = {
   dns: { action: NO_ACTION, runbook: "docs/sre/runbooks/dns-problem.md" },
   tls: { action: NO_ACTION, runbook: "docs/sre/runbooks/tls-certificate.md" },
   domain: { action: NO_ACTION, runbook: "docs/sre/runbooks/domain-expiry.md" },
+  // The alert engine's own incidents: Cloudflare refusing the monitor, or the
+  // monitor seeing nothing at all. Never a reason to touch the API.
+  monitoring: { action: NO_ACTION, runbook: "docs/sre/runbooks/cloudflare-outage.md and docs/sre/runbooks/monitoring-is-blind.md" },
 };
 const UNKNOWN_PART = { action: NO_ACTION, runbook: "docs/sre/runbooks/README.md" };
 
@@ -132,7 +135,7 @@ export function mayAct({ apply, env }) {
 const time = (value) => (typeof value === "string" ? Date.parse(value) : NaN);
 const iso = (ms) => new Date(ms).toISOString();
 const minutesBetween = (later, earlier) => Math.round((later - earlier) / MINUTE);
-const partName = (component) => COMPONENTS[component] ?? String(component);
+const partName = (component) => COMPONENTS[component] ?? (component === "monitoring" ? "Monitoring" : String(component));
 
 function isFresh(at, now, minutes = LIMITS.freshMinutes) {
   const t = time(at);
@@ -453,7 +456,7 @@ export function plan({ now, status = null, incidents = null, deploys = [], deplo
     const entry = CATALOGUE[incident.component] ?? UNKNOWN_PART;
     const basis = base(incident, entry);
     if (entry.action !== ROLLBACK) {
-      decisions.push(skip(basis, "no-automatic-fix", `There is no automatic fix for ${partName(incident.component)}. A person follows ${entry.runbook}.`));
+      decisions.push(skip(basis, "no-automatic-fix", `There is no automatic fix for ${partName(incident.component)}.`));
       continue;
     }
     if (log.some((line) => sameIncident(line, basis) && (line.decision === "acted" || line.decision === "failed"))) continue;
