@@ -1,0 +1,37 @@
+{
+  "displayName": "DiamondEcho SRE: TLS certificate expires within 14 days",
+  "documentation": {
+    "subject": "DiamondEcho: a certificate is close to expiry and has not been renewed",
+    "mimeType": "text/markdown",
+    "content": "An uptime check reports that the certificate it was served expires in less than 14 days. Cloudflare (diamondecho.com, staff.diamondecho.com) and Google (the run.app address) renew these on their own; one this close to expiry means renewal has stopped. When it expires, browsers show visitors a security warning instead of the site.\n\nThe GitHub monitor warns earlier (21 days, scripts/sre/checks/tls.mjs); this is the independent backstop.\n\nWhat to do: follow docs/sre/runbooks/tls-certificate.md.\n\nThis message carries no visitor data."
+  },
+  "conditions": [
+    {
+      "displayName": "Certificate expires in under 14 days",
+      "conditionThreshold": {
+        "filter": "metric.type=\"monitoring.googleapis.com/uptime_check/time_until_ssl_cert_expires\" AND resource.type=\"uptime_url\"",
+        "aggregations": [
+          {
+            "alignmentPeriod": "1200s",
+            "perSeriesAligner": "ALIGN_NEXT_OLDER",
+            "crossSeriesReducer": "REDUCE_MIN",
+            "groupByFields": ["resource.label.host"]
+          }
+        ],
+        "comparison": "COMPARISON_LT",
+        "thresholdValue": 14,
+        "duration": "600s",
+        "trigger": { "count": 1 }
+      }
+    }
+  ],
+  "combiner": "OR",
+  "enabled": true,
+  "severity": "ERROR",
+  "alertStrategy": {
+    "notificationRateLimit": { "period": "86400s" },
+    "autoClose": "86400s"
+  },
+  "notificationChannels": ["${NOTIFICATION_CHANNEL}"],
+  "userLabels": { "owner": "sre-observability", "sev": "sev2" }
+}

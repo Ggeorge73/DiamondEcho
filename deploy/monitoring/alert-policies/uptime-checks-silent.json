@@ -1,0 +1,35 @@
+{
+  "displayName": "DiamondEcho SRE: uptime checks have stopped reporting",
+  "documentation": {
+    "subject": "DiamondEcho: the Google Cloud uptime checks have gone quiet",
+    "mimeType": "text/markdown",
+    "content": "No uptime check result has arrived for 30 minutes. The checks run every 5 minutes, so they have been deleted, paused, or Cloud Monitoring is having trouble. Without them the only watch left is the GitHub monitor.\n\nWhat to do: follow docs/sre/runbooks/monitoring-is-blind.md.\n\nThis message carries no visitor data."
+  },
+  "conditions": [
+    {
+      "displayName": "No uptime check results for 30 minutes",
+      "conditionAbsent": {
+        "filter": "metric.type=\"monitoring.googleapis.com/uptime_check/check_passed\" AND resource.type=\"uptime_url\"",
+        "aggregations": [
+          {
+            "alignmentPeriod": "300s",
+            "perSeriesAligner": "ALIGN_COUNT",
+            "crossSeriesReducer": "REDUCE_SUM",
+            "groupByFields": ["resource.label.project_id"]
+          }
+        ],
+        "duration": "1800s",
+        "trigger": { "count": 1 }
+      }
+    }
+  ],
+  "combiner": "OR",
+  "enabled": true,
+  "severity": "WARNING",
+  "alertStrategy": {
+    "notificationRateLimit": { "period": "21600s" },
+    "autoClose": "3600s"
+  },
+  "notificationChannels": ["${NOTIFICATION_CHANNEL}"],
+  "userLabels": { "owner": "sre-observability", "sev": "sev3" }
+}

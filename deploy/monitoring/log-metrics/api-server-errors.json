@@ -1,0 +1,19 @@
+{
+  "name": "diamondecho_sre_api_server_errors",
+  "description": "DiamondEcho SRE: API answers with status 5xx or an unhandled error, counted from the one log line backend/observability writes for each. Labels: the route template (never the address asked for) and the status.",
+  "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"diamondecho-api\" AND logName=\"projects/${PROJECT_ID}/logs/run.googleapis.com%2Fstdout\" AND jsonPayload.event=\"request.error\"",
+  "metricDescriptor": {
+    "metricKind": "DELTA",
+    "valueType": "INT64",
+    "unit": "1",
+    "displayName": "DiamondEcho SRE: API server errors",
+    "labels": [
+      { "key": "route", "valueType": "STRING", "description": "Route template, for example /api/v1/deals/analyze" },
+      { "key": "status", "valueType": "STRING", "description": "HTTP status sent, 500 for an unhandled error" }
+    ]
+  },
+  "labelExtractors": {
+    "route": "EXTRACT(jsonPayload.route)",
+    "status": "EXTRACT(jsonPayload.status)"
+  }
+}

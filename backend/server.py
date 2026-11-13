@@ -125,3 +125,9 @@ async def protect_staff_surface(request, call_next):
     if path.startswith("/api/v1/inquiries") or path == "/api/status":
         response.headers["Cache-Control"] = "no-store"
     return response
+
+# Outermost, so it times the whole request and sees any error the layers above
+# let through. It writes one log line only for a server error or a slow
+# request, and never anything a visitor sent (backend/observability).
+from observability import RequestTelemetry
+app.add_middleware(RequestTelemetry)

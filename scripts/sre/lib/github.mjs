@@ -110,8 +110,11 @@ export function githubClient({
     // started failing again. They follow the same rules: dry run without a
     // token.
 
-    // Who commented and when; never the comment text (the engine has no use
-    // for it, and it is not ours to copy around).
+    // Who commented, when, and the first line only (at most 300 characters).
+    // The engine needs that line for two things: "ack" / "Acknowledged" at
+    // its start acknowledges, and "Status:" at its start is a public update
+    // a person wrote for the status page. The rest of a comment is never
+    // read into the engine.
     async listComments(number) {
       if (dryRun) return [];
       const rows = await call("GET", `${issuePath(number)}/comments?per_page=100`);
@@ -119,6 +122,7 @@ export function githubClient({
         login: row.user?.login || "",
         bot: row.user?.type === "Bot" || /\[bot\]$/.test(row.user?.login || ""),
         created_at: row.created_at,
+        first_line: String(row.body ?? "").trim().split(/\r?\n/, 1)[0].trim().slice(0, 300),
       }));
     },
 

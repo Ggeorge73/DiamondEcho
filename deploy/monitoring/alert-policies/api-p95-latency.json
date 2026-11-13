@@ -1,0 +1,27 @@
+{
+  "displayName": "DiamondEcho SRE: API slow (p95 above 2.5 seconds)",
+  "documentation": {
+    "subject": "DiamondEcho: the API is answering slowly",
+    "mimeType": "text/markdown",
+    "content": "For 10 minutes, 1 in 20 of the API's answers (the 95th percentile, p95) took longer than 2.5 seconds, measured by Cloud Run itself, with at least 30 requests in the 15-minute window. The minimum count is there because the API scales to zero: on a quiet night a single cold start would otherwise be the whole p95.\n\nThe GitHub monitor's latency target (1 second, measured from outside) is in scripts/sre/slo.config.mjs; this alert is the server-side view and is deliberately looser so it only fires on real, sustained slowness.\n\nWhat to do: follow docs/sre/runbooks/api-slow-or-saturated.md. Logs Explorer filter for the slow routes: jsonPayload.event=\"request.slow\" on service diamondecho-api.\n\nThe 2.5 seconds, 10 minutes and 30 requests are proposed starting values, not tuned against measured traffic (none has been measured yet).\n\nThis message carries no visitor data."
+  },
+  "conditions": [
+    {
+      "displayName": "p95 latency above 2500 ms with at least 30 requests in 15 minutes",
+      "conditionPrometheusQueryLanguage": {
+        "query": "(histogram_quantile(0.95, sum by (le) (rate(run_googleapis_com:request_latencies_bucket{monitored_resource=\"cloud_run_revision\",service_name=\"diamondecho-api\"}[15m]))) > 2500) and (sum(increase(run_googleapis_com:request_count{monitored_resource=\"cloud_run_revision\",service_name=\"diamondecho-api\"}[15m])) >= 30)",
+        "duration": "600s",
+        "evaluationInterval": "60s"
+      }
+    }
+  ],
+  "combiner": "OR",
+  "enabled": true,
+  "severity": "WARNING",
+  "alertStrategy": {
+    "notificationRateLimit": { "period": "3600s" },
+    "autoClose": "1800s"
+  },
+  "notificationChannels": ["${NOTIFICATION_CHANNEL}"],
+  "userLabels": { "owner": "sre-observability", "sev": "sev3" }
+}
