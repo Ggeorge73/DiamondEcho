@@ -1,0 +1,100 @@
+name: SRE post-merge check
+
+# After every merge to main, Cloudflare Pages builds diamondecho.com by
+# itself. This waits until the site serves the merged commit (/version.json),
+# then runs the post-deploy synthetic checks against it (read-only). If the
+# build never goes live or a check fails, the run fails and an `sre-incident`
+# issue names the merge, what failed and how to roll back. The site is rolled
+# back automatically only when the Cloudflare secrets exist AND the repository
+# variable SRE_PAGES_AUTOROLLBACK is `enabled`; otherwise the issue carries
+# the steps. See docs/sre/release-safety.md.
+#
+# On pull requests that touch the release scripts, only their tests run.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'scripts/sre/cloudrun/**'
+      - 'scripts/sre/cloudflare/**'
+      - 'scripts/sre/post-deploy*.mjs'
+      - 'scripts/copy-build*.mjs'
+      - '.github/workflows/sre-post-merge-check.yml'
+      - '.github/workflows/sre-deploy-api.yml'
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: 'Commit on main to check (blank: the newest on main)'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+# One check at a time. A newer merge waits for the running check rather than
+# cutting it off part-way through an issue or a rollback.
+concurrency:
+  group: sre-post-merge-${{ github.event_name == 'pull_request' && github.ref || 'main' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  release-script-tests:
+    name: Release script tests (no network)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+      - name: Cloud Run, Pages rollback, post-deploy and build identity tests
+        run: >-
+          node --test
+          scripts/sre/cloudrun/lib.test.mjs
+          scripts/sre/cloudrun/cloudrun.test.mjs
+          scripts/sre/cloudflare/pages-rollback.test.mjs
+          scripts/sre/post-deploy.test.mjs
+          scripts/copy-build.test.mjs
+
+  post-merge:
+    name: Merged build is live and healthy
+    if: github.repository == 'Ggeorge73/DiamondEcho' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: release-script-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Full history: the summary compares the API's commit with main.
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+      - name: Wait for the build, check it, report
+        env:
+          COMMIT: ${{ inputs.commit || github.sha }}
+          GITHUB_TOKEN: ${{ github.token }}
+          # Dormant until Gbenga sets them (docs/sre/needs-from-gbenga.md).
+          SRE_PAGES_AUTOROLLBACK: ${{ vars.SRE_PAGES_AUTOROLLBACK }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          case "$COMMIT" in
+            *[!0-9a-fA-F]*|'') echo "Not a commit: $COMMIT"; exit 2 ;;
+          esac
+          node scripts/sre/post-deploy.mjs --commit "$COMMIT" --out post-deploy.json --run-out run.json --apply
+      - name: Keep the results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: post-deploy-${{ github.run_id }}
+          path: |
+            post-deploy.json
+            run.json
+          if-no-files-found: ignore
+          retention-days: 30

@@ -43,6 +43,9 @@ jobs:
         env:
           CI: true
 
+      - name: Page weight within budget (scripts/sre/perf-budget.json)
+        run: node scripts/sre/perf-budget.mjs --summary "$GITHUB_STEP_SUMMARY"
+
   backend:
     name: Backend tests
     runs-on: ubuntu-latest
@@ -122,3 +125,31 @@ jobs:
           java-version: '21'
       - name: Test rules and real Firestore transactions without cloud credentials
         run: npx --yes firebase-tools@15.31.0 emulators:exec --project demo-diamondecho --only firestore "node --test staff-queue/firestore-rules.test.mjs && python -m pytest backend/tests/test_firestore_emulator.py -q"
+
+  sre:
+    name: SRE automation tests (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+      # Every *.test.mjs of the SRE automation (scripts/sre/README.md is the
+      # contract between them). None of these tests touches the network.
+      - name: Monitoring, alerting, remediation, release, status page, load and chaos tests
+        run: |
+          files=$(find scripts/sre deploy/monitoring status-page tests/load tests/chaos scripts/copy-build.test.mjs \
+            -name '*.test.mjs' -not -path '*/node_modules/*' 2>/dev/null | sort || true)
+          echo "$files"
+          node --test $files
+      - name: Shell scripts parse and pass shellcheck (errors only)
+        run: |
+          files=$(find scripts/sre deploy/monitoring -name '*.sh' | sort)
+          for f in $files; do bash -n "$f"; done
+          shellcheck -S error $files

@@ -164,7 +164,14 @@ appear on the status page.
 
 `remediation-log.jsonl`: one line per decision:
 `{"at":"…","trigger":"api","action":"cloud-run-rollback","decision":"dry-run","reason":"…","from_revision":"…","to_revision":"…","verified":null}`.
-`decision` is `acted`, `dry-run`, `skipped` or `failed`.
+`decision` is `acted`, `dry-run`, `skipped` or `failed`. A line may also carry
+`code` (the machine reason, for example `no-recent-deploy`), `incident_key`,
+`incident_opened_at`, `issue_number`, `runbook`, `summary`, `command`,
+`gcloud_command`, `verify`, `verified_at` and `verify_result`. Verification
+rewrites the acted line in place (it sets `verified`); it does not append.
+
+`decision.json` (one per run of `remediate.mjs`):
+`{ "schema": 1, "at": "…", "mode": "dry-run|apply", "switch": "…", "inputs": {…}, "decisions": [], "verifications": [], "logged": 0, "summary": "…" }`.
 
 `slo.json` (written by `slo-calc.mjs`; read by the alert engine through
 `--slo`, by the status page and by the weekly report):
@@ -183,6 +190,8 @@ appear on the status page.
 }
 ```
 
+`slo.json` may carry more fields than shown (coverage, budget level, the burn
+rule that fired); a `burn` value is `null` when its window holds no data.
 `budget_remaining` is the share of the window's error budget still unspent
 (1 is untouched, 0 is spent, negative is overspent). `accepted` is false until
 Gbenga accepts the target.
@@ -204,11 +213,11 @@ One history line (written by `state.mjs`, read by `slo-calc.mjs`):
 | `bash scripts/sre/state-git.sh checkout DIR` / `commit DIR "message"` | observability | the `sre-status` branch | the `sre-status` branch |
 | `node scripts/sre/alert.mjs --run run.json --state-dir DIR --out actions.json [--slo slo.json] [--apply]` | observability | `run.json`, `incidents.json` | `incidents.json`, `actions.json`; with `--apply`, GitHub issues and the optional webhook |
 | `node scripts/sre/remediate.mjs --state-dir DIR --out decision.json [--apply]` | infrastructure | state dir | `remediation-log.jsonl`, `decision.json`; with `--apply`, calls `cloudrun/rollback.sh` |
-| `bash scripts/sre/cloudrun/status.sh` | release and change safety | Cloud Run | prints `{"serving":[{"revision":"…","percent":100}],"revisions":[{"name":"…","created":"…","ready":true}]}` |
+| `bash scripts/sre/cloudrun/status.sh` | release and change safety | Cloud Run | prints `{"serving":[{"revision":"…","percent":100}],"revisions":[{"name":"…","created":"…","ready":true,"image":"…"}]}` |
 | `bash scripts/sre/cloudrun/rollback.sh --to REVISION [--apply]` | release and change safety | Cloud Run | with `--apply`, Cloud Run traffic |
 | `bash scripts/sre/cloudrun/deploy.sh [--apply]` | release and change safety | the repository | with `--apply`, a new Cloud Run revision |
 | `node scripts/sre/slo-calc.mjs --state-dir DIR --window-days 28 --out slo.json` | SLO | `history/` | `slo.json` |
-| `node scripts/sre/weekly-report.mjs --state-dir DIR --out report.md` | SLO | state dir | `report.md` |
+| `node scripts/sre/weekly-report.mjs --state-dir DIR --out report.md [--apply]` | SLO | state dir | `report.md`; with `--apply`, opens (or comments on) that week's `sre-report` issue |
 
 `lib/github.mjs` (observability) is the one way scripts talk to GitHub:
 `githubClient({ token, repository, fetch })` returns
@@ -222,6 +231,10 @@ post-merge check).
 
 Anything that changes something outside the repository is off unless
 `--apply` is given. Without it the command prints what it would do.
+
+Every command that reads the clock honours `SRE_NOW` (an ISO time) when it is
+set, so the offline fire drill (`fire-drill.mjs`) and tests can replay hours of
+history in seconds. Production runs never set it.
 
 ## Rules for every script and workflow
 

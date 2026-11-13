@@ -1,0 +1,53 @@
+{
+  "schema": 1,
+  "note": "Limits are the build measured on 2026-11-13 at commit 672aa79 plus 10 percent, rounded up to the next 1,000 bytes. Raise a limit only in a reviewed commit that says why. How to: docs/sre/capacity.md.",
+  "measured_on": "2026-11-13",
+  "commit": "672aa79",
+  "headroom": 0.1,
+  "limits": {
+    "js-total-bytes": {
+      "limit_bytes": 729000,
+      "measured_bytes": 661853
+    },
+    "js-total-gzip": {
+      "limit_bytes": 227000,
+      "measured_bytes": 205848
+    },
+    "js-largest-bytes": {
+      "limit_bytes": 729000,
+      "measured_bytes": 661853
+    },
+    "js-largest-gzip": {
+      "limit_bytes": 227000,
+      "measured_bytes": 205848
+    },
+    "css-total-bytes": {
+      "limit_bytes": 167000,
+      "measured_bytes": 151113
+    },
+    "css-total-gzip": {
+      "limit_bytes": 29000,
+      "measured_bytes": 26000
+    },
+    "css-largest-gzip": {
+      "limit_bytes": 29000,
+      "measured_bytes": 26000
+    },
+    "html-largest-bytes": {
+      "limit_bytes": 76000,
+      "measured_bytes": 68491
+    },
+    "html-largest-gzip": {
+      "limit_bytes": 17000,
+      "measured_bytes": 14756
+    },
+    "image-largest-bytes": {
+      "limit_bytes": 177000,
+      "measured_bytes": 160791
+    },
+    "all-total-bytes": {
+      "limit_bytes": 1412000,
+      "measured_bytes": 1283079
+    }
+  }
+}

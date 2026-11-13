@@ -1,0 +1,126 @@
+name: SRE deploy API
+
+# Deploys the API to Cloud Run with scripts/sre/cloudrun/deploy.sh: a new
+# revision with no traffic, candidate checks, traffic in steps of 10, 50 and
+# 100 percent with a health gate after each, and an automatic return to the
+# revision that was serving if any check or step fails. It is the same
+# procedure Gbenga runs by hand from Cloud Shell (docs/sre/release-safety.md).
+#
+# Dormant. It runs only when started by hand, from main, with the confirmation
+# typed exactly, AFTER Gbenga has set up Workload Identity Federation (a
+# short-lived Google sign-in for this workflow, no stored key) and these
+# repository variables: GCP_WORKLOAD_IDENTITY_PROVIDER, GCP_SRE_SERVICE_ACCOUNT,
+# GCP_PROJECT_ID, GCP_REGION, CLOUD_RUN_SERVICE. Without them it stops with a
+# message. Each run also waits for Gbenga's approval in the protected
+# `production` environment. See docs/sre/needs-from-gbenga.md.
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: 'Commit on main to deploy (7 to 40 characters)'
+        required: true
+        type: string
+      confirm:
+        description: 'Type exactly: deploy diamondecho-api'
+        required: true
+        type: string
+      dry_run:
+        description: 'Dry run: read and print the commands, change nothing'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# Never two deploys at once, and never cut one off part-way.
+concurrency:
+  group: sre-deploy-api
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: Set up and confirmed?
+    if: github.repository == 'Ggeorge73/DiamondEcho'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Stop unless set up, confirmed and started from main
+        env:
+          GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          GCP_SRE_SERVICE_ACCOUNT: ${{ vars.GCP_SRE_SERVICE_ACCOUNT }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ vars.GCP_REGION }}
+          CLOUD_RUN_SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
+          CONFIRM: ${{ inputs.confirm }}
+          COMMIT: ${{ inputs.commit }}
+          REF: ${{ github.ref }}
+        shell: bash
+        run: |
+          missing=""
+          for name in GCP_WORKLOAD_IDENTITY_PROVIDER GCP_SRE_SERVICE_ACCOUNT GCP_PROJECT_ID GCP_REGION CLOUD_RUN_SERVICE; do
+            [ -n "${!name}" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Not set up: the repository variables$missing are missing. The API is deployed by hand until Gbenga sets up Workload Identity Federation (docs/sre/needs-from-gbenga.md). Nothing was changed."
+            exit 1
+          fi
+          if [ "$CONFIRM" != "deploy diamondecho-api" ]; then
+            echo "::error::The confirmation was not typed exactly as: deploy diamondecho-api. Nothing was changed."
+            exit 1
+          fi
+          if ! [[ "$COMMIT" =~ ^[0-9a-fA-F]{7,40}$ ]]; then
+            echo "::error::Not a commit: $COMMIT. Nothing was changed."
+            exit 1
+          fi
+          if [ "$REF" != refs/heads/main ]; then
+            echo "::error::Start this workflow from main, so the reviewed version of it runs. Nothing was changed."
+            exit 1
+          fi
+          echo "Set up and confirmed. The next job waits for approval in the production environment."
+
+  deploy:
+    name: Deploy with gates and automatic rollback
+    needs: preflight
+    runs-on: ubuntu-latest
+    # GitHub asks the environment's required reviewer (Gbenga) before this job starts.
+    environment: production
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      # Into a folder of its own: the Google sign-in step writes a credentials
+      # file into the workspace, and deploy.sh refuses a checkout with any
+      # file git does not know.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.commit }}
+          path: repo
+          # Full history, so deploy.sh can prove the commit is on main.
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SRE_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          version: '570.0.0'
+      - name: Deploy (record goes to the run summary)
+        working-directory: repo
+        env:
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ vars.GCP_REGION }}
+          CLOUD_RUN_SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
+          COMMIT: ${{ inputs.commit }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        shell: bash
+        run: |
+          if [ "$DRY_RUN" = true ]; then
+            bash scripts/sre/cloudrun/deploy.sh --commit "$COMMIT" | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            bash scripts/sre/cloudrun/deploy.sh --apply --commit "$COMMIT" | tee -a "$GITHUB_STEP_SUMMARY"
+          fi

@@ -1,0 +1,68 @@
+name: SRE weekly report
+
+# Every Monday morning: work out the SLO figures from the probe history on the
+# sre-status branch, write last week's reliability report there, and open an
+# issue labelled "sre-report" so a person reads it. It reads files and writes
+# only to the sre-status branch and to issues. It never calls the live site,
+# Google Cloud or Cloudflare. docs/sre/slo.md explains the figures.
+on:
+  schedule:
+    - cron: '23 7 * * 1' # Mondays, 07:23 UTC (before the working day in Georgia)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One writer at a time on the sre-status branch. Every workflow that writes
+# state uses this group, and none cancels another in the middle of a write.
+concurrency:
+  group: sre-state
+  cancel-in-progress: false
+
+jobs:
+  report:
+    name: Weekly reliability report
+    if: github.repository == 'Ggeorge73/DiamondEcho'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write # state-git.sh pushes the report to the sre-status branch
+      issues: write # the "sre-report" issue
+    steps:
+      # Credentials stay in the checkout because state-git.sh pushes to the
+      # sre-status branch with this job's token. Nothing else here uses them.
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+
+      # A report from broken code is worse than none: test the three scripts first.
+      - name: Test the SLO scripts
+        run: node --test scripts/sre/slo.config.test.mjs scripts/sre/slo-calc.test.mjs scripts/sre/weekly-report.test.mjs
+
+      - name: Check out the status branch
+        run: |
+          echo "STATE_DIR=$RUNNER_TEMP/sre-state" >> "$GITHUB_ENV"
+          bash scripts/sre/state-git.sh checkout "$RUNNER_TEMP/sre-state"
+
+      - name: Work out the SLO figures (28 days)
+        run: node scripts/sre/slo-calc.mjs --state-dir "$STATE_DIR" --window-days 28 --out "$STATE_DIR/slo.json"
+
+      # The week label comes from the script itself so the file name and the
+      # report's title cannot disagree. --apply opens the issue (or comments on
+      # it if this week's report was already posted).
+      - name: Write the report and open its issue
+        id: report
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          week=$(node --input-type=module -e 'const { reportPeriod } = await import("./scripts/sre/weekly-report.mjs"); console.log(reportPeriod(Date.now()).week)')
+          if ! [[ "$week" =~ ^[0-9]{4}-W[0-9]{2}$ ]]; then echo "Unexpected week label"; exit 2; fi
+          echo "week=$week" >> "$GITHUB_OUTPUT"
+          node scripts/sre/weekly-report.mjs --state-dir "$STATE_DIR" --out "$STATE_DIR/reports/$week.md" --apply
+
+      - name: Save to the status branch
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          WEEK: ${{ steps.report.outputs.week }}
+        run: bash scripts/sre/state-git.sh commit "$STATE_DIR" "Weekly reliability report $WEEK"

@@ -1,0 +1,131 @@
+name: SRE load test
+
+# Measures how the API behaves under load, on a copy of the API running inside
+# the GitHub runner itself. It never sends load anywhere else: the target is
+# http://127.0.0.1:8080 on the runner, and the load generator refuses
+# diamondecho.com, its subdomains and the production API address in code, with
+# no setting that changes that (tests/load/safety.mjs, tested before every run).
+#
+# The container is limited to 1 CPU and 1 GiB, like one Cloud Run instance,
+# and runs one worker, like production. A runner is not Cloud Run: the figures
+# show how the code behaves and catch a change that makes it several times
+# slower; they are not production capacity. How to read the result:
+# docs/sre/load-testing.md.
+#
+# Manual only (Actions > SRE load test > Run workflow). It needs no secret and
+# changes nothing outside the runner.
+on:
+  workflow_dispatch:
+    inputs:
+      scenarios:
+        description: Scenarios, comma-separated (see node tests/load/loadgen.mjs --list). "standard" is the everyday set.
+        type: string
+        default: standard
+      heavy:
+        description: Also time the heavy calculation routes, a few requests each (heavy-local)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sre-load-test-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  load:
+    name: Load test the API container on the runner
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      # The refusals are tested before any request is sent. If one fails, the
+      # job stops here and nothing is load-tested.
+      - name: Test the load generator and its safety rules
+        run: node --test tests/load/*.test.mjs
+
+      - name: Build the API container (as CI does; no push, no deployment)
+        run: docker build -t diamondecho-api:load backend
+
+      - name: Start it on this runner only (1 CPU, 1 GiB, one worker)
+        id: start
+        run: |
+          started=$(date +%s%N)
+          docker run -d --name diamondecho-api --cpus 1 --memory 1g -p 127.0.0.1:8080:8080 diamondecho-api:load
+          for attempt in $(seq 1 120); do
+            if curl -fsS http://127.0.0.1:8080/health > /dev/null 2>&1; then break; fi
+            sleep 0.25
+          done
+          curl -fsS http://127.0.0.1:8080/health
+          echo
+          ready=$(date +%s%N)
+          echo "startup_ms=$(( (ready - started) / 1000000 ))" >> "$GITHUB_OUTPUT"
+
+      - name: Run the scenarios
+        env:
+          SCENARIOS: ${{ inputs.scenarios }}
+          HEAVY: ${{ inputs.heavy }}
+          STARTUP_MS: ${{ steps.start.outputs.startup_ms }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/load"
+          {
+            echo "### Where this ran"
+            echo
+            echo "GitHub Actions runner, API container limited to 1 CPU and 1 GiB, commit \`${GITHUB_SHA::7}\`."
+            echo "Container start to first answer on the runner: ${STARTUP_MS} ms (not a Cloud Run cold start)."
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+          list="$SCENARIOS"
+          if [ "$HEAVY" = "true" ]; then list="$list,heavy-local"; fi
+          node tests/load/loadgen.mjs \
+            --target http://127.0.0.1:8080 \
+            --scenario "$list" \
+            --label "a GitHub Actions runner (API container limited to 1 CPU and 1 GiB)" \
+            --out "$RUNNER_TEMP/load/load-result.json" \
+            --summary "$GITHUB_STEP_SUMMARY"
+
+      - name: Show the API's own log if something failed
+        if: failure()
+        run: docker logs --tail 200 diamondecho-api || true
+
+      - name: Stop the API container
+        if: always()
+        run: docker stop diamondecho-api || true
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: sre-load-test-${{ github.run_id }}
+          path: ${{ runner.temp }}/load/
+          if-no-files-found: ignore
+          retention-days: 30
+
+  page-weight:
+    name: Page-weight budget of the public site
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Use the repository's pinned npm version
+        run: npm install --global npm@10.9.3
+      - run: npm ci
+      - name: Build the public site
+        run: npm run build
+        env:
+          CI: true
+      - name: Compare the build with scripts/sre/perf-budget.json
+        run: node scripts/sre/perf-budget.mjs --summary "$GITHUB_STEP_SUMMARY"

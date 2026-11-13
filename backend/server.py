@@ -1,5 +1,6 @@
 """Cloud Run entry point: calculators work without a database at startup."""
 import os
+import re
 from pathlib import Path
 from uuid import uuid4
 from datetime import datetime, timezone
@@ -33,9 +34,28 @@ def docs_settings(environ=os.environ):
 app = FastAPI(**docs_settings())
 api = APIRouter(prefix="/api")
 
+# Build identity: which deploy is answering. A monitor with no cloud sign-in
+# reads this to tell a new revision from the old one (scripts/sre). Cloud Run
+# sets K_REVISION in the container; scripts/sre/cloudrun/deploy.sh sets
+# APP_COMMIT to the commit it deployed. Both are null when unset, as on a
+# local run. Only these two facts are published, and only when they look like
+# a revision name and a commit, so a mistyped setting cannot put anything else
+# on this route. No library versions and no configuration.
+REVISION_NAME = re.compile(r"[a-z][a-z0-9-]{0,62}")
+COMMIT_HASH = re.compile(r"[0-9a-f]{7,40}")
+
+def build_identity(environ=os.environ):
+    revision = environ.get("K_REVISION", "").strip()
+    commit = environ.get("APP_COMMIT", "").strip().lower()
+    return {
+        "service": "DiamondEcho API",
+        "revision": revision if REVISION_NAME.fullmatch(revision) else None,
+        "commit": commit if COMMIT_HASH.fullmatch(commit) else None,
+    }
+
 @api.get("/")
 def root():
-    return {"service": "DiamondEcho API"}
+    return build_identity()
 
 # Liveness only, not proof of Firebase configuration or queue delivery.
 # Cloud Run's front end answers some paths ending in "z" itself, so /healthz

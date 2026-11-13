@@ -1,0 +1,21 @@
+{
+  "displayName": "API speed, real requests: 95% answered in under 1,000 ms over 28 days (proposed, not accepted)",
+  "goal": 0.95,
+  "rollingPeriod": "2419200s",
+  "serviceLevelIndicator": {
+    "requestBased": {
+      "distributionCut": {
+        "distributionFilter": "metric.type=\"run.googleapis.com/request_latencies\" resource.type=\"cloud_run_revision\" resource.labels.project_id=\"${PROJECT_ID}\" resource.labels.location=\"us-east1\" resource.labels.service_name=\"diamondecho-api\"",
+        "range": {
+          "min": 0,
+          "max": 1000
+        }
+      }
+    }
+  },
+  "userLabels": {
+    "sli": "api-latency",
+    "view": "real-requests",
+    "accepted": "false"
+  }
+}
