@@ -55,7 +55,11 @@ results with those functions, never by hand.
   `slow` (hourly: TLS, DNS, domain registration, third parties), `post-deploy`
   (after a merge to `main`: everything).
 - `component`: one of the keys of `COMPONENTS` in `lib/schema.mjs`. Incidents
-  and the status page are per component.
+  and the status page are per component, with two exceptions made by the
+  alert engine: the `monitoring` incident (the monitor is blind, overdue, or
+  refused by Cloudflare; it is not a check component and has no status-page
+  row), and page-load failures folded into an open website incident as "also
+  affected" instead of opening their own.
 - `severity`: how bad it is if this check keeps failing (`sev1` to `sev4`,
   defined in `docs/sre/severity-and-escalation.md`).
 - `slis`: names from `slo.config.mjs`. A check that feeds no SLO passes `[]`.
@@ -205,7 +209,10 @@ One history line (written by `state.mjs`, read by `slo-calc.mjs`):
 {"t":"2026-11-13T00:00:00.000Z","suite":"fast","region":"eastus","c":{"public-home":[1,212,["public-availability","public-latency"]]}}
 ```
 
-`c` maps check id to `[ok as 1 or 0, latency_ms or null, slis]`.
+`c` maps check id to `[ok as 1 or 0, latency_ms or null, slis]`. A line may
+also carry `"blind": N` (the monitor reached nothing, outside checks
+included: `c` is empty and the run counts against no SLO) and `"refused": N`
+(checks Cloudflare refused to the monitor, left out of `c`).
 
 ## Commands
 
@@ -214,7 +221,7 @@ One history line (written by `state.mjs`, read by `slo-calc.mjs`):
 | `node scripts/sre/synthetic-checks.mjs --suite fast\|slow\|post-deploy --out run.json [--fail-on-failure]` | synthetic monitoring | the live site | `run.json` |
 | `node scripts/sre/state.mjs record --run run.json --state-dir DIR` | observability | `run.json` | `status.json`, `history/` |
 | `bash scripts/sre/state-git.sh checkout DIR` / `commit DIR "message"` | observability | the `sre-status` branch | the `sre-status` branch |
-| `node scripts/sre/alert.mjs --run run.json --state-dir DIR --out actions.json [--slo slo.json] [--apply]` | observability | `run.json`, `incidents.json` | `incidents.json`, `actions.json`; with `--apply`, GitHub issues and the optional webhook |
+| `node scripts/sre/alert.mjs --run run.json --state-dir DIR --out actions.json [--slo slo.json] [--apply]` | observability | `run.json`, `incidents.json`, `status.json`, `deploys.jsonl`, `remediation-log.jsonl` | `incidents.json`, `actions.json`; with `--apply`, GitHub issues and the optional webhook |
 | `node scripts/sre/remediate.mjs --state-dir DIR --out decision.json [--apply]` | infrastructure | state dir | `remediation-log.jsonl`, `decision.json`; with `--apply`, calls `cloudrun/rollback.sh` |
 | `node scripts/sre/remediate.mjs --check-access --out access.json` | infrastructure | Cloud Run (read-only, via `status.sh`) | `access.json`: `{schema, at, check:"access", ok, service, serving, revisions, fields:{image,settings,tags}, summary}`; exit 0 read, 1 could not read, 2 bad arguments |
 | `bash scripts/sre/cloudrun/status.sh` | release and change safety | Cloud Run | prints `{"serving":[{"revision":"…","percent":100}],"tags":[{"tag":"candidate","revision":"…"}],"revisions":[{"name":"…","created":"…","ready":true,"image":"…","settings":"<fingerprint>"}]}`; `settings` is a short fingerprint of every setting except the image and `APP_COMMIT` |
@@ -225,8 +232,14 @@ One history line (written by `state.mjs`, read by `slo-calc.mjs`):
 
 `lib/github.mjs` (observability) is the one way scripts talk to GitHub:
 `githubClient({ token, repository, fetch })` returns
-`{ ensureLabel(name, color, description), createIssue({ title, body, labels }) -> { number, html_url }, comment(number, body), closeIssue(number), listOpenIssues(label) -> [{ number, title, html_url, labels }] }`.
-`token` defaults to `GITHUB_TOKEN` and `repository` to `GITHUB_REPOSITORY`.
+`{ ensureLabel(name, color, description), createIssue({ title, body, labels }) -> { number, html_url }, comment(number, body), closeIssue(number), listOpenIssues(label) -> [{ number, title, html_url, labels }] }`,
+plus `editIssue`, `reopenIssue`, `addLabels`, `removeLabel` and
+`listComments(number) -> [{ user, author_association, created_at, first_line }]`
+(only the first line of a comment, at most 300 characters), and a `dryRun`
+flag (true without a token). `token` defaults to `GITHUB_TOKEN` and
+`repository` to `GITHUB_REPOSITORY`. Only comments whose `author_association`
+is OWNER, MEMBER or COLLABORATOR (or by `SRE_OWNER`) may acknowledge an
+incident or post a `Status:` line: the repository is public.
 
 Exit codes: 0 means the command did its job (a failed check is data, not an
 error); 2 means the command itself broke. `--fail-on-failure` makes
