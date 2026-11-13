@@ -39,7 +39,7 @@ marked "declared by a person".
 | Staff site (`staff-site`) | | Staff cannot open the queue, or the staff API stops asking for sign-in (`staff-home`, `staff-api-auth`) | | |
 | DNS (`dns`) | `diamondecho.com` does not resolve (`dns-apex-resolves`) | Mail records (MX, SPF) wrong, staff address or nameservers wrong | Microsoft 365 or DMARC records wrong | Other records carried over from GoDaddy changed |
 | TLS certificates (`tls`) | A certificate has expired, or expires in under 2 days | Expires in under 7 days; or a connection older than TLS 1.2 | Expires in under 21 days and not yet renewed | |
-| Domain registration (`domain`) | Expired, expires in under 7 days, on hold, or being moved away | Expires in under 30 days, or a lock is off | Expires in under 60 days | |
+| Domain registration (`domain`) | Expired, expires in under 7 days, on hold, or no longer registered | Expires in under 30 days; a transfer to another registrar is under way, or the registry names a different registrar (refuse it at GoDaddy at once if nobody started it) | Expires in under 60 days, or the transfer lock is off | |
 | Monitoring | | | The monitor cannot see the site, or a suite has not run (see "When the monitor itself fails") | |
 | Error budget | | A fast burn (1-hour window): failing so often that the 28-day allowance would be gone in about two days ([error-budget-policy.md](error-budget-policy.md)) | A medium burn (6-hour window) | A slow burn (3-day window): opens no issue; shown in `slo.json` and the weekly report only |
 
