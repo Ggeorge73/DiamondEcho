@@ -185,11 +185,14 @@ rewrites the acted line in place (it sets `verified`); it does not append.
       "budget_remaining": 0.0012, "burn": { "1h": 0, "6h": 1.2, "3d": 0.8 }, "enough_data": true }
   ],
   "burn_alerts": [
-    { "slo": "public-availability", "component": "public-site", "severity": "sev2", "window": "1h", "burn_rate": 16.2, "text": "…" }
+    { "slo": "public-availability", "component": "public-site", "severity": "sev2", "window": "1h", "burn_rate": 16.2, "checks": ["search-page"], "text": "…" }
   ]
 }
 ```
 
+A burn alert's `checks` names the checks that failed (or were slow) in its
+long window; the alert engine treats the alert as covered when an open
+incident's `failing_checks` share one of them, so one outage pages once.
 `slo.json` may carry more fields than shown (coverage, budget level, the burn
 rule that fired); a `burn` value is `null` when its window holds no data.
 `budget_remaining` is the share of the window's error budget still unspent
