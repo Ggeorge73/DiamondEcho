@@ -16,7 +16,7 @@
 //   slow-rollback giving all traffic back to the original revision takes 2 s
 // The fake writes "MARK traffic-step" and "MARK rollback" lines to FAKE_LOG
 // as those calls start, so a test can send a signal at a known moment.
-import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 
 const args = process.argv.slice(2);
 const statePath = process.env.FAKE_STATE;
@@ -24,7 +24,14 @@ const scenario = new Set((process.env.FAKE_SCENARIO || "").split(",").filter(Boo
 if (process.env.FAKE_LOG) appendFileSync(process.env.FAKE_LOG, `gcloud ${args.join(" ")}\n`);
 
 const state = JSON.parse(readFileSync(statePath, "utf8"));
-const save = () => writeFileSync(statePath, JSON.stringify(state, null, 2));
+// Atomic: write a file beside it, then rename over it. A test (or another
+// fake) reading the state at that moment sees the old or the new model,
+// never half of one.
+const save = () => {
+  const temporary = `${statePath}.${process.pid}.tmp`;
+  writeFileSync(temporary, JSON.stringify(state, null, 2));
+  renameSync(temporary, statePath);
+};
 const fail = (message, code = 1) => { process.stderr.write(`ERROR: (gcloud) ${message}\n`); process.exit(code); };
 const flag = (name) => {
   const index = args.indexOf(name);

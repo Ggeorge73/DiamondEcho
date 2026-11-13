@@ -569,3 +569,12 @@ test("the flapping home page that first burns the budget yields one issue", () =
   assert.equal(opened.length, 1, opened.map((action) => action.key).join());
   assert.equal(kinds(out.actions, "close-issue").length <= 1, true);
 });
+
+test("a part folded into the website incident does not open a budget incident when the website recovers", () => {
+  const sloDoc = (at, alerts) => ({ schema: 1, generated_at: new Date(at).toISOString(), slos: [{ id: "calculators-availability", name: "Calculators availability" }], burn_alerts: alerts });
+  const burn = { slo: "calculators-availability", component: "calculators", severity: "sev3", window: "6h", text: "Calculators burning.", checks: ["calculators-deal-page", "calculators-mortgage-page"] };
+  const runs = [...Array.from({ length: 4 }, () => pagesOutage(true)), ...Array.from({ length: 6 }, () => pagesOutage(false))];
+  const out = replay(runs, { slo: (at, i) => sloDoc(at, i >= 3 ? [burn] : []) });
+  assert.ok(!out.actions.some((action) => action.key.startsWith("budget:")), out.actions.map((action) => `${action.kind}:${action.key}`).join(" "));
+  assert.equal(kinds(out.actions, "open-issue").length, 1);
+});

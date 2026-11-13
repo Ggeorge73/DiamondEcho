@@ -7,7 +7,7 @@
 //
 // FAKE_SCENARIO: "bad-token" (403), "rollback-ignored" (accepted, nothing
 // changes).
-import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 
 const args = process.argv.slice(2);
 const scenario = new Set((process.env.FAKE_SCENARIO || "").split(",").filter(Boolean));
@@ -44,7 +44,10 @@ if (auth !== `Authorization: Bearer ${state.token}` || scenario.has("bad-token")
   const id = parsed.pathname.split("/").at(-2);
   if (!scenario.has("rollback-ignored")) state.live = id;
   state.rollbacks = [...(state.rollbacks || []), id];
-  writeFileSync(statePath, JSON.stringify(state));
+  // Atomic, as in cloudrun/fakes/gcloud.mjs: a reader never sees half a file.
+  const temporary = `${statePath}.${process.pid}.tmp`;
+  writeFileSync(temporary, JSON.stringify(state));
+  renameSync(temporary, statePath);
   send(200, { success: true, errors: [], result: state.deployments.find((row) => row.id === id) });
 } else {
   send(404, { success: false, errors: [{ code: 8000007, message: "Not found" }], result: null });

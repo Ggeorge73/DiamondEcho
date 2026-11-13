@@ -241,6 +241,7 @@ if [ -f "$DIR/slos/service.json" ]; then
     [ "$(basename "$file")" = service.json ] && continue
     rendered="$(render "$file")"
     label="$(field "$rendered" displayName)"
+    # "sli" here means userLabels.sli (see field and pick), never a top-level field.
     key=sli; match="$(field "$rendered" sli)"
     if [ -z "$match" ]; then key=displayName; match="$label"; fi
     if [ "$READ" = 0 ]; then unknown slo "$label"; continue; fi

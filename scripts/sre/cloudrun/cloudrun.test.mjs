@@ -121,9 +121,12 @@ const changes = (calls) => calls.filter((line) => / run deploy | update-traffic 
 // Signals. The fake gcloud writes MARK lines as traffic calls start, and the
 // tests wait for those (or for the traffic itself) before signalling, with a
 // generous deadline for slow machines.
+// A condition that cannot be judged yet (a file not written, or caught
+// mid-write by a fake that is still running) counts as "not yet".
+const holds = (condition) => { try { return Boolean(condition()); } catch { return false; } };
 async function until(condition, what, ms = 60_000) {
   const deadline = Date.now() + ms;
-  while (!condition()) {
+  while (!holds(condition)) {
     assert.ok(Date.now() < deadline, `timed out waiting for: ${what}`);
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
@@ -157,12 +160,14 @@ test("status.sh prints the contract document, revisions newest first", (t) => {
 test("status.sh shows the candidate tag of a deploy in progress, and it is gone afterwards", async (t) => {
   const box = setup();
   t.after(box.cleanup);
-  const child = box.start("deploy.sh", ["--apply"], "", { DEPLOY_GATE_SECONDS: "3", DEPLOY_GATE_PROBES: "1" });
+  const child = box.start("deploy.sh", ["--apply"], "", { DEPLOY_GATE_SECONDS: "6", DEPLOY_GATE_PROBES: "1" });
   const seen = collect(child);
   await until(() => box.serving().includes(`${NEW}=10`), "the 10 percent step");
   const during = JSON.parse(box.run("status.sh").out);
   assert.deepEqual(during.tags, [{ tag: "candidate", revision: NEW }]);
-  assert.deepEqual(during.serving.map((item) => `${item.revision}=${item.percent}`).sort(), [`${PREV}=90`, `${NEW}=10`]);
+  // On a slow machine the 50 percent step may already have begun.
+  const split = during.serving.map((item) => `${item.revision}=${item.percent}`).sort().join(" ");
+  assert.ok([`${PREV}=90 ${NEW}=10`, `${PREV}=50 ${NEW}=50`].includes(split), split);
   assert.equal(await seen.closed, 0, seen.err);
   assert.deepEqual(JSON.parse(box.run("status.sh").out).tags, []);
 });

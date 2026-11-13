@@ -47,13 +47,27 @@ the same public text: what visitors notice, the failing checks, the runbook.
   spell of failures is not "on and off": the two-run rule handles it.
 - **One incident per part of the site.** Failures in the same component share
   one incident and one issue. Its severity is the worst of its failing checks.
+  It drops only when the more serious checks have recovered for good; one
+  good run in the middle of an outage does not turn "is down" into "on and
+  off".
+- **One cause, one page.** The search page, the calculator pages and the
+  contact page are served by Cloudflare Pages exactly like the website. While
+  the website has a sev1 or sev2 incident, a part whose only failures are
+  those page loads is named in the website incident as "also affected" (in
+  its issue text and on the status page) instead of opening its own incident
+  and chat message. It gets its own incident only if it still fails once the
+  website incident has closed. A 20-minute Pages outage therefore makes one
+  issue and two chat messages (opened, resolved).
 - **The monitor's own blindness is not the site's outage.** If a run reached
-  nothing at all, not even outside services (the Georgia MLS search, public
-  DNS, the domain registry, recognised by their check names), the monitor's
-  network failed. That run counts against nothing. Two in a row open a sev3
-  "Monitoring cannot see the site" incident, never a false "Website is down".
-  Those outside checks run only in the hourly suite, so a 5-minute run is
-  never called blind: if nothing answers there, it counts against the site.
+  nothing at all, not even outside services (recognised by their check
+  names: the Georgia MLS search, the public DNS resolvers and the domain
+  registry in the hourly suite, and `outside-dns-probe` in the 5-minute
+  suite), the monitor's network failed. That run counts against nothing. Two
+  such runs in a row open a sev3 "Monitoring cannot see the site" incident.
+  **Until `outside-dns-probe` is in the 5-minute suite** (synthetic
+  monitoring role), a 5-minute run has no outside check and is never called
+  blind: if the runner's network fails there, it counts against the site and
+  can open a false "Website is down" after two runs (5 to 10 minutes).
 - **Cloudflare refusing the monitor is one problem, not six.** On the first
   run from GitHub's runners every page Cloudflare serves answered 403 to the
   monitor ("Cloudflare refused the request …") while browsers got the pages
@@ -70,6 +84,9 @@ the same public text: what visitors notice, the failing checks, the runbook.
 
 ## While it is open
 
+- **Reminders wait while it recovers.** A reminder that falls due on a run
+  where every check in the incident passed is skipped; it comes at the next
+  run that fails again.
 - **Worse: at once.** When the severity rises, the issue is relabelled and
   retitled, a comment says what changed, and a sev1 or sev2 goes to chat. The
   reminder ladder restarts at the new severity.
@@ -80,7 +97,8 @@ the same public text: what visitors notice, the failing checks, the runbook.
   `slo.json` (the share of the 28-day allowance of failures being used up too
   fast; see [slo.md](slo.md)) opens a `budget:<slo>` incident at the alert's
   severity. It is not opened when its failing checks (named in the burn
-  alert) already belong to an open incident, or the component has, or had in
+  alert) already belong to an open incident (including a part folded into
+  the website incident), or the component has, or had in
   the last 6 hours, its own incident: then it is the same trouble seen
   another way and is noted once on that incident. So a sev3 calculator check
   that also burns the API's budget stays one sev3 incident, not a sev2 page.
@@ -90,7 +108,8 @@ the same public text: what visitors notice, the failing checks, the runbook.
   own incident, or had one in the last 6 hours, the burn is the same trouble
   seen another way: it is noted once on that incident instead. If the budget
   incident came first and the component's own incident opens afterwards, the
-  budget issue is closed with "Merged" and a pointer to the other one.
+  new incident takes over the budget incident's issue (relabelled, retitled
+  and continued with a comment), so one problem keeps one issue.
   `slo.json` older than 2 hours is ignored, so a stalled SLO calculation
   cannot open or close anything.
 
@@ -118,6 +137,13 @@ Either of these, on the incident issue:
 That stops the reminders. It does not close the incident: the monitor closes
 it when the checks pass.
 
+**Only people with standing in the repository count.** The repository is
+public, so anyone with a GitHub account can comment on an incident issue.
+The engine reads a comment for `ack` or `Status:` only when GitHub marks its
+author as the repository's OWNER, a MEMBER or a COLLABORATOR, or when the
+author is the `SRE_OWNER` login. Anyone else's comment never stops a
+reminder and never reaches the status page.
+
 Any other comment does **not** acknowledge, on purpose. AI role agents may
 comment on an incident issue through the account of the person who asked
 them; if every comment counted, an agent's note could silence a sev1's
@@ -127,7 +153,8 @@ before the incident opened never count.
 
 ## Telling visitors what is happening
 
-A comment by a person whose first line starts with `Status:` goes onto the
+A comment by a trusted person (see "How to acknowledge") whose first line
+starts with `Status:` goes onto the
 status page as an update, for example
 `Status: We are restoring the previous version.` Only that first line is
 used (at most 280 characters, without `<` and `>`); nothing else from the
@@ -175,7 +202,7 @@ about it. What covers each failure:
 | What stops | Who notices |
 | --- | --- |
 | One suite stops (the 5-minute or the hourly checks) | The other suite, at its next run: sev3 "Monitoring cannot see the site" after 45 minutes (5-minute checks) or 3 hours (hourly checks) |
-| The monitor's network | The blind-run rule above, after two runs |
+| The monitor's network | The blind-run rule above, after two blind monitor runs in a row: about 2 hours on the hourly checks; 5 to 10 minutes on the 5-minute checks once `outside-dns-probe` is there (until then the 5-minute checks cannot tell, see above) |
 | The whole workflow, or GitHub | **The Google Cloud uptime checks**, which run in Google Cloud from several continents and alert by email on their own. This is the independent heartbeat. Until Gbenga applies them, nobody is told; the status page shows "stale" to visitors after 30 minutes |
 | The uptime checks themselves | The "uptime checks have stopped reporting" policy, after 30 minutes without a result |
 | Both paths at once | Nothing. The 9:00 look at the inquiry queue ([DE-31](../de31-inquiry-routing.md)) is the human safety net for inquiries |

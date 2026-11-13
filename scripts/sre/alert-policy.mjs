@@ -681,6 +681,10 @@ function foldInto(ctx, site, component) {
   memo.also = Array.isArray(memo.also) ? memo.also : [];
   if (memo.also.includes(component)) return;
   memo.also.push(component);
+  // Its failing checks count as part of this incident for the error-budget
+  // cover, now and in the quiet hours after it closes.
+  const failing = Object.entries(ctx.engine.checks).filter(([, check]) => check.component === component && !check.ok).map(([id]) => id);
+  memo.ever = [...new Set([...(memo.ever || []), ...failing])];
   const text = `Also affected: ${componentName(component)}. Its pages are served the same way as the website.`;
   addUpdate(site, iso(ctx.now), text);
   // Named in the issue text when the issue is opened in this run; otherwise
@@ -745,6 +749,7 @@ function resolveIncident(ctx, incident, why, { merged = null, takenOver = false 
   engine.closed[incident.key] = {
     at, silenced: memo.silenced === true, hand_closed: memo.hand_closed === true, acknowledged: memo.acknowledged === true,
     webhooked: memo.webhooked === true, checks: [...new Set([...(memo.ever || []), ...Object.keys(memo.members || {})])],
+    also: Array.isArray(memo.also) ? memo.also : [],
   };
   if (!memo.hand_closed && !takenOver) {
     const body = memo.silenced ? null : merged
@@ -795,10 +800,12 @@ function judgeBudgets(ctx, slo) {
     // so on that incident instead of opening a second one.
     // Same part, or the same failing checks (a sev3 calculator check burning
     // the API's budget must not become a sev2 page of its own).
+    // A part folded into the website incident ("also affected") counts too.
     const shares = (ids) => checks.some((id) => (ids || []).includes(id));
-    const own = doc.open.find((item) => !item.key.startsWith("budget:") && (item.key === component || shares(item.failing_checks)))
+    const own = doc.open.find((item) => !item.key.startsWith("budget:") && (item.key === component || shares(item.failing_checks)
+        || shares(engine.incidents[item.key]?.ever) || (engine.incidents[item.key]?.also || []).includes(component)))
       ?? doc.recent.find((item) => !item.key.startsWith("budget:") && now - time(item.resolved_at) <= BUDGET_QUIET_HOURS * HOUR
-        && (item.key === component || shares(engine.closed[item.key]?.checks)));
+        && (item.key === component || shares(engine.closed[item.key]?.checks) || (engine.closed[item.key]?.also || []).includes(component)));
     if (own) {
       if (doc.open.includes(own)) {
         const memo = memoryOf(ctx, own);

@@ -150,12 +150,14 @@ are in `scripts/sre/README.md`; the rules are here.
 - **"Since"** for an outage or degraded part is when its first failing check
   first failed, not when the failure was confirmed.
 - **A blind run** is one where the monitor reached nothing at all, not even
-  outside services (the Georgia MLS search, the public DNS resolvers, the
-  domain registry). That is the monitor's network, not the site. It is kept
-  in the history as a line with no results, so it counts against no check
-  and no SLO, and the alert engine opens a "Monitoring cannot see the site"
-  incident if it happens twice in a row. Those outside checks run only in
-  the hourly suite, so a 5-minute run is never called blind.
+  outside services that do not touch our hosts (`outside-dns-probe` in the
+  5-minute suite; the Georgia MLS search, the public DNS resolvers and the
+  domain registry in the hourly suite). That is the monitor's network, not
+  the site. It is kept in the history as a line with no results, so it
+  counts against no check and no SLO, and the alert engine opens a
+  "Monitoring cannot see the site" incident if it happens twice in a row.
+  Until `outside-dns-probe` is in the 5-minute suite, a 5-minute run is
+  never called blind.
 - **Cloudflare refusing the monitor.** When every failing check on the parts
   Cloudflare serves was refused by Cloudflare (or not made because its page
   was), those checks are left out the same way: the history line keeps only

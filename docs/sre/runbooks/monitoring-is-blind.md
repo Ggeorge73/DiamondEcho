@@ -37,8 +37,12 @@ visitors its information is out of date rather than showing "working".
    so; GitHub disables scheduled workflows after 60 days without repository
    activity), runs failing at a step, or no runs at all.
 4. **Anyone.** Open the newest run's summary. If every check failed with "No
-   answer", including the Georgia MLS search, the runner's network failed;
-   it usually clears by itself within a few runs.
+   answer", including the outside checks that do not touch our hosts
+   (`outside-dns-probe` in the 5-minute checks; the Georgia MLS search, the
+   DNS and the domain-registry checks in the hourly ones), the runner's
+   network failed; it usually clears by itself within a few runs. If the
+   outside checks answered and only ours did not, it is the site: go to
+   [site-down.md](site-down.md).
 5. **Anyone.** See what the state branch last recorded:
    ```bash
    git fetch origin sre-status && git show origin/sre-status:status.json | grep -A 3 '"last_runs"'
