@@ -33,27 +33,36 @@ working, but no visitor knows it.
 
 ## Check first
 
-1. **Anyone.** Read the registry's record (read-only, no account):
+1. **Anyone.** Ask the registry whether it holds the name at all
+   (read-only, no account):
+   ```bash
+   curl -s -o /dev/null -w '%{http_code}\n' https://rdap.verisign.com/com/v1/domain/diamondecho.com
+   ```
+   `200`: go on to step 2. `404`: the registry has no record of the domain;
+   it has lapsed past every grace period or been deleted: go straight to Fix
+   step 2 and escalate. Anything else: the registry did not answer; try again
+   in a few minutes.
+2. **Anyone.** Read the registry's record:
    ```bash
    curl -s https://rdap.verisign.com/com/v1/domain/diamondecho.com | python3 -c 'import json,sys; d=json.load(sys.stdin); print([e for e in d["events"] if e["eventAction"]=="expiration"], d["status"], [n["ldhName"] for n in d["nameservers"]])'
    ```
    Healthy: an expiration date more than 60 days away; statuses include
    `client transfer prohibited`; nameservers `GEORGIA.NS.CLOUDFLARE.COM` and
    `JASPER.NS.CLOUDFLARE.COM`. A status of `client hold`, `redemption period`
-   or `pending delete`, or a 404 answer, means the domain has stopped working.
-2. **Gbenga.** GoDaddy > My Products > Domains > `diamondecho.com`. Note the
+   or `pending delete` means the domain has stopped working.
+3. **Gbenga.** GoDaddy > My Products > Domains > `diamondecho.com`. Note the
    expiry date, whether **Auto-renew** is on, and that the payment method on
    file is current.
-3. **Gbenga.** Same page, Domain settings: **Domain lock** should be on. Under
+4. **Gbenga.** Same page, Domain settings: **Domain lock** should be on. Under
    transfers, note any pending outbound transfer.
-4. **Gbenga.** Same page, DNS > Nameservers: should be the two Cloudflare
+5. **Gbenga.** Same page, DNS > Nameservers: should be the two Cloudflare
    names above.
 
 ## Fix
 
 1. **Gbenga. Needs Gbenga's yes** (a payment): renew `diamondecho.com` at
    GoDaddy for at least one year, and switch Auto-renew on. Worked when: the
-   registry's expiration date in step 1 above moves forward (it can take a
+   registry's expiration date in step 2 above moves forward (it can take a
    few minutes) and `domain-expiry` passes on the next hourly run.
 2. **Gbenga. Needs Gbenga's yes:** if it had already expired, renew the same
    way. The .com registry keeps an expired name for its owner for a while

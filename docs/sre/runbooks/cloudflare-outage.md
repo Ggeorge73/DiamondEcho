@@ -46,9 +46,11 @@ miss.
    CDN, DNS or Pages, this is Cloudflare's outage: go to Fix step 1.
 2. **Anyone.** Paste:
    ```bash
-   curl -sI https://diamondecho.com/ | head -n 1; curl -sI https://diamondecho.pages.dev/ | head -n 1
+   curl -s -o /dev/null -w '%{http_code}\n' https://diamondecho.com/; curl -s -o /dev/null -w '%{http_code}\n' https://diamondecho.pages.dev/
    ```
-   Healthy: `HTTP/2 200` twice. If `pages.dev` answers 200 and
+   Healthy: `200` twice. (Do not use `curl -sI … | head -n 1`: the site
+   first sends an early "103" hint, so that prints `HTTP/2 103` even when
+   all is well.) If `pages.dev` answers 200 and
    `diamondecho.com` does not, Pages is fine and something in **our zone's
    settings** (firewall, bot, redirect rules) is the cause: go to step 4.
 3. **Anyone.** Does a normal browser get through? Open https://diamondecho.com

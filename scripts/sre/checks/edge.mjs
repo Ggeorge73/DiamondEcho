@@ -60,7 +60,10 @@ export function cloudflareRefusal(result) {
   if (mitigated) {
     return { code: "challenge", text: `Cloudflare answered the monitor with a "${String(mitigated).replace(/[^a-z-]/gi, "").slice(0, 20)}" page instead of the site (status ${result.status}). A Cloudflare bot or firewall setting is stopping the monitor, and may stop real visitors too.` };
   }
-  if (![403, 429, 503].includes(result.status) || !BLOCK_PAGE.test(result.body)) return null;
+  // Only refusals. Cloudflare's 5xx outage pages carry the same
+  // cf-error-details block, and they mean Cloudflare or the site is failing,
+  // not that a security setting turned the monitor away.
+  if (![403, 429].includes(result.status) || !BLOCK_PAGE.test(result.body)) return null;
   const code = BLOCK_CODE.map((pattern) => pattern.exec(result.body)?.[1]).find(Boolean) ?? null;
   // Worded like lib/http.mjs's refusal text, so one runbook symptom covers
   // the page checks and these.

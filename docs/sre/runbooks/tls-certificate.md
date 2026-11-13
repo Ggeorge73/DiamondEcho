@@ -72,9 +72,17 @@ have no visitor impact yet.
    put the old value back in Cloudflare > DNS > Records. Worked when: the
    Pages custom domain shows Active again and, within a few hours, a new
    expiry date appears under Edge Certificates.
+   Mail guard: never change the `MX` records, the `TXT` records,
+   `autodiscover`, `sip` or `lyncdiscover` as part of this fix, and keep
+   every `CNAME` "DNS only" (grey cloud); see [edge.md](../edge.md),
+   "Changing DNS safely".
 2. **Gbenga. Needs Gbenga's yes:** if a Pages custom domain is not Active and
    names a missing DNS record, add exactly the record it names. Worked when:
    it shows Active and the `tls-*` check passes on the next hourly run.
+   Mail guard: never change the `MX` records, the `TXT` records,
+   `autodiscover`, `sip` or `lyncdiscover` as part of this fix, and keep
+   every `CNAME` "DNS only" (grey cloud); see [edge.md](../edge.md),
+   "Changing DNS safely".
 3. **Gbenga.** If Edge Certificates shows the certificate as Active with a
    future date but the check still fails, the monitor may have seen an old
    connection: wait for the next hourly run before doing anything else.

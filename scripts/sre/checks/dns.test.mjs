@@ -120,13 +120,44 @@ test("a disagreement between resolvers is reported but not counted as a failure"
   assert.match(mx.detail, /Not confirmed by both resolvers/);
 });
 
-test("one resolver unreachable and the other sees a fault: not confirmed, so it passes with a note", async () => {
+test("one resolver unreachable and the other sees a fault: an early warning (sev3), not a pass", async () => {
   const zones = { cloudflare: "down", google: healthyZone("google") };
   zones.google.delete("MX diamondecho.com");
   const { ctx } = ctxWith(zones);
-  const mx = byId(await run(ctx), "dns-mail-mx");
-  assert.equal(mx.ok, true);
-  assert.match(mx.detail, /but Cloudflare DNS could not be reached/);
+  const checks = await run(ctx);
+  const mx = byId(checks, "dns-mail-mx");
+  assert.deepEqual([mx.ok, mx.severity], [false, "sev3"]);
+  assert.match(mx.detail, /Google DNS reports MX diamondecho\.com: no record, and Cloudflare DNS could not be reached to confirm it\. Counted as an early warning/);
+  assert.match(mx.detail, /update deploy\/dns\/expected-records\.json/);
+  // The other records are fine at the one resolver that answers: they pass.
+  assert.equal(byId(checks, "dns-mail-spf").ok, true);
+});
+
+test("the same half-confirmed fault on a sev4 record stays sev4", async () => {
+  const zones = { cloudflare: healthyZone("cloudflare"), google: "down" };
+  zones.cloudflare.delete("CNAME pay.diamondecho.com");
+  const other = byId(await run(ctxWith(zones).ctx), "dns-other-records");
+  assert.deepEqual([other.ok, other.severity], [false, "sev4"]);
+});
+
+test("a confirmed fault and a half-confirmed one together keep the full severity", async () => {
+  const zones = { cloudflare: healthyZone("cloudflare"), google: healthyZone("google") };
+  zones.cloudflare.delete("CNAME autodiscover.diamondecho.com");
+  zones.google.delete("CNAME autodiscover.diamondecho.com");
+  const { query } = fakeDoh(zones);
+  const ctx = {
+    now: () => NOW, targets: TARGETS.production, env: {},
+    // Google cannot be asked about the TXT record only.
+    dohQuery: async (question) => {
+      if (question.resolver.id === "google" && question.type === "TXT" && question.name === "diamondecho.com") throw new Error("HTTP 503");
+      return query(question);
+    },
+  };
+  zones.cloudflare.set("TXT diamondecho.com", { rcode: 0, answers: ['"v=spf1 include:_spf-usg2.ppe-hosted.com include:secureserver.net ~all"'] });
+  const m365 = byId(await run(ctx), "dns-mail-microsoft-365");
+  assert.deepEqual([m365.ok, m365.severity], [false, "sev3"]);
+  assert.match(m365.detail, /CNAME autodiscover\.diamondecho\.com: no record\. Both resolvers agree/);
+  assert.match(m365.detail, /could not be reached to confirm it/);
 });
 
 test("one resolver unreachable and the other healthy: passes and says it was one resolver", async () => {

@@ -168,6 +168,10 @@ export async function judge({ ask, now, expectations, id, name, severity, hint =
   const confirmed = [];
   const unconfirmed = [];
   const blind = [];
+  // A fault seen by one resolver while the other cannot be asked: not
+  // confirmed, but not contradicted either. Passing it would hide a real
+  // fault for as long as the second resolver stays out of reach.
+  const halfBlind = [];
   const oneDown = new Set();
   let attempts = 1;
   let firstAnswers = null;
@@ -183,17 +187,19 @@ export async function judge({ ask, now, expectations, id, name, severity, hint =
     else if (wrong.length === answers.length) confirmed.push(`${label}: ${wrong[0].problem}`);
     else if (wrong.length > 0) {
       const other = answers.find((answer) => answer !== wrong[0].answer);
-      unconfirmed.push(`${wrong[0].answer.resolver.name} reports ${label}: ${wrong[0].problem}, but ${other.resolver.name} ${other.reachable ? "sees it as expected" : "could not be reached"}`);
+      if (other.reachable) unconfirmed.push(`${wrong[0].answer.resolver.name} reports ${label}: ${wrong[0].problem}, but ${other.resolver.name} sees it as expected`);
+      else halfBlind.push(`${wrong[0].answer.resolver.name} reports ${label}: ${wrong[0].problem}, and ${other.resolver.name} could not be reached to confirm it`);
     }
   }
-  const ok = confirmed.length === 0 && blind.length === 0;
+  const ok = confirmed.length === 0 && blind.length === 0 && halfBlind.length === 0;
   const sentences = [];
   if (confirmed.length) sentences.push(`${confirmed.join(". ")}. Both resolvers agree.${hint ? ` ${hint}` : ""}`);
+  if (halfBlind.length) sentences.push(`${halfBlind.join(". ")}. Counted as an early warning until both resolvers can be asked.${hint ? ` ${hint}` : ""}`);
   if (blind.length) sentences.push(`Neither resolver could be asked about ${blind.join(", ")}, so this was not checked.`);
   if (unconfirmed.length) sentences.push(`${unconfirmed.join(". ")}. Not confirmed by both resolvers, so not counted as a failure.`);
   if (ok && !unconfirmed.length && oneDown.size) sentences.push(`${[...oneDown].join(" and ")} could not be reached; the other resolver sees the records as expected. That is not a fault of the site.`);
-  // Not being able to ask is an early warning at most, however important the
-  // record: the site itself may be fine.
+  // Not being able to ask (fully or half) is an early warning at most, however
+  // important the record: the site itself may be fine.
   const blindSeverity = severity === "sev4" ? "sev4" : "sev3";
   return makeCheck({
     id, name, component: "dns", ok,

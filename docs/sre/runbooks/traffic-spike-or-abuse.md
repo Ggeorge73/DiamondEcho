@@ -47,9 +47,12 @@ Never test this by sending requests to production yourself.
    and instance count. Healthy: instance count usually 0 or 1, not
    pinned at 3.
 3. **Gbenga.** Google Cloud > Logging, query `resource.labels.service_name="diamondecho-api"
-   httpRequest.status=(429 OR 503)`. Note which paths are refused. The logs hold no
-   visitor addresses for the limits (they are hashed and never logged), so
-   do not try to find "who".
+   httpRequest.status=(429 OR 503)`. Note only **how many** and **which
+   paths**. Each line of Cloud Run's own request log also shows the sender's
+   address (`remoteIp`): that is visitor data. Never copy an address, or a
+   log line, into the incident issue, chat or any public place; the limits
+   themselves keep only a salted hash. If an address really matters (one
+   source to block), hand it to the security lead in private.
 4. **Gbenga.** If the pages are the target: Cloudflare > diamondecho.com >
    Analytics & Logs > Traffic, last 24 hours. Note whether requests jumped and
    which countries or paths stand out.

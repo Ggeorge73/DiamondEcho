@@ -173,6 +173,9 @@ test("cloudflareRefusal ignores ordinary errors and reads other block codes", ()
   const waf = cloudflareRefusal(result(403, BLOCK_PAGE.replace("<span>1010</span>", "<span>1020</span>")));
   assert.equal(waf.code, "1020");
   assert.match(waf.text, /^Cloudflare refused the request \(403, error 1020\)/);
+  // Cloudflare's 5xx pages share the cf-error-details block: an outage, not a refusal.
+  assert.equal(cloudflareRefusal(result(503, BLOCK_PAGE)), null);
+  assert.equal(cloudflareRefusal(result(522, '<div id="cf-error-details">Connection timed out</div>')), null);
   const nameless = cloudflareRefusal(result(429, "<title>Attention Required! | Cloudflare</title>"));
   assert.equal(nameless.code, "unknown");
   assert.match(nameless.text, /^Cloudflare refused the request \(429\): /);
@@ -216,4 +219,16 @@ test("the DNS questions go out before the first page request", async () => {
   // Each question goes to both resolvers: four DNS questions, then the pages.
   assert.deepEqual(order.slice(0, 4).sort(), ["dns CAA", "dns CAA", "dns DS", "dns DS"]);
   assert.equal(order.filter((entry) => entry.startsWith("get")).length, 3);
+});
+
+test("a Cloudflare 5xx outage page is reported as the status it is, not as a security block", async () => {
+  const outage = () => new Response('<html><div id="cf-error-details"><span data-translate="error">Error</span> <span>522</span></div></html>', { status: 522, headers: { server: "cloudflare" } });
+  const { ctx } = ctxWith({ "https://diamondecho.com/": outage });
+  const checks = await run(ctx);
+  const beacon = byId(checks, "edge-no-analytics-beacon");
+  assert.equal(beacon.ok, false);
+  assert.equal(beacon.status, 522);
+  assert.match(beacon.detail, /answered 522, so the page was not read/);
+  assert.doesNotMatch(beacon.detail, /security setting/);
+  assert.doesNotMatch(byId(checks, "edge-hsts").detail, /security setting/);
 });

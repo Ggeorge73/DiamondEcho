@@ -48,9 +48,11 @@ home page; DNSSEC is off; there is no CAA record.
 ## What watches it
 
 Four check modules run hourly in the `slow` suite of
-`scripts/sre/synthetic-checks.mjs` (contract: `scripts/sre/README.md`).
-They only read: DNS questions to two public resolvers, one registry lookup,
-three page requests and four TLS connections an hour.
+`scripts/sre/synthetic-checks.mjs` (contract: `scripts/sre/README.md`), and
+the edge checks also run after each deploy (`post-deploy` suite). They only
+read: DNS questions to two public resolvers, one registry lookup, three page
+requests and four TLS connections an hour, plus the edge checks' three page
+requests and two DNS questions after a deploy.
 
 | Check | What it proves | Fails at |
 | --- | --- | --- |
@@ -170,7 +172,7 @@ first step is for Gbenga to look and note what is there.
 - **Risk:** very old devices (phones and computers that stopped receiving
   updates years ago) can no longer open the site. How many visitors that is
   has not been measured; there is no visitor analytics, by design.
-- **Undo:** set it back to 1.0.
+- **Undo:** set it back to the value noted before the change.
 - **Needs Gbenga's yes.**
 
 ### 4. HSTS: keep it where it is
@@ -348,7 +350,8 @@ starts instances (and bills for them); one address family for visitors
 4. Watch the next hourly `slow` run: the DNS checks should pass at both
    resolvers.
 5. Undo: put the old value back; it takes effect as caches expire (the
-   record's TTL, one hour for most of ours today).
+   record's TTL: 3600 s (one hour) for the MX, TXT and SRV records, 300 s
+   (five minutes) for the six CNAMEs, as answered on 2026-11-13).
 
 ## Runbooks
 
