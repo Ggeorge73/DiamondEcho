@@ -93,10 +93,13 @@ jobs:
       (github.event_name == 'workflow_dispatch' || vars.SRE_MONITOR == 'enabled')
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # One writer of the sre-status branch at a time. Shared with the weekly
-    # report; a run that is waiting is not cancelled.
+    # One monitor run at a time: a running one is never cut off. If runs pile
+    # up, GitHub keeps only the newest one waiting and drops the older waiting
+    # one, which is fine here: the newest look at the site is the one wanted.
+    # (Other workflows that write the sre-status branch use their own groups
+    # and rely on state-git.sh's rebase-and-retry.)
     concurrency:
-      group: sre-state
+      group: sre-monitor
       cancel-in-progress: false
     permissions:
       contents: write # the sre-status branch only (scripts/sre/state-git.sh never touches main)
