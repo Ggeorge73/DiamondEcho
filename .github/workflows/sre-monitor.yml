@@ -91,8 +91,6 @@ jobs:
       issues: write # sre-incident issues
       id-token: write # Google Cloud sign-in, used only when automatic rollback is switched on
     env:
-      STATE_DIR: ${{ runner.temp }}/sre-state
-      RUN_FILE: ${{ runner.temp }}/run.json
       GH_TOKEN: ${{ github.token }}
       GITHUB_TOKEN: ${{ github.token }}
     steps:
@@ -100,6 +98,13 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
+
+      # The runner's temporary folder is not known at job level, so the paths
+      # the later steps share are set here.
+      - name: Working paths
+        run: |
+          echo "STATE_DIR=$RUNNER_TEMP/sre-state" >> "$GITHUB_ENV"
+          echo "RUN_FILE=$RUNNER_TEMP/run.json" >> "$GITHUB_ENV"
 
       - name: Choose the checks
         id: suite
