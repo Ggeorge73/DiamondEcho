@@ -172,6 +172,17 @@ jobs:
         if: vars.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && github.ref == 'refs/heads/main'
         uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f # v2.2.1
 
+      # Proves on every run that the sign-in can read Cloud Run, so a missing
+      # permission shows up now, not first during a real incident. Read-only.
+      - name: Check the Cloud Run sign-in (read-only)
+        if: vars.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && github.ref == 'refs/heads/main'
+        continue-on-error: true
+        env:
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ vars.GCP_REGION }}
+          CLOUD_RUN_SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
+        run: node scripts/sre/remediate.mjs --check-access --out "$RUNNER_TEMP/access.json"
+
       - name: Decide on an automatic fix
         env:
           SRE_AUTOREMEDIATE: ${{ (vars.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && github.ref == 'refs/heads/main') && vars.SRE_AUTOREMEDIATE || 'disabled' }}
@@ -213,6 +224,10 @@ jobs:
                 const run = JSON.parse(fs.readFileSync(process.env.RUN_FILE, "utf8"));
                 for (const c of run.checks) console.log(`- ${c.ok ? "✅" : "❌"} ${c.name}${c.ok ? "" : ` (${c.severity}): ${c.detail}`}`);
               } catch { console.log("No result was written."); }
+              try {
+                const a = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + "/access.json", "utf8"));
+                if (a.summary) console.log(`\nCloud Run sign-in: ${a.summary}`);
+              } catch {}
               try {
                 const d = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + "/decision.json", "utf8"));
                 if (d.summary) console.log(`\nAutomatic fix: ${d.summary}`);

@@ -66,8 +66,18 @@ Never test this by sending requests to production yourself.
 1. **Gbenga. Needs Gbenga's yes:** junk is filling the queue or real visitors
    are refused: close the request slot, from Cloud Shell:
    ```bash
+   bash scripts/sre/cloudrun/status.sh
+   ```
+   If one revision serves 100 percent and it is the latest one, run:
+   ```bash
    gcloud run services update diamondecho-api --region us-east1 --project diamondecho-prod --update-env-vars INQUIRY_STAFF_QUEUE_ENABLED=false
    ```
+   If the service is pinned to an older revision (after a rollback), a plain
+   settings change builds a revision that gets no traffic and the queue stays
+   open: follow "After a rollback" in
+   [release-safety.md](../release-safety.md) instead (same change, with
+   `--image` of the serving revision, then `--to-latest`). Worked when:
+   `status.sh` shows the new revision at 100 percent.
    The form then answers 503 and stores nothing; the visitor sees an error
    and that the request was not confirmed. Worked when: no new queue entries
    appear. Undo: the same command

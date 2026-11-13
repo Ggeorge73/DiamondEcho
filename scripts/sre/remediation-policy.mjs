@@ -283,8 +283,19 @@ function judgeFromCloudRun(incident, basis, ctx, { failing, openedAt }) {
   const data = cloudrun.data;
   const serving = Array.isArray(data?.serving) ? data.serving.filter((entry) => Number(entry?.percent) > 0) : [];
   const revisions = Array.isArray(data?.revisions) ? data.revisions : [];
+  // Never race a person or deploy.sh. A deploy starts a revision with no
+  // traffic under the tag "candidate", checks it, then moves traffic (maybe
+  // in steps). While a candidate tag exists or traffic is split, someone is
+  // part-way through; and if status.sh does not say which tags exist, the
+  // engine cannot rule that out.
   if (serving.length !== 1 || Number(serving[0].percent) !== 100) {
-    return skip(basis, "traffic-split", "Traffic is not 100 percent on one revision. Someone is part-way through a rollout; the engine does not interfere.");
+    return skip(basis, "deploy-in-progress", "Traffic is not 100 percent on one revision. Someone is part-way through a rollout; the engine does not interfere.");
+  }
+  if (!Array.isArray(data?.tags)) {
+    return skip(basis, "deploy-in-progress", "Cloud Run's answer does not say which traffic tags exist, so the engine cannot rule out a deploy in progress.");
+  }
+  if (data.tags.some((entry) => entry?.tag === "candidate")) {
+    return skip(basis, "deploy-in-progress", "A revision tagged \"candidate\" exists: a deploy is in progress. The engine does not interfere.");
   }
   const current = serving[0].revision;
   const currentEntry = revisions.find((entry) => entry?.name === current);
@@ -365,6 +376,19 @@ function judgeFromCloudRun(incident, basis, ctx, { failing, openedAt }) {
       return skip(basis, "settings-only", `The monitor saw the revision change to ${current} but the commit the API publishes stayed the same. That is a settings change; going back would undo a setting a person changed on purpose.`, plan);
     }
     return skip(basis, "cannot-tell-new-code", `The engine cannot prove ${current} is new code rather than a settings change: Cloud Run's list does not show the container images, and the monitor did not see the published commit change.`, plan);
+  }
+
+  // A rollback brings back ALL of the older revision's settings, the inquiry
+  // queue switch and the origins among them. So the engine goes back only to
+  // a revision whose settings are the same as the serving one's, by the
+  // fingerprint status.sh reports (image and APP_COMMIT left out). A missing
+  // fingerprint is unknown, and unknown is a no.
+  const settings = [currentEntry.settings, previousEntry.settings];
+  if (!settings.every((value) => typeof value === "string" && value)) {
+    return skip(basis, "settings-differ", `Cloud Run's answer does not give the settings fingerprint of both ${current} and ${previous}, so the engine cannot show that going back keeps today's settings (the inquiry queue switch among them).`, plan);
+  }
+  if (settings[0] !== settings[1]) {
+    return skip(basis, "settings-differ", `${previous} has different settings from ${current}. Going back would also bring back its older settings (the inquiry queue switch, origins or limits), which a person may have changed on purpose.`, plan);
   }
 
   const quietFrom = createdAt - LIMITS.quietHoursBeforeDeploy * HOUR;

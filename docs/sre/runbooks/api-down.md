@@ -83,13 +83,22 @@ run in the browser and keep working. Staff cannot read the queue.
    bash scripts/sre/cloudrun/rollback.sh --to PREVIOUS_REVISION
    bash scripts/sre/cloudrun/rollback.sh --to PREVIOUS_REVISION --apply
    ```
-   `PREVIOUS_REVISION` is the `to_revision` from step 3, or the earlier
-   revision from step 4. The kept fallbacks recorded in
-   `docs/de13-production-setup.md` are `diamondecho-api-00025-sij`,
-   `00022-zow` and `00010-car`. Worked when: the script ends with "Rolled back:
-   … answers /health" and the next monitor run passes the API checks. The
-   service is then pinned to that revision until the next
-   `update-traffic --to-latest`.
+   `PREVIOUS_REVISION` is the revision that was serving before: the
+   `to_revision` in the remediation log (step 3), or the last serving
+   revision recorded in `docs/de13-production-setup.md`. Not simply the next
+   one in the list from step 4: that can be a candidate that never served
+   anyone. **A rollback brings back all of that revision's settings too**
+   (the inquiry queue switch, the origins): if they differ from today's, say
+   so in the issue and check the form afterwards. Worked when: the script ends
+   with "Rolled back: … answers /health" and the next monitor run passes the
+   API checks.
+
+   After this the service is **pinned**: `update-traffic --to-latest` would
+   put the broken revision back on 100 percent, and a plain settings change
+   would make a revision with the broken image and no traffic. Before any
+   settings change, follow [auto-remediation.md](../auto-remediation.md),
+   "After an automatic rollback", step 3 (and the release role's
+   [release-safety.md](../release-safety.md), "After a rollback").
 2. If the automatic engine already rolled back and it did not help
    (`verified: false`), do not roll back again to another older revision on a
    guess: go to step 4 of "Check first" and to "When to escalate".
@@ -102,7 +111,8 @@ run in the browser and keep working. Staff cannot read the queue.
 5. **AI role agent.** Prepare a fix for the broken revision as a draft pull
    request, with a test. It changes nothing until Gbenga merges and deploys it
    (`--no-traffic --tag candidate`, candidate checks, then
-   `update-traffic --to-latest`; **needs Gbenga's yes**).
+   `update-traffic --to-latest` once `status.sh` shows the fixed revision is
+   the newest; **needs Gbenga's yes**).
 
 If none of these works within the time to mitigate for this severity, go to
 "When to escalate".
@@ -122,8 +132,9 @@ If none of these works within the time to mitigate for this severity, go to
 - [ ] Post the "resolved" update (wording in
       [incident-response.md](../incident-response.md)).
 - [ ] If traffic was rolled back: the newer revision is still in Cloud Run
-      with no traffic. Do not send traffic to it again without a fix. The next
-      deploy ends the pin with `update-traffic --to-latest`.
+      with no traffic. Do not send traffic to it again without a fix: never
+      run `update-traffic --to-latest` until `status.sh` shows that the newest
+      revision is the fixed one.
 - [ ] Record in `docs/de13-production-setup.md` which revision serves now.
 - [ ] Open a postmortem if
       [postmortem-template.md](../postmortem-template.md) says one is

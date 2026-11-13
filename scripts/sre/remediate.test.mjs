@@ -8,7 +8,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { remediate, main, parseArgs, clock, gcloudCommandFor } from "./remediate.mjs";
+import { remediate, main, parseArgs, clock, gcloudCommandFor, checkAccess, defaultExec } from "./remediate.mjs";
+import { readFileSync } from "node:fs";
 
 const NOW = Date.parse("2026-11-13T12:00:00.000Z");
 const at = (minutesAgo, now = NOW) => new Date(now - minutesAgo * 60_000).toISOString();
@@ -41,7 +42,11 @@ const DEPLOYS = [
 ];
 const CLOUD_RUN = {
   serving: [{ revision: NEW, percent: 100 }],
-  revisions: [{ name: NEW, created: at(40), ready: true }, { name: OLD, created: "2026-10-26T13:45:00.000Z", ready: true }],
+  tags: [],
+  revisions: [
+    { name: NEW, created: at(40), ready: true, image: "us-east1-docker.pkg.dev/p/r/api@sha256:new", settings: "s-1" },
+    { name: OLD, created: "2026-10-26T13:45:00.000Z", ready: true, image: "us-east1-docker.pkg.dev/p/r/api@sha256:old", settings: "s-1" },
+  ],
 };
 
 async function stateDir({ status = statusDoc(), open = [INCIDENT], deploys = DEPLOYS, log = null } = {}) {
@@ -299,7 +304,10 @@ test("other parts are logged once as 'no automatic fix', with their runbook", as
 });
 
 test("arguments, clock and exit codes", async () => {
-  assert.deepEqual(parseArgs(["--state-dir", "s", "--out", "o", "--apply"]), { stateDir: "s", out: "o", apply: true });
+  assert.deepEqual(parseArgs(["--state-dir", "s", "--out", "o", "--apply"]), { stateDir: "s", out: "o", apply: true, checkAccess: false });
+  assert.deepEqual(parseArgs(["--check-access", "--out", "o"]), { stateDir: null, out: "o", apply: false, checkAccess: true });
+  assert.throws(() => parseArgs(["--check-access", "--out", "o", "--apply"]), "the access check never acts");
+  assert.throws(() => parseArgs(["--check-access"]));
   assert.throws(() => parseArgs(["--state-dir", "s"]));
   assert.throws(() => parseArgs(["--state-dir", "--out", "o"]));
   assert.throws(() => parseArgs(["--state-dir", "s", "--out", "o", "--force"]));
@@ -341,4 +349,62 @@ test("the command line works end to end (no incident, so no process is started)"
   assert.equal(doc.at, "2026-11-13T12:00:00.000Z");
   assert.equal(doc.switch.fixed_clock, true);
   await rm(dir, { recursive: true });
+});
+
+test("a timed-out rollback says the traffic state is unknown", async () => {
+  const dir = await readyToAct();
+  const { exec } = fakeExec({ rollback: { code: null, stdout: "", stderr: "", timedOut: true } });
+  const doc = await run(dir, { exec, apply: true, env: ENABLED });
+  assert.equal(doc.decisions[0].decision, "failed");
+  assert.match(doc.decisions[0].reason, /may already have been sent.*status\.sh now/);
+  await rm(dir, { recursive: true });
+});
+
+test("--check-access reads Cloud Run once, read-only, and reports what it saw", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "sre-access-"));
+  const out = join(dir, "access.json");
+  const { exec, calls } = fakeExec();
+  let doc = await checkAccess({ out, exec, now: NOW, stderr: quiet });
+  assert.deepEqual(calls, [["bash", "scripts/sre/cloudrun/status.sh"]]);
+  assert.equal(doc.ok, true);
+  assert.equal(doc.revisions, 2);
+  assert.deepEqual(doc.fields, { image: true, settings: true, tags: true });
+  assert.match(doc.summary, new RegExp(`serving ${NEW} 100%`));
+
+  const bare = { serving: CLOUD_RUN.serving, revisions: CLOUD_RUN.revisions.map(({ name, created, ready }) => ({ name, created, ready })) };
+  doc = await checkAccess({ out, exec: fakeExec({ status: { code: 0, stdout: JSON.stringify(bare) } }).exec, now: NOW, stderr: quiet });
+  assert.equal(doc.ok, true);
+  assert.match(doc.summary, /did not report image, settings, tags/);
+
+  const denied = fakeExec({ status: { code: 2, stdout: "", stderr: "PERMISSION_DENIED for sa@example" } });
+  doc = await checkAccess({ out, exec: denied.exec, now: NOW, stderr: quiet });
+  assert.equal(doc.ok, false);
+  assert.doesNotMatch(readFileSync(out, "utf8"), /PERMISSION_DENIED|sa@example/);
+
+  const code = await main(["--check-access", "--out", out], { env: {}, exec: denied.exec, stdout: quiet, stderr: quiet });
+  assert.equal(code, 1);
+  assert.equal(await main(["--check-access", "--out", out], { env: {}, exec: fakeExec().exec, stdout: quiet, stderr: quiet }), 0);
+  await rm(dir, { recursive: true });
+});
+
+// The real process runner, on a local shell only: a timeout must stop the
+// command AND anything it started (as bash starts gcloud).
+const gone = (pid) => {
+  try { process.kill(pid, 0); } catch { return true; }
+  try { return readFileSync(`/proc/${pid}/stat`, "utf8").split(") ")[1]?.startsWith("Z"); } catch { return true; }
+};
+test("defaultExec: a timeout stops the whole process group", { skip: process.platform !== "linux" }, async () => {
+  const result = await defaultExec("bash", ["-c", "sleep 30 & echo $!; wait"], { timeoutMs: 300, env: process.env, killGraceMs: 200 });
+  assert.equal(result.timedOut, true);
+  const pid = Number(result.stdout.trim());
+  assert.ok(pid > 0);
+  for (let i = 0; i < 20 && !gone(pid); i += 1) await new Promise((r) => setTimeout(r, 100));
+  assert.ok(gone(pid), "the child's own child was left running");
+});
+
+test("defaultExec: output and exit code of a normal command", async () => {
+  const result = await defaultExec(process.execPath, ["-e", "console.log('hi'); console.error('note'); process.exit(3)"], { timeoutMs: 10_000, env: process.env });
+  assert.deepEqual(result, { code: 3, stdout: "hi\n", stderr: "note\n", timedOut: false });
+  const missing = await defaultExec("/nonexistent/command", [], { timeoutMs: 1000, env: process.env });
+  assert.equal(missing.code, null);
 });

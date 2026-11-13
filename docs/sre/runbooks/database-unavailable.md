@@ -66,12 +66,27 @@ damaged, requests already received may be gone: the database is the only copy.
 1. **Google incident.** Nothing to change on our side. Post a status update.
    If it lasts, **Gbenga, needs Gbenga's yes:** close the form so visitors are
    told plainly to call or email instead of seeing a failure
-   (`docs/de13-production-setup.md`, "Undo"):
+   (`docs/de13-production-setup.md`, "Undo", made safe for a pinned service):
    ```bash
-   gcloud run services update diamondecho-api --region us-east1 --project diamondecho-prod --update-env-vars INQUIRY_STAFF_QUEUE_ENABLED=false
+   bash scripts/sre/cloudrun/status.sh            # note the image of the revision at 100 percent
+   curl -sS https://diamondecho-api-180189726732.us-east1.run.app/api/   # note its commit, if it names one
+   gcloud run services update diamondecho-api --region us-east1 --project diamondecho-prod \
+     --image SERVING_IMAGE --update-env-vars INQUIRY_STAFF_QUEUE_ENABLED=VALUE,APP_COMMIT=SERVING_COMMIT
+   bash scripts/sre/cloudrun/status.sh            # the newest revision: SERVING_IMAGE, ready
    ```
-   Reopen with the same command and `=true` when Firestore is back. Both make
-   a new revision (a settings change; the automatic rollback never undoes it).
+   `VALUE` is `false` to close, `true` to reopen. Leave out `APP_COMMIT=…` if
+   `/api/` names no commit. Passing the serving revision's image matters: after
+   a rollback the service is pinned and its template names the broken image.
+   If the newest revision is not at 100 percent (the service was pinned), and
+   only then, move the traffic to it:
+   ```bash
+   gcloud run services update-traffic diamondecho-api --to-latest --project diamondecho-prod --region us-east1
+   ```
+   Worked when: `status.sh` shows the new revision at 100 percent, and the
+   monitor's `inquiry-queue` check fails (closed) or passes (open) on its next
+   run.
+   Reopen the same way with `true` when Firestore is back. Each makes a new
+   revision (a settings change; the automatic rollback never undoes it).
 2. **A role is missing** (step 3). **Gbenga, needs Gbenga's yes:**
    ```bash
    gcloud projects add-iam-policy-binding diamondecho-prod \
@@ -84,7 +99,7 @@ damaged, requests already received may be gone: the database is the only copy.
    account". Worked when: step 4 says `True` and the queue opens.
 4. **Data lost or damaged.** **Gbenga, needs Gbenga's yes:** follow
    [backup-and-restore.md](../backup-and-restore.md), "A real recovery". Close
-   the form first (step 1's command) so no new request is lost meanwhile.
+   the form first (step 1's commands) so no new request is lost meanwhile.
 5. **It started right after an API deploy.** The new code may be what fails to
    store: [api-down.md](api-down.md), Fix step 1 (documented rollback).
 

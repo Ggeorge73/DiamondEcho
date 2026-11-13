@@ -2,6 +2,13 @@
 // The automatic-fix engine. Runs once per monitor run, after the alert engine.
 //
 //   node scripts/sre/remediate.mjs --state-dir DIR --out decision.json [--apply]
+//   node scripts/sre/remediate.mjs --check-access --out access.json
+//
+// --check-access asks Cloud Run once, read-only (status.sh), and reports
+// whether the monitor's Google sign-in can see the service, so a missing
+// permission is found on the day it is set up and not during an incident.
+// It needs no state directory and never changes anything. Exit 0: Cloud Run
+// was read; exit 1: it could not be read (the reason is in access.json).
 //
 // It reads the state directory (status.json, incidents.json, deploys.jsonl,
 // remediation-log.jsonl), asks remediation-policy.mjs what to do about each
@@ -18,11 +25,12 @@
 // replace it and never touch Google Cloud. Only the two commands in
 // remediation-policy.mjs can be run, and each is checked again just before.
 //
-// Exit 0: the engine did its job (whatever it decided). Exit 2: it could not
-// (bad arguments, unreadable state directory, a bug).
+// Exit 0: the engine did its job (whatever it decided). Exit 1: only with
+// --check-access, Cloud Run could not be read. Exit 2: it could not do its
+// job (bad arguments, unreadable state directory, a bug).
 
 import { readFile, writeFile, rename, stat } from "node:fs/promises";
-import { execFile } from "node:child_process";
+import { spawn } from "node:child_process";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
@@ -39,19 +47,24 @@ const LOG_FILE = "remediation-log.jsonl";
 const STATUS_TIMEOUT_MS = 90_000;
 const ROLLBACK_TIMEOUT_MS = 240_000;
 
-export const USAGE = "Usage: node scripts/sre/remediate.mjs --state-dir DIR --out decision.json [--apply]";
+export const USAGE = "Usage: node scripts/sre/remediate.mjs --state-dir DIR --out decision.json [--apply] | --check-access --out access.json";
 
 export function parseArgs(argv) {
-  const options = { stateDir: null, out: null, apply: false };
+  const options = { stateDir: null, out: null, apply: false, checkAccess: false };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--apply") options.apply = true;
+    else if (arg === "--check-access") options.checkAccess = true;
     else if (arg === "--state-dir" || arg === "--out") {
       const value = argv[i + 1];
       if (!value || value.startsWith("--")) throw new Error(`${arg} needs a value. ${USAGE}`);
       options[arg === "--out" ? "out" : "stateDir"] = value;
       i += 1;
     } else throw new Error(`Unknown argument: ${arg}. ${USAGE}`);
+  }
+  if (options.checkAccess) {
+    if (options.apply || options.stateDir || !options.out) throw new Error(`--check-access takes only --out. ${USAGE}`);
+    return options;
   }
   if (!options.stateDir || !options.out) throw new Error(USAGE);
   return options;
@@ -111,14 +124,35 @@ async function writeAtomic(file, text) {
 // judges. The environment is passed through because the cloudrun scripts read
 // GCP_PROJECT_ID, GCP_REGION and CLOUD_RUN_SERVICE, and gcloud reads the
 // workflow's short-lived sign-in from it.
-export function defaultExec(file, args, { timeoutMs, env } = {}) {
+//
+// The command runs in a process group of its own. On a timeout the whole
+// group is stopped (SIGTERM, then SIGKILL after a grace period), so a gcloud
+// started by bash cannot carry on after the engine has given up on it.
+const OUTPUT_LIMIT = 4 * 1024 * 1024;
+export function defaultExec(file, args, { timeoutMs, env, killGraceMs = 5_000 } = {}) {
   return new Promise((done) => {
-    execFile(file, args, { cwd: REPO_ROOT, env, timeout: timeoutMs, maxBuffer: 4 * 1024 * 1024, encoding: "utf8" },
-      (error, stdout, stderr) => {
-        let code = 0;
-        if (error) code = Number.isInteger(error.code) ? error.code : null;
-        done({ code, stdout: stdout ?? "", stderr: stderr ?? "", timedOut: Boolean(error?.killed) });
-      });
+    let child;
+    try {
+      child = spawn(file, args, { cwd: REPO_ROOT, env, detached: true, stdio: ["ignore", "pipe", "pipe"] });
+    } catch (error) {
+      done({ code: null, stdout: "", stderr: String(error?.message ?? error), timedOut: false });
+      return;
+    }
+    let stdout = "";
+    let stderr = "";
+    let timedOut = false;
+    let finished = false;
+    const finish = (result) => { if (!finished) { finished = true; clearTimeout(timer); done(result); } };
+    const killGroup = (signal) => { try { process.kill(-child.pid, signal); } catch { /* already gone */ } };
+    child.stdout.setEncoding("utf8").on("data", (chunk) => { if (stdout.length < OUTPUT_LIMIT) stdout += chunk; });
+    child.stderr.setEncoding("utf8").on("data", (chunk) => { if (stderr.length < OUTPUT_LIMIT) stderr += chunk; });
+    const timer = timeoutMs ? setTimeout(() => {
+      timedOut = true;
+      killGroup("SIGTERM");
+      setTimeout(() => killGroup("SIGKILL"), killGraceMs).unref();
+    }, timeoutMs) : null;
+    child.on("error", (error) => finish({ code: null, stdout, stderr: `${stderr}${error.message}`, timedOut }));
+    child.on("close", (code) => finish({ code: Number.isInteger(code) ? code : null, stdout, stderr, timedOut }));
   });
 }
 
@@ -193,11 +227,10 @@ async function carryOut(decision, { act, why, exec, service, env, stderr, now })
       reason: `${decision.reason} The traffic moved, but ${decision.to_revision} did not answer /health right after; a person should look now.`,
     };
   }
-  const how = result.timedOut ? "did not finish in time" : `exited with code ${result.code ?? "none"}`;
-  return {
-    ...common, decision: "failed", code: "rollback-failed", verified: false,
-    reason: `rollback.sh ${how}, and the traffic was not confirmed on ${decision.to_revision}. The workflow log has the details.`,
-  };
+  const reason = result.timedOut
+    ? `rollback.sh did not finish within ${ROLLBACK_TIMEOUT_MS / 1000} seconds. The engine stopped it and every process it started, but the traffic change may already have been sent: what serves now is unknown. A person must run status.sh now.`
+    : `rollback.sh exited with code ${result.code ?? "none"}, and the traffic was not confirmed on ${decision.to_revision}. The workflow log has the details.`;
+  return { ...common, decision: "failed", code: "rollback-failed", verified: false, reason };
 }
 
 const partName = (component) => COMPONENTS[component] ?? String(component);
@@ -309,6 +342,30 @@ export async function remediate({ stateDir, out, apply = false, env = {}, exec =
   return document;
 }
 
+// --check-access: one read-only look at Cloud Run. Reports only names,
+// counts and which fields status.sh gave, never settings or gcloud's words.
+export async function checkAccess({ out, env = {}, exec = defaultExec, now, stderr = process.stderr }) {
+  const service = env.CLOUD_RUN_SERVICE || DEFAULT_SERVICE;
+  if (!isServiceName(service)) throw new Error("CLOUD_RUN_SERVICE is not a Cloud Run service name.");
+  const cloudrun = await readCloudRun(exec, service, env, stderr);
+  const at = new Date(now).toISOString();
+  let document;
+  if (!cloudrun.ok) {
+    document = { schema: 1, at, check: "access", ok: false, service,
+      summary: `The monitor could not read Cloud Run (${cloudrun.error}). The sign-in or a permission is missing: see docs/sre/auto-remediation.md, "Check the sign-in".` };
+  } else {
+    const { serving, revisions, tags } = cloudrun.data;
+    const has = (field) => revisions.length > 0 && revisions.every((entry) => typeof entry?.[field] === "string" && entry[field]);
+    const fields = { image: has("image"), settings: has("settings"), tags: Array.isArray(tags) };
+    const missing = Object.entries(fields).filter(([, present]) => !present).map(([name]) => name);
+    const servingText = serving.map((entry) => `${entry.revision} ${entry.percent}%`).join(", ") || "nothing";
+    document = { schema: 1, at, check: "access", ok: true, service, serving, revisions: revisions.length, fields,
+      summary: `Cloud Run read: ${revisions.length} revisions of ${service}; serving ${servingText}.${missing.length ? ` status.sh did not report ${missing.join(", ")}, so every rollback would be skipped.` : ""}` };
+  }
+  await writeAtomic(resolve(out), `${JSON.stringify(document, null, 2)}\n`);
+  return document;
+}
+
 export async function main(argv = process.argv.slice(2), { env = process.env, exec = defaultExec, stdout = process.stdout, stderr = process.stderr } = {}) {
   let options;
   let time;
@@ -320,6 +377,11 @@ export async function main(argv = process.argv.slice(2), { env = process.env, ex
     return 2;
   }
   try {
+    if (options.checkAccess) {
+      const document = await checkAccess({ out: options.out, env, exec, now: time.now, stderr });
+      stdout.write(`${document.summary}\n`);
+      return document.ok ? 0 : 1;
+    }
     const document = await remediate({ ...options, env, exec, now: time.now, fixedClock: time.fixed, stderr });
     stdout.write(`${document.summary}\n`);
     return 0;

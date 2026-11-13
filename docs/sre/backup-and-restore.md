@@ -133,9 +133,26 @@ production and **needs Gbenga's yes**; follow
 the problem is the data and not Firestore being unreachable.
 
 1. **Stop further harm:** close the form so no new request is lost while the
-   data is being restored (documented in `docs/de13-production-setup.md`,
-   "Undo"):
-   `gcloud run services update diamondecho-api --region us-east1 --project diamondecho-prod --update-env-vars INQUIRY_STAFF_QUEUE_ENABLED=false`.
+   data is being restored (`docs/de13-production-setup.md`, "Undo", made safe
+   for a service that may be pinned after a rollback), with `VALUE` = `false`:
+   ```bash
+   bash scripts/sre/cloudrun/status.sh            # note the image of the revision at 100 percent
+   curl -sS https://diamondecho-api-180189726732.us-east1.run.app/api/   # note its commit, if it names one
+   gcloud run services update diamondecho-api --region us-east1 --project diamondecho-prod \
+     --image SERVING_IMAGE --update-env-vars INQUIRY_STAFF_QUEUE_ENABLED=VALUE,APP_COMMIT=SERVING_COMMIT
+   bash scripts/sre/cloudrun/status.sh            # the newest revision: SERVING_IMAGE, ready
+   ```
+   `VALUE` is `false` to close, `true` to reopen. Leave out `APP_COMMIT=…` if
+   `/api/` names no commit. Passing the serving revision's image matters: after
+   a rollback the service is pinned and its template names the broken image.
+   If the newest revision is not at 100 percent (the service was pinned), and
+   only then, move the traffic to it:
+   ```bash
+   gcloud run services update-traffic diamondecho-api --to-latest --project diamondecho-prod --region us-east1
+   ```
+   Worked when: `status.sh` shows the new revision at 100 percent, and the
+   monitor's `inquiry-queue` check fails (closed) or passes (open) on its next
+   run.
    The form then answers "unavailable" and stores nothing.
 2. **Restore the newest good backup into a new database**, as in drill step 3,
    named for example `restore-20261120`.
@@ -149,8 +166,9 @@ the problem is the data and not Firestore being unreachable.
    The commands are `gcloud firestore export gs://BUCKET/restore-20261120 --database=restore-20261120 --collection-ids=inquiries --project diamondecho-prod`
    and then `gcloud firestore import gs://BUCKET/restore-20261120 --database="(default)" --project diamondecho-prod`.
    This path has not been tried; try it on staging first if there is time.
-4. **Reopen the form**: the same command with `INQUIRY_STAFF_QUEUE_ENABLED=true`,
-   then check the staff queue shows the restored requests.
+4. **Reopen the form**: the same commands as step 1 with `VALUE` = `true`
+   (read `status.sh` again first: the serving image may have changed), then
+   check the staff queue shows the restored requests.
 5. Delete the restored database and the bucket when the data is confirmed.
 
 Replacing `(default)` outright (switch off delete protection, delete it,

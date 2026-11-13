@@ -165,7 +165,7 @@ appear on the status page.
 `remediation-log.jsonl`: one line per decision:
 `{"at":"…","trigger":"api","action":"cloud-run-rollback","decision":"dry-run","reason":"…","from_revision":"…","to_revision":"…","verified":null}`.
 `decision` is `acted`, `dry-run`, `skipped` or `failed`. A line may also carry
-`code` (the machine reason, for example `no-recent-deploy`), `incident_key`,
+`code` (the machine reason, for example `no-recent-deploy`, `deploy-in-progress` (traffic split or a `candidate` tag), `settings-differ` (the target revision's settings fingerprint differs or is unknown)), `incident_key`,
 `incident_opened_at`, `issue_number`, `runbook`, `summary`, `command`,
 `gcloud_command`, `verify`, `verified_at` and `verify_result`. Verification
 rewrites the acted line in place (it sets `verified`); it does not append.
@@ -213,7 +213,8 @@ One history line (written by `state.mjs`, read by `slo-calc.mjs`):
 | `bash scripts/sre/state-git.sh checkout DIR` / `commit DIR "message"` | observability | the `sre-status` branch | the `sre-status` branch |
 | `node scripts/sre/alert.mjs --run run.json --state-dir DIR --out actions.json [--slo slo.json] [--apply]` | observability | `run.json`, `incidents.json` | `incidents.json`, `actions.json`; with `--apply`, GitHub issues and the optional webhook |
 | `node scripts/sre/remediate.mjs --state-dir DIR --out decision.json [--apply]` | infrastructure | state dir | `remediation-log.jsonl`, `decision.json`; with `--apply`, calls `cloudrun/rollback.sh` |
-| `bash scripts/sre/cloudrun/status.sh` | release and change safety | Cloud Run | prints `{"serving":[{"revision":"…","percent":100}],"revisions":[{"name":"…","created":"…","ready":true,"image":"…"}]}` |
+| `node scripts/sre/remediate.mjs --check-access --out access.json` | infrastructure | Cloud Run (read-only, via `status.sh`) | `access.json`: `{schema, at, check:"access", ok, service, serving, revisions, fields:{image,settings,tags}, summary}`; exit 0 read, 1 could not read, 2 bad arguments |
+| `bash scripts/sre/cloudrun/status.sh` | release and change safety | Cloud Run | prints `{"serving":[{"revision":"…","percent":100}],"tags":[{"tag":"candidate","revision":"…"}],"revisions":[{"name":"…","created":"…","ready":true,"image":"…","settings":"<fingerprint>"}]}`; `settings` is a short fingerprint of every setting except the image and `APP_COMMIT` |
 | `bash scripts/sre/cloudrun/rollback.sh --to REVISION [--apply]` | release and change safety | Cloud Run | with `--apply`, Cloud Run traffic |
 | `bash scripts/sre/cloudrun/deploy.sh [--apply]` | release and change safety | the repository | with `--apply`, a new Cloud Run revision |
 | `node scripts/sre/slo-calc.mjs --state-dir DIR --window-days 28 --out slo.json` | SLO | `history/` | `slo.json` |

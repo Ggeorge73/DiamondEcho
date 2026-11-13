@@ -57,10 +57,13 @@ function scenario() {
       ok: true,
       data: {
         serving: [{ revision: NEW, percent: 100 }],
+        tags: [],
+        // No images here, so the commit the monitor saw change is the proof
+        // of new code; the image path has tests of its own.
         revisions: [
-          { name: NEW, created: at(40), ready: true },
-          { name: "diamondecho-api-00030-xyz", created: at(41), ready: false },
-          { name: OLD, created: "2026-10-26T13:45:00.000Z", ready: true },
+          { name: NEW, created: at(40), ready: true, settings: "s-1" },
+          { name: "diamondecho-api-00030-xyz", created: at(41), ready: false, settings: "s-1" },
+          { name: OLD, created: "2026-10-26T13:45:00.000Z", ready: true, settings: "s-1" },
         ],
       },
     },
@@ -280,10 +283,19 @@ test("an incident that opened before the revision cannot have been caused by it"
   expectSkip(input, "incident-before-deploy");
 });
 
-test("traffic split or unreadable Cloud Run: hands off", () => {
+test("a deploy in progress, or unreadable Cloud Run: hands off", () => {
   let input = scenario();
   input.cloudrun.data.serving = [{ revision: NEW, percent: 50 }, { revision: OLD, percent: 50 }];
-  expectSkip(input, "traffic-split");
+  expectSkip(input, "deploy-in-progress");
+  input = scenario();
+  input.cloudrun.data.tags = [{ tag: "candidate", revision: "diamondecho-api-00032-cnd" }];
+  expectSkip(input, "deploy-in-progress");
+  input = scenario();
+  delete input.cloudrun.data.tags; // status.sh does not report tags: unknown is a no
+  expectSkip(input, "deploy-in-progress");
+  input = scenario();
+  input.cloudrun.data.tags = [{ tag: "old-fallback", revision: OLD }];
+  assert.equal(only(input).decision, "proceed", "another tag is not a deploy");
   input = scenario();
   input.cloudrun = { ok: false, error: "status.sh exited with code 2" };
   expectSkip(input, "cloud-run-unreadable");
@@ -338,6 +350,19 @@ test("a settings-only revision is never rolled back", () => {
   expectSkip(input, "settings-only"); // the API publishes a commit and it did not change
   input.status.checks["api-identity"].observed = { revision: NEW };
   expectSkip(input, "cannot-tell-new-code"); // no commit published at all
+});
+
+test("going back must not bring back different settings", () => {
+  let input = scenario();
+  input.cloudrun.data.revisions[2].settings = "s-0"; // e.g. the queue switch was different then
+  const decision = expectSkip(input, "settings-differ");
+  assert.match(decision.reason, /inquiry queue switch/);
+  input = scenario();
+  delete input.cloudrun.data.revisions[2].settings;
+  expectSkip(input, "settings-differ");
+  input = scenario();
+  input.cloudrun.data.revisions[0].settings = "";
+  expectSkip(input, "settings-differ");
 });
 
 test("trouble that started before the deploy is not blamed on it", () => {

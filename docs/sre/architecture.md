@@ -88,7 +88,7 @@ but not the API itself; and an API failure leaves every page standing.
 | Cloudflare Pages (public) | No pages at all, or old pages | `public-home`, `public-asset-js` (sev1), the other `public-*` page checks | [site-down.md](runbooks/site-down.md) |
 | Cloudflare Pages (staff) | Staff cannot open the queue; visitors unaffected | `staff-home` | [site-down.md](runbooks/site-down.md) |
 | `www` redirect rule | `www.` links stop working; the apex is fine | `public-www-redirect` | [dns-problem.md](runbooks/dns-problem.md) |
-| Cloud Run API down or erroring | Form answers an error; the staff queue is empty or fails; calculators fall back to the browser and say so | `api-health`, `api-identity`, `inquiry-route`, `inquiry-preflight`, `calculators-api-analyze` | [api-down.md](runbooks/api-down.md) |
+| Cloud Run API down or erroring | Form answers an error; the staff queue is empty or fails; Deal Studio's base analysis fails with an error; its risk simulation, the mortgage simulator and the seller net sheet run in the browser | `api-health`, `api-identity`, `inquiry-route`, `inquiry-preflight`, `calculators-api-analyze` | [api-down.md](runbooks/api-down.md) |
 | API settings (queue switched off, origins wrong) | Form says "unavailable" or the browser refuses the answer | `inquiry-queue`, `api-cors-allowed`, `inquiry-preflight` | [api-down.md](runbooks/api-down.md) |
 | Firestore | The form's submission fails (the request is not stored); the staff queue fails. Pages, `/health` and the calculators keep working | **No synthetic check can see it** (the monitor never submits). The missing arrival email, or a staff member, notices | [database-unavailable.md](runbooks/database-unavailable.md) |
 | Identity Platform | Staff cannot sign in; visitors unaffected | None from outside (signing in needs a password and code) | [api-down.md](runbooks/api-down.md) |
@@ -154,9 +154,11 @@ What changed in the template on 2026-11-13:
   with a Google 404 (DE-33). Using `/health` for both means the probe and a
   person's `curl` test the same route.
 - **A liveness probe.** It restarts an instance whose process has stopped
-  answering. It is slow to fire on purpose (three misses 30 s apart), longer
-  than the 30 s request timeout, so a long calculation on a concurrency-1
-  instance cannot get a working instance restarted. `/health` does not touch
+  answering. It is slow to fire on purpose: probes 30 s apart, each allowed
+  5 s, and the restart comes at the third miss in a row, about 60 to 65 s
+  after the first missed probe. That is longer than the 30 s request
+  timeout, so a long calculation on a concurrency-1 instance cannot get a
+  working instance restarted. `/health` does not touch
   Firestore, so a database problem does not restart healthy instances.
 - The startup probe is kept, with an explicit 3 s timeout.
 
@@ -171,11 +173,26 @@ gcloud run services describe diamondecho-api --project diamondecho-prod --region
 ```
 
 To add the liveness probe to the real service: try it on staging first, then,
-**needs Gbenga's yes**, export the service, add the `livenessProbe` block
-above, and `gcloud run services replace` the file. That makes a new revision
-with the same image (a settings-only change, which the automatic rollback will
-never undo). The exported file holds the environment variable values: keep it
-in Cloud Shell and delete it afterwards.
+**needs Gbenga's yes**:
+
+1. `bash scripts/sre/cloudrun/status.sh`. If the revision at 100 percent is
+   not the newest in the list, the service is **pinned** (after a rollback)
+   and its template names a newer, unwanted image.
+2. Export the service
+   (`gcloud run services describe diamondecho-api --project diamondecho-prod --region us-east1 --format export > svc.yaml`),
+   add the `livenessProbe` block above, and set the container `image` to the
+   image of the revision at 100 percent. Leave the `traffic` block as it is.
+3. `gcloud run services replace svc.yaml --project diamondecho-prod --region us-east1`.
+   This makes a new revision with the serving image and the new probe. While
+   pinned it gets no traffic.
+4. `bash scripts/sre/cloudrun/status.sh` again: the newest revision is ready
+   and runs the serving image. Only then, if pinned,
+   `gcloud run services update-traffic diamondecho-api --to-latest --project diamondecho-prod --region us-east1`.
+
+Worked when: `status.sh` shows the new revision at 100 percent. This is a
+settings-only change, which the automatic rollback never undoes. The exported
+file holds the environment variable values: keep it in Cloud Shell and delete
+it afterwards.
 
 What would make the template the source of truth:
 
@@ -205,7 +222,7 @@ switched on by this document.
 
 | Option | Removes or reduces | Rough cost | Trade-off |
 | --- | --- | --- | --- |
-| Switch on the automatic Cloud Run rollback ([auto-remediation.md](auto-remediation.md)) | Time a bad API deploy stays live when Gbenga is away | Free | A narrow Google permission held by the repository's monitor |
+| Switch on the automatic Cloud Run rollback ([auto-remediation.md](auto-remediation.md)) | Time a bad API deploy stays live when Gbenga is away | Free | The monitor's workflow holds `run.services.update` on the API, which Google cannot narrow to traffic only (see auto-remediation.md) |
 | Rehearse a rollback and a database restore ([backup-and-restore.md](backup-and-restore.md)) | "Never tested" on both recovery paths | Cents (restore is billed per GiB; the database is small) | An hour of Gbenga's time |
 | Minimum 1 instance | Cold starts on the first request after a quiet spell | About ten to twenty dollars a month for one idle 1 CPU / 1 GiB instance (estimate) | Uses a large part of the $25 budget |
 | Startup CPU boost | Shorter cold starts | Small; extra CPU only while starting | Not measured here |

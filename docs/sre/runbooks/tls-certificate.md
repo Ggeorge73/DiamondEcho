@@ -88,7 +88,9 @@ have no visitor impact yet.
    connection: wait for the next hourly run before doing anything else.
 4. **Gbenga.** `tls-api`: Google issues this certificate and we cannot renew
    it. Open a case with Google Cloud support (see "When to escalate"). The
-   site keeps working; the calculators fall back to the browser.
+   site keeps working, but Deal Studio's base analysis and the inquiry form
+   cannot reach the API (the mortgage simulator and seller net sheet run in
+   the browser and keep working).
 5. **AI role agent.** Update this runbook and, if a DNS value changed on
    purpose, `deploy/dns/expected-records.json` in a draft pull request.
 

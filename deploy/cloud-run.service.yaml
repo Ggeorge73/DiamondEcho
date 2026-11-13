@@ -66,9 +66,10 @@ spec:
             periodSeconds: 3
             failureThreshold: 20
           # Liveness: restart an instance whose process has stopped answering.
-          # Deliberately slow to fire: three misses 30 s apart (about 90 s),
-          # longer than the 30 s request timeout, so one long calculation
-          # (concurrency 1) cannot get a working instance killed. Not yet
+          # Deliberately slow to fire: probes 30 s apart, 5 s each; the
+          # restart comes at the third miss in a row, about 60 to 65 s after
+          # the first. Longer than the 30 s request timeout, so one long
+          # calculation (concurrency 1) cannot get a working instance killed. Not yet
           # tried on staging; see docs/sre/architecture.md.
           livenessProbe:
             httpGet:
