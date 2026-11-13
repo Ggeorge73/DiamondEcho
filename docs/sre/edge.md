@@ -81,10 +81,15 @@ as the site.
 **When a DNS change is meant**, update `deploy/dns/expected-records.json` in
 the same pull request (or the next), or the check will keep reporting it.
 
-**When Cloudflare stops the monitor itself**, the edge checks say so in plain
-words ("Cloudflare refused the monitor with its own Access denied page …
-error 1010"), naming only Cloudflare's error number. That points at a
-Cloudflare security setting, not at the site. See "Found on 2026-11-13" below.
+**When Cloudflare stops the monitor itself**, every check that reads a page
+says so in the same words, written by `scripts/sre/lib/http.mjs` and by
+`edge.mjs`: "Cloudflare refused the request (403, error 1010: the browser
+signature check, usually Browser Integrity Check): a Cloudflare security
+setting is blocking the monitor, and perhaps visitors too." Only Cloudflare's
+error number is kept from its page. That points at a Cloudflare security
+setting, not at the site: see
+[cloudflare-outage.md](runbooks/cloudflare-outage.md) and "Found on
+2026-11-13" below.
 
 Not repeated here: the strength of the security headers, which
 `scripts/security-headers-check.mjs` checks daily for the security team.
@@ -102,8 +107,10 @@ Not repeated here: the strength of the security headers, which
    gets the real page. `www` is not affected (its redirect rule answers
    first). This was seen from the agents' sandbox; GitHub's runners may be
    treated differently. Until it is fixed, every page check of the monitor
-   would fail. The fix that changes nothing at Cloudflare is the second form
-   of the name above, in `scripts/sre/targets.mjs`.
+   would fail. **Gbenga's choice (2026-11-13): a Cloudflare custom rule**, so
+   the monitor keeps its plain name. The exact rule is item 1.1 of
+   [needs-from-gbenga.md](needs-from-gbenga.md) and is summarised under item
+   9 below.
 2. **Cloudflare adds a bot-detection script to the page.** The home page as
    served contains `/cdn-cgi/challenge-platform/scripts/jsd/main.js`,
    Cloudflare's "JavaScript detections", which Cloudflare adds while Bot Fight
@@ -243,12 +250,45 @@ code.
 - **Today:** Cloudflare's JavaScript detections script is in the page (see
   "Found on 2026-11-13"), so some bot setting is on. Which one, Gbenga can
   read under Security > Bots.
-- **Recommendation:** first change the monitor's User-Agent (no Cloudflare
-  change). If the monitor is still stopped from GitHub, Gbenga chooses between
-  switching Bot Fight Mode off (undo: switch it on) and a custom rule that
-  skips Browser Integrity Check for the monitor's User-Agent (anyone can copy
-  a User-Agent, so this weakens the check for whoever does; undo: delete the
-  rule). **Needs Gbenga's yes.**
+- **Decision (Gbenga, 2026-11-13):** one custom rule, `Let the DiamondEcho
+  monitor through`, exactly as written in item 1.1 of
+  [needs-from-gbenga.md](needs-from-gbenga.md): it matches only `GET` and
+  `HEAD` requests whose User-Agent contains `DiamondEcho-SRE-Monitor` on
+  `diamondecho.com`, `www.diamondecho.com` and `staff.diamondecho.com`, and
+  its action is **Skip** with only **Browser Integrity Check** ticked. That
+  item is the one place the expression is kept; copy it from there, not from
+  here.
+  - **Risk:** anyone who copies that name also skips the browser check, and
+    only that check: the managed rules, any rate limit and Bot Fight Mode
+    still apply to them.
+  - **Undo:** delete the rule. The monitor's page checks then fail again with
+    "Cloudflare refused the request (403, error 1010 …)".
+  - **Worked when:** after a hand-run of the "SRE monitor" workflow, the page
+    and edge checks pass.
+  - **If GitHub's runners are still stopped** (by Bot Fight Mode, which a
+    rule cannot exempt on the Free plan), the remaining choice is switching
+    Bot Fight Mode off (undo: switch it on). **Needs Gbenga's yes.**
+- **Google's uptime checks may meet the same block.** The Cloud Monitoring
+  uptime checks in `deploy/monitoring/uptime-checks/` (item 3.3 of
+  [needs-from-gbenga.md](needs-from-gbenga.md)) set no User-Agent, so they
+  send Google's own checker name. Google documents it as starting
+  `GoogleStackdriverMonitoring-UptimeChecks`. It does not contain
+  `DiamondEcho-SRE-Monitor`, so the rule above does not let them through, and
+  Browser Integrity Check may refuse them with error 1010 as it did the
+  monitor. Nobody has tested this; they do not exist yet. How Gbenga checks,
+  read-only, within an hour of applying them:
+  1. Google Cloud > Monitoring > Uptime checks. Open each `DiamondEcho SRE: …`
+     check. Healthy: every region passes. A 403 failure in every region
+     means a block.
+  2. Cloudflare > diamondecho.com > Security > Events, filtered to the last
+     hour and the action "Block". Healthy: no events from Google's checker.
+     A block names the service ("Browser Integrity Check") and shows the exact
+     User-Agent.
+  3. If they are blocked, the fix is a written change to the rule in item
+     1.1: add `or http.user_agent contains "<the name seen in step 2>"`
+     inside the User-Agent part, keeping the method and host conditions. Same
+     risk and undo as above. **Needs Gbenga's yes**, and a review by the
+     security lead, who narrowed the rule.
 
 ### 10. "I'm Under Attack" mode: only during an attack
 

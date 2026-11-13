@@ -150,7 +150,7 @@ test("Cloudflare's 1010 block page is named as a block of the monitor, and the a
     const check = byId(checks, id);
     assert.equal(check.ok, false, id);
     assert.equal(check.status, 403);
-    assert.match(check.detail, /Cloudflare refused the monitor .*\(error 1010: blocked for the browser signature/);
+    assert.match(check.detail, /^Cloudflare refused the request \(403, error 1010: the browser signature check, usually Browser Integrity Check\): .*cloudflare-outage\.md/);
     assert.deepEqual(check.observed, { "cloudflare-refusal": "1010" });
     assert.doesNotMatch(check.detail, /203\.0\.113\.77/);
   }
@@ -172,9 +172,10 @@ test("cloudflareRefusal ignores ordinary errors and reads other block codes", ()
   assert.equal(cloudflareRefusal({ answered: false, status: null, body: "", headers: new Headers() }), null);
   const waf = cloudflareRefusal(result(403, BLOCK_PAGE.replace("<span>1010</span>", "<span>1020</span>")));
   assert.equal(waf.code, "1020");
-  assert.match(waf.text, /\(error 1020\)/);
+  assert.match(waf.text, /^Cloudflare refused the request \(403, error 1020\)/);
   const nameless = cloudflareRefusal(result(429, "<title>Attention Required! | Cloudflare</title>"));
   assert.equal(nameless.code, "unknown");
+  assert.match(nameless.text, /^Cloudflare refused the request \(429\): /);
 });
 
 test("no answer at all is 'not checked', after one retry (so a hanging site cannot outlast the runner's limit)", async () => {

@@ -62,8 +62,10 @@ export function cloudflareRefusal(result) {
   }
   if (![403, 429, 503].includes(result.status) || !BLOCK_PAGE.test(result.body)) return null;
   const code = BLOCK_CODE.map((pattern) => pattern.exec(result.body)?.[1]).find(Boolean) ?? null;
-  const which = code === "1010" ? " (error 1010: blocked for the browser signature, usually Browser Integrity Check)" : code ? ` (error ${code})` : "";
-  return { code: code ?? "unknown", text: `Cloudflare refused the monitor with its own "Access denied" page, status ${result.status}${which}, instead of the site. A Cloudflare security setting is stopping the monitor, and may stop real visitors too.` };
+  // Worded like lib/http.mjs's refusal text, so one runbook symptom covers
+  // the page checks and these.
+  const which = code === "1010" ? ", error 1010: the browser signature check, usually Browser Integrity Check" : code ? `, error ${code}` : "";
+  return { code: code ?? "unknown", text: `Cloudflare refused the request (${result.status}${which}): a Cloudflare security setting is blocking the monitor, and perhaps visitors too. See docs/sre/runbooks/cloudflare-outage.md.` };
 }
 
 function unreachable(result, what) {

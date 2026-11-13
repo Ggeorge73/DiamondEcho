@@ -4,7 +4,7 @@
 | --- | --- |
 | Component | `public-site` (also `staff-site` and `dns`, which Cloudflare also serves) |
 | Usual severity | sev1 when the site does not load for visitors; sev3 when only the monitor is stopped. See [severity-and-escalation.md](../severity-and-escalation.md) |
-| Alerts that lead here | `edge-http-redirect`, `edge-hsts`, `edge-www-redirect`, `edge-no-analytics-beacon` with "Cloudflare refused the monitor" or "answered the monitor with a challenge page"; page checks failing with a Cloudflare error page; `dns-*` failing at both resolvers at once |
+| Alerts that lead here | any page or edge check whose text begins "Cloudflare refused the request" or "Cloudflare answered the monitor with a … page"; page checks failing with a Cloudflare error page; `dns-*` failing at both resolvers at once |
 | Last reviewed | 2026-11-13, not yet tested |
 
 ## Symptoms
@@ -17,9 +17,13 @@
     or security-level setting is challenging them;
   - "Error 5xx" with "Cloudflare" in the middle of a diagram, or nothing at
     all: Cloudflare itself, or the path behind it, is failing.
-- The incident issue says "Cloudflare refused the monitor with its own
-  'Access denied' page, status 403 (error 1010 …)". That is a block of the
-  monitor; real visitors may or may not be affected.
+- The incident issue says "Cloudflare refused the request (403, error 1010:
+  the browser signature check, usually Browser Integrity Check): a Cloudflare
+  security setting is blocking the monitor, and perhaps visitors too." That is
+  a block of the monitor; real visitors may or may not be affected. Error 1010
+  for the monitor usually means the rule `Let the DiamondEcho monitor through`
+  (item 1.1 of [needs-from-gbenga.md](../needs-from-gbenga.md)) is missing,
+  switched off or changed.
 - Several unrelated checks fail at once (pages, staff, DNS): Cloudflare
   serves all three, so a Cloudflare-wide problem looks like this.
 - Not for a page that loads but is wrong or old: use [site-down.md](site-down.md)
@@ -74,8 +78,14 @@ miss.
 3. **Gbenga. Needs Gbenga's yes:** a feature is blocking real visitors or the
    monitor (step 4 named it). Choose the narrowest change and follow its
    undo in [edge.md](../edge.md), "Recommended baseline", item 9:
-   - only the monitor is blocked: first have the SRE lead change the
-     monitor's User-Agent (a pull request, no Cloudflare change);
+   - only the monitor is blocked with error 1010: Security > Security rules
+     (older dashboards: WAF) > Custom rules. Check that `Let the DiamondEcho
+     monitor through` exists, is enabled and is first in the list. If it is
+     missing or changed, re-create it exactly as item 1.1 of
+     [needs-from-gbenga.md](../needs-from-gbenga.md) says (Skip, Browser
+     Integrity Check only). Undo: delete the rule. If only Google's uptime
+     checks are blocked, see [edge.md](../edge.md) item 9, "Google's uptime
+     checks";
    - visitors are blocked by Browser Integrity Check or a custom rule: switch
      that one feature or rule off;
    - visitors are challenged by Bot Fight Mode: switch Bot Fight Mode off.
