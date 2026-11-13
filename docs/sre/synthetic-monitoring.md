@@ -77,8 +77,9 @@ SLIs: page checks count toward `public-availability` and `public-latency`
 (the search page too); calculator page checks toward `calculators-availability`;
 inquiry checks toward `inquiry-availability`; `api-health` and `api-identity`
 toward `api-availability` and `api-latency`, and the deal analysis call toward
-`api-availability` (the calculators still work in the browser when the API is
-down, so an API failure is not counted as a calculator outage); staff checks toward
+`api-availability` (an API failure is counted once, as an API outage, not
+again as a calculator outage; the calculator pages themselves still load);
+staff checks toward
 `staff-availability`. The CORS, not-found and redirect checks feed no SLO.
 
 A fast run makes about 25 requests, one at a time with a pause between them:

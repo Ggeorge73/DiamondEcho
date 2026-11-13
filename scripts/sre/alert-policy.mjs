@@ -167,7 +167,7 @@ export const componentName = (component) => NAMES[component] ?? String(component
 export const IMPACT = {
   "public-site": "Pages of diamondecho.com may not load, or may load incomplete, for visitors.",
   search: "The property search on /search may not show listings. The search is provided by Georgia MLS.",
-  calculators: "Deal Studio, the mortgage simulator or the seller net sheet may not work fully. The pages calculate in the browser when the service behind them is down, and say so.",
+  calculators: "Deal Studio's analysis may fail with an error. The mortgage simulator and the seller net sheet calculate in the browser and keep working.",
   inquiry: "Visitors may not be able to send a request from the contact form. A request that is not confirmed on screen is not stored.",
   api: "The service behind the calculators and the contact form is not answering correctly.",
   "staff-site": "Staff may not be able to open the request queue at staff.diamondecho.com.",

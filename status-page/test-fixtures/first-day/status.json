@@ -1,0 +1,177 @@
+{
+  "schema": 1,
+  "updated_at": "2026-11-12T15:01:04.210Z",
+  "overall": "operational",
+  "components": {
+    "public-site": {
+      "name": "Website",
+      "state": "operational",
+      "since": "2026-11-12T12:00:00.000Z",
+      "checks": [
+        "public-home"
+      ]
+    },
+    "search": {
+      "name": "Property search",
+      "state": "operational",
+      "since": "2026-11-12T12:00:00.000Z",
+      "checks": [
+        "search-page"
+      ]
+    },
+    "calculators": {
+      "name": "Intelligence calculators",
+      "state": "operational",
+      "since": "2026-11-12T12:00:00.000Z",
+      "checks": [
+        "calculators-analyze"
+      ]
+    },
+    "inquiry": {
+      "name": "Inquiry form",
+      "state": "operational",
+      "since": "2026-11-12T12:00:00.000Z",
+      "checks": [
+        "inquiry-route"
+      ]
+    },
+    "api": {
+      "name": "API",
+      "state": "operational",
+      "since": "2026-11-12T12:00:00.000Z",
+      "checks": [
+        "api-health"
+      ]
+    },
+    "staff-site": {
+      "name": "Staff site",
+      "state": "operational",
+      "since": "2026-11-12T12:00:00.000Z",
+      "checks": [
+        "staff-home"
+      ]
+    },
+    "dns": {
+      "name": "DNS",
+      "state": "unknown",
+      "since": "2026-11-12T12:00:00.000Z",
+      "checks": [
+        "dns-apex"
+      ]
+    },
+    "tls": {
+      "name": "TLS certificates",
+      "state": "unknown",
+      "since": "2026-11-12T12:00:00.000Z",
+      "checks": [
+        "tls-public"
+      ]
+    },
+    "domain": {
+      "name": "Domain registration",
+      "state": "unknown",
+      "since": "2026-11-12T12:00:00.000Z",
+      "checks": [
+        "domain-registration"
+      ]
+    }
+  },
+  "checks": {
+    "public-home": {
+      "name": "Website check",
+      "component": "public-site",
+      "severity": "sev1",
+      "suite": "fast",
+      "ok": true,
+      "status": 200,
+      "latency_ms": 180,
+      "detail": "",
+      "checked_at": "2026-11-12T15:01:00.000Z",
+      "consecutive_failures": 0,
+      "last_ok_at": "2026-11-12T15:01:00.000Z",
+      "last_failure_at": null,
+      "observed": {}
+    },
+    "search-page": {
+      "name": "Property search check",
+      "component": "search",
+      "severity": "sev2",
+      "suite": "fast",
+      "ok": true,
+      "status": 200,
+      "latency_ms": 180,
+      "detail": "",
+      "checked_at": "2026-11-12T15:01:00.000Z",
+      "consecutive_failures": 0,
+      "last_ok_at": "2026-11-12T15:01:00.000Z",
+      "last_failure_at": null,
+      "observed": {}
+    },
+    "calculators-analyze": {
+      "name": "Intelligence calculators check",
+      "component": "calculators",
+      "severity": "sev2",
+      "suite": "fast",
+      "ok": true,
+      "status": 200,
+      "latency_ms": 180,
+      "detail": "",
+      "checked_at": "2026-11-12T15:01:00.000Z",
+      "consecutive_failures": 0,
+      "last_ok_at": "2026-11-12T15:01:00.000Z",
+      "last_failure_at": null,
+      "observed": {}
+    },
+    "inquiry-route": {
+      "name": "Inquiry form check",
+      "component": "inquiry",
+      "severity": "sev2",
+      "suite": "fast",
+      "ok": true,
+      "status": 200,
+      "latency_ms": 180,
+      "detail": "",
+      "checked_at": "2026-11-12T15:01:00.000Z",
+      "consecutive_failures": 0,
+      "last_ok_at": "2026-11-12T15:01:00.000Z",
+      "last_failure_at": null,
+      "observed": {}
+    },
+    "api-health": {
+      "name": "API check",
+      "component": "api",
+      "severity": "sev2",
+      "suite": "fast",
+      "ok": true,
+      "status": 200,
+      "latency_ms": 180,
+      "detail": "",
+      "checked_at": "2026-11-12T15:01:00.000Z",
+      "consecutive_failures": 0,
+      "last_ok_at": "2026-11-12T15:01:00.000Z",
+      "last_failure_at": null,
+      "observed": {}
+    },
+    "staff-home": {
+      "name": "Staff site check",
+      "component": "staff-site",
+      "severity": "sev2",
+      "suite": "fast",
+      "ok": true,
+      "status": 200,
+      "latency_ms": 180,
+      "detail": "",
+      "checked_at": "2026-11-12T15:01:00.000Z",
+      "consecutive_failures": 0,
+      "last_ok_at": "2026-11-12T15:01:00.000Z",
+      "last_failure_at": null,
+      "observed": {}
+    }
+  },
+  "last_runs": {
+    "fast": {
+      "at": "2026-11-12T15:01:00.000Z",
+      "region": "eastus"
+    }
+  }
+}

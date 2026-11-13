@@ -1,0 +1,10 @@
+# Files of the public status page. The monitor workflow copies exactly these,
+# keeping their paths, from status-page/ on main to the root of the sre-status
+# branch. Everything else in status-page/ (the tests and test-fixtures/) stays
+# out of the branch. render.test.mjs checks this list against index.html.
+index.html
+status.css
+status.js
+render.mjs
+favicon.svg
+.nojekyll

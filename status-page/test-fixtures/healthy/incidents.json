@@ -1,0 +1,57 @@
+{
+  "schema": 1,
+  "engine": {
+    "streaks": {}
+  },
+  "open": [],
+  "recent": [
+    {
+      "key": "api",
+      "component": "api",
+      "severity": "sev2",
+      "title": "TEST DATA: API is not answering",
+      "opened_at": "2026-11-02T14:10:00.000Z",
+      "failing_checks": [
+        "api-health"
+      ],
+      "issue_number": 9001,
+      "issue_url": "https://example.invalid/issues/9001",
+      "updates": [
+        {
+          "at": "2026-11-02T14:10:00.000Z",
+          "text": "TEST DATA. Opened: the API check has failed 2 checks in a row."
+        },
+        {
+          "at": "2026-11-02T14:40:00.000Z",
+          "text": "TEST DATA. The calculators are working in the browser while the API is restored."
+        },
+        {
+          "at": "2026-11-02T15:20:00.000Z",
+          "text": "TEST DATA. Resolved: the API check has passed 3 checks in a row."
+        }
+      ],
+      "resolved_at": "2026-11-02T15:20:00.000Z",
+      "duration_minutes": 70
+    },
+    {
+      "key": "public-site",
+      "component": "public-site",
+      "severity": "sev1",
+      "title": "TEST DATA: Website was down (older than 30 days)",
+      "opened_at": "2026-10-05T09:00:00.000Z",
+      "failing_checks": [
+        "public-home"
+      ],
+      "issue_number": 9000,
+      "issue_url": "https://example.invalid/issues/9000",
+      "updates": [
+        {
+          "at": "2026-10-05T09:00:00.000Z",
+          "text": "TEST DATA. Opened."
+        }
+      ],
+      "resolved_at": "2026-10-05T09:15:00.000Z",
+      "duration_minutes": 15
+    }
+  ]
+}

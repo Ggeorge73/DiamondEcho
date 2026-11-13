@@ -26,9 +26,10 @@
 
 On an expired or wrong certificate, almost every visitor stops at the
 browser's warning. For `tls-public` or `tls-www` that is the whole website; for
-`tls-staff` staff cannot open the queue; for `tls-api` the calculators fall
-back to calculating in the browser, but the inquiry form cannot reach the API,
-so a visitor cannot send a request (they can still phone). Days-left warnings
+`tls-staff` staff cannot open the queue; for `tls-api` Deal Studio's base
+analysis and the inquiry form cannot reach the API (a visitor can still phone;
+the mortgage simulator and seller net sheet run in the browser and keep
+working). Days-left warnings
 have no visitor impact yet.
 
 ## Check first

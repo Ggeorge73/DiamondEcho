@@ -87,7 +87,8 @@ test("a build that never goes live fails visibly, opens an issue, and rolls noth
   assert.deepEqual(created.labels, ["sre-incident"]);
   assert.match(created.body, /did not show this commit within 15 minutes \(31 looks at \/version.json\)\. The last answer named `0000000`/);
   assert.match(created.body, /Rollback to this deployment/);
-  assert.ok(created.body.includes("https://github.com/o/r/commit/1111111111111111111111111111111111111111"));
+  const links = (created.body.match(/https:\/\/[^\s)>\]]+/g) || []).map((link) => link.replace(/[.,]+$/, ""));
+  assert.ok(links.some((link) => link === "https://github.com/o/r/commit/1111111111111111111111111111111111111111"), links.join(" "));
 });
 
 test("a failed website check rolls the site back only when set up AND enabled, and reads it back", async () => {

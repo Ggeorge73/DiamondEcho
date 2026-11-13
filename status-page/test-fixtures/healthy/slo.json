@@ -1,0 +1,55 @@
+{
+  "schema": 1,
+  "generated_at": "2026-11-12T15:00:00.000Z",
+  "window_days": 28,
+  "slos": [
+    {
+      "id": "public-availability",
+      "name": "Website availability",
+      "component": "public-site",
+      "target": 0.999,
+      "accepted": false,
+      "good": 7745,
+      "total": 7748,
+      "attainment": 0.9996,
+      "budget_remaining": 0.61,
+      "burn": {
+        "1h": 0,
+        "6h": 0,
+        "3d": 0.2
+      },
+      "enough_data": true
+    },
+    {
+      "id": "api-availability",
+      "name": "API availability",
+      "component": "api",
+      "target": 0.995,
+      "accepted": true,
+      "good": 7732,
+      "total": 7748,
+      "attainment": 0.9979,
+      "budget_remaining": 0.59,
+      "burn": {
+        "1h": 0,
+        "6h": 0,
+        "3d": 0.1
+      },
+      "enough_data": true
+    },
+    {
+      "id": "inquiry-availability",
+      "name": "Inquiry form availability",
+      "component": "inquiry",
+      "target": 0.999,
+      "accepted": false,
+      "good": 0,
+      "total": 0,
+      "attainment": null,
+      "budget_remaining": null,
+      "burn": {},
+      "enough_data": false
+    }
+  ],
+  "burn_alerts": []
+}

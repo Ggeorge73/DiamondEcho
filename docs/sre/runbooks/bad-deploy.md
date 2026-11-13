@@ -24,8 +24,9 @@
 
 Depends on what the change broke: anything from one wrong label to the whole
 site. A broken form loses requests that visitors do not resend, so treat a
-form fault as urgent. The calculators keep working in the browser when the
-API fails. A refused `deploy.sh` run (exit 1) has no visitor impact: the old
+form fault as urgent. When the API fails, Deal Studio's base analysis fails
+with an error; the mortgage simulator and seller net sheet run in the browser
+and keep working. A refused `deploy.sh` run (exit 1) has no visitor impact: the old
 revision serves.
 
 ## Check first

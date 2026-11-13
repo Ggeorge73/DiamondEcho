@@ -1,0 +1,226 @@
+{
+  "schema": 1,
+  "updated_at": "2026-11-12T15:01:04.210Z",
+  "overall": "outage",
+  "components": {
+    "public-site": {
+      "name": "Website",
+      "state": "outage",
+      "since": "2026-11-12T14:50:00.000Z",
+      "checks": [
+        "public-home"
+      ]
+    },
+    "search": {
+      "name": "Property search",
+      "state": "operational",
+      "since": "2026-10-03T12:00:00.000Z",
+      "checks": [
+        "search-page"
+      ]
+    },
+    "calculators": {
+      "name": "Intelligence calculators",
+      "state": "degraded",
+      "since": "2026-11-12T13:30:00.000Z",
+      "checks": [
+        "calculators-analyze"
+      ]
+    },
+    "inquiry": {
+      "name": "Inquiry form",
+      "state": "operational",
+      "since": "2026-10-03T12:00:00.000Z",
+      "checks": [
+        "inquiry-route"
+      ]
+    },
+    "api": {
+      "name": "API",
+      "state": "operational",
+      "since": "2026-10-03T12:00:00.000Z",
+      "checks": [
+        "api-health"
+      ]
+    },
+    "staff-site": {
+      "name": "Staff site",
+      "state": "operational",
+      "since": "2026-10-03T12:00:00.000Z",
+      "checks": [
+        "staff-home"
+      ]
+    },
+    "dns": {
+      "name": "DNS",
+      "state": "operational",
+      "since": "2026-10-03T12:00:00.000Z",
+      "checks": [
+        "dns-apex"
+      ]
+    },
+    "tls": {
+      "name": "TLS certificates",
+      "state": "operational",
+      "since": "2026-10-03T12:00:00.000Z",
+      "checks": [
+        "tls-public"
+      ]
+    },
+    "domain": {
+      "name": "Domain registration",
+      "state": "operational",
+      "since": "2026-10-03T12:00:00.000Z",
+      "checks": [
+        "domain-registration"
+      ]
+    }
+  },
+  "checks": {
+    "public-home": {
+      "name": "Website check",
+      "component": "public-site",
+      "severity": "sev1",
+      "suite": "fast",
+      "ok": false,
+      "status": 503,
+      "latency_ms": 2400,
+      "detail": "Test data: the check failed.",
+      "checked_at": "2026-11-12T15:01:00.000Z",
+      "consecutive_failures": 3,
+      "last_ok_at": "2026-11-12T14:45:00.000Z",
+      "last_failure_at": "2026-11-12T15:01:00.000Z",
+      "observed": {}
+    },
+    "search-page": {
+      "name": "Property search check",
+      "component": "search",
+      "severity": "sev2",
+      "suite": "fast",
+      "ok": true,
+      "status": 200,
+      "latency_ms": 180,
+      "detail": "",
+      "checked_at": "2026-11-12T15:01:00.000Z",
+      "consecutive_failures": 0,
+      "last_ok_at": "2026-11-12T15:01:00.000Z",
+      "last_failure_at": null,
+      "observed": {}
+    },
+    "calculators-analyze": {
+      "name": "Intelligence calculators check",
+      "component": "calculators",
+      "severity": "sev2",
+      "suite": "fast",
+      "ok": false,
+      "status": 503,
+      "latency_ms": 2400,
+      "detail": "Test data: the check failed.",
+      "checked_at": "2026-11-12T15:01:00.000Z",
+      "consecutive_failures": 3,
+      "last_ok_at": "2026-11-12T14:45:00.000Z",
+      "last_failure_at": "2026-11-12T15:01:00.000Z",
+      "observed": {}
+    },
+    "inquiry-route": {
+      "name": "Inquiry form check",
+      "component": "inquiry",
+      "severity": "sev2",
+      "suite": "fast",
+      "ok": true,
+      "status": 200,
+      "latency_ms": 180,
+      "detail": "",
+      "checked_at": "2026-11-12T15:01:00.000Z",
+      "consecutive_failures": 0,
+      "last_ok_at": "2026-11-12T15:01:00.000Z",
+      "last_failure_at": null,
+      "observed": {}
+    },
+    "api-health": {
+      "name": "API check",
+      "component": "api",
+      "severity": "sev2",
+      "suite": "fast",
+      "ok": true,
+      "status": 200,
+      "latency_ms": 180,
+      "detail": "",
+      "checked_at": "2026-11-12T15:01:00.000Z",
+      "consecutive_failures": 0,
+      "last_ok_at": "2026-11-12T15:01:00.000Z",
+      "last_failure_at": null,
+      "observed": {}
+    },
+    "staff-home": {
+      "name": "Staff site check",
+      "component": "staff-site",
+      "severity": "sev2",
+      "suite": "fast",
+      "ok": true,
+      "status": 200,
+      "latency_ms": 180,
+      "detail": "",
+      "checked_at": "2026-11-12T15:01:00.000Z",
+      "consecutive_failures": 0,
+      "last_ok_at": "2026-11-12T15:01:00.000Z",
+      "last_failure_at": null,
+      "observed": {}
+    },
+    "dns-apex": {
+      "name": "DNS check",
+      "component": "dns",
+      "severity": "sev2",
+      "suite": "slow",
+      "ok": true,
+      "status": 200,
+      "latency_ms": 180,
+      "detail": "",
+      "checked_at": "2026-11-12T14:30:00.000Z",
+      "consecutive_failures": 0,
+      "last_ok_at": "2026-11-12T14:30:00.000Z",
+      "last_failure_at": null,
+      "observed": {}
+    },
+    "tls-public": {
+      "name": "TLS certificates check",
+      "component": "tls",
+      "severity": "sev2",
+      "suite": "slow",
+      "ok": true,
+      "status": 200,
+      "latency_ms": 180,
+      "detail": "",
+      "checked_at": "2026-11-12T14:30:00.000Z",
+      "consecutive_failures": 0,
+      "last_ok_at": "2026-11-12T14:30:00.000Z",
+      "last_failure_at": null,
+      "observed": {}
+    },
+    "domain-registration": {
+      "name": "Domain registration check",
+      "component": "domain",
+      "severity": "sev2",
+      "suite": "slow",
+      "ok": true,
+      "status": 200,
+      "latency_ms": 180,
+      "detail": "",
+      "checked_at": "2026-11-12T14:30:00.000Z",
+      "consecutive_failures": 0,
+      "last_ok_at": "2026-11-12T14:30:00.000Z",
+      "last_failure_at": null,
+      "observed": {}
+    }
+  },
+  "last_runs": {
+    "fast": {
+      "at": "2026-11-12T15:01:00.000Z",
+      "region": "eastus"
+    },
+    "slow": {
+      "at": "2026-11-12T14:30:00.000Z",
+      "region": "eastus"
+    }
+  }
+}

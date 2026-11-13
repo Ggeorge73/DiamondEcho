@@ -1,0 +1,41 @@
+{
+  "public-site": {
+    "2026-11-12": {
+      "runs": 37,
+      "failed": 0
+    }
+  },
+  "search": {
+    "2026-11-12": {
+      "runs": 37,
+      "failed": 0
+    }
+  },
+  "calculators": {
+    "2026-11-12": {
+      "runs": 37,
+      "failed": 0
+    }
+  },
+  "inquiry": {
+    "2026-11-12": {
+      "runs": 37,
+      "failed": 0
+    }
+  },
+  "api": {
+    "2026-11-12": {
+      "runs": 37,
+      "failed": 0
+    }
+  },
+  "staff-site": {
+    "2026-11-12": {
+      "runs": 37,
+      "failed": 0
+    }
+  },
+  "dns": {},
+  "tls": {},
+  "domain": {}
+}

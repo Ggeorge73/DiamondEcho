@@ -1,0 +1,78 @@
+# For an incident a person noticed (a visitor called, a page looks wrong) that
+# the monitor has not opened. Monitor incidents are opened automatically with
+# the sre-incident label; this form deliberately does not use that label, so
+# the alert engine never adopts or closes a person's issue.
+# Process: docs/sre/incident-response.md. Severities: docs/sre/severity-and-escalation.md.
+name: Incident (reported by a person)
+description: Something on diamondecho.com is broken for visitors and the monitor has not opened an issue for it.
+title: "Incident: "
+labels: ["incident"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **This issue is public.** Do not write a visitor's name, email, phone number or message, a password, a key or a token. Refer to a request only by its reference.
+
+        A suspected attack or leaked secret: say only "possible security problem" here and follow `docs/security-operations.md`.
+  - type: dropdown
+    id: component
+    attributes:
+      label: Which part is affected?
+      options:
+        - Website
+        - Property search
+        - Intelligence calculators
+        - Inquiry form
+        - API
+        - Staff site
+        - DNS or email
+        - TLS certificates
+        - Domain registration
+        - Not sure
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: "In visitor terms; see docs/sre/severity-and-escalation.md. When unsure, pick the higher one."
+      options:
+        - "sev1: visitors cannot use the site, or confirmed requests may be lost"
+        - "sev2: a main feature is down, the site still opens"
+        - "sev3: a minor feature, or an early warning"
+        - "sev4: a notice, nobody affected now"
+    validations:
+      required: true
+  - type: textarea
+    id: visitors
+    attributes:
+      label: What do visitors see?
+      description: In their words, for example "the contact form says try again later". Which page, which device, if known.
+    validations:
+      required: true
+  - type: input
+    id: started
+    attributes:
+      label: Since when (UTC)?
+      description: Best estimate, for example 2026-11-13 14:50 UTC, or "unknown".
+    validations:
+      required: true
+  - type: textarea
+    id: noticed
+    attributes:
+      label: How was it noticed?
+      description: A visitor's call, Gbenga's own look, a provider email. No personal details.
+  - type: textarea
+    id: timeline
+    attributes:
+      label: Timeline (UTC)
+      description: One line per event or decision. Add more as comments as the incident goes on.
+      value: |
+        - HH:MM UTC: noticed by …
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Before submitting
+      options:
+        - label: This issue contains no visitor details, passwords, keys or tokens.
+          required: true

@@ -106,7 +106,8 @@ choice to keep each one is a decision, not an accident.
 
 1. **One region.** The API, the database and staff sign-in are all in
    `us-east1`. A regional outage at Google stops the form, the staff queue and
-   the calculators' service (the calculators still work in the browser).
+   Deal Studio's base analysis (the mortgage simulator and seller net sheet run
+   in the browser and keep working).
 2. **Minimum 0 instances, so cold starts.** When no one has used the API for a
    while there is no instance running, and the next request waits for one to
    start. A cold start of 7.3 s was measured on staging (DE-33). A visitor's

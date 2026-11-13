@@ -1,0 +1,110 @@
+# The blameless review after an incident. The sections and the rules for when
+# one is required are in docs/sre/postmortem-template.md; keep the two in step.
+name: Postmortem
+description: The blameless review of an incident, with actions, owners and dates.
+title: "Postmortem: "
+labels: ["postmortem"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Required for every sev1; a sev2 over an hour or touching inquiries; any loss or exposure of visitor data; any automatic action that acted; anything that spent an error budget. Guidance: `docs/sre/postmortem-template.md`.
+
+        **Blameless:** ask what made the failure possible, not who. **Public:** no visitor details, passwords, keys or tokens. **Measured numbers only:** write "not measured" where there is none. An AI role agent's draft stays a draft until Gbenga accepts it.
+  - type: input
+    id: incident
+    attributes:
+      label: Incident issue
+      description: "For example #123."
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Highest severity reached
+      options: [sev1, sev2, sev3, sev4]
+    validations:
+      required: true
+  - type: textarea
+    id: times
+    attributes:
+      label: Key times (UTC)
+      value: |
+        - Started (visitors first affected):
+        - Detected (and how):
+        - Acknowledged:
+        - Mitigated (visitors no longer harmed):
+        - Resolved:
+    validations:
+      required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: Three sentences. What visitors experienced, for how long, and what ended it.
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact on visitors
+      value: |
+        - What they could not do:
+        - How long:
+        - How many (only if measured):
+        - Requests (inquiries) lost, delayed or not alerted:
+        - Error budget used, per SLO (from slo.json or the weekly report):
+        - What still worked:
+    validations:
+      required: true
+  - type: textarea
+    id: timeline
+    attributes:
+      label: Timeline (UTC)
+      description: From the incident issue and the monitor's updates. Include decisions, not only events.
+      value: |
+        | Time | What happened |
+        | --- | --- |
+        | HH:MM | |
+    validations:
+      required: true
+  - type: textarea
+    id: causes
+    attributes:
+      label: Contributing causes
+      description: Usually several. For each, why it made sense at the time. Consider the change, the tests, detection time, mitigation time and the setup.
+    validations:
+      required: true
+  - type: textarea
+    id: well
+    attributes:
+      label: What went well
+  - type: textarea
+    id: hard
+    attributes:
+      label: What was hard or lucky
+  - type: textarea
+    id: actions
+    attributes:
+      label: Actions
+      description: One owner (Gbenga, or a named role agent preparing a PR for him) and a date each. Production, DNS, billing, IAM and secret changes are exact steps for Gbenga, also added to docs/sre/needs-from-gbenga.md.
+      value: |
+        | # | Action | Kind (prevent / detect / mitigate / document) | Owner | Due | Tracking |
+        | --- | --- | --- | --- | --- | --- |
+        | 1 | | | | YYYY-MM-DD | |
+    validations:
+      required: true
+  - type: textarea
+    id: runbooks
+    attributes:
+      label: Runbook changes
+      description: Which runbook was wrong, missing or slow, and the fix.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: This contains no visitor details, passwords, keys or tokens, and no attack details that would help a repeat.
+          required: true
+        - label: Every number here was measured, or is marked "not measured".
+          required: true
