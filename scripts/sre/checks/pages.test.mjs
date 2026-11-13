@@ -93,17 +93,29 @@ test("another page served in place of this one fails", () => {
   assert.equal(hasCanonical(T.publicOrigin, "/about")(savedPage("/about")), true);
 });
 
-test("a home page that keeps failing: three attempts, then the files it would name are reported as not checked", async () => {
+test("a home page server error is reported at once (no retry), and the files it would name are not checked and count toward no SLO", async () => {
   const { fetch, calls } = site({ [`${T.publicOrigin}/`]: { status: 502, headers: html, body: "bad gateway" } });
   const checks = byId(await run(ctx(fetch)));
   assert.equal(checks["public-home"].ok, false);
   assert.equal(checks["public-home"].status, 502);
-  assert.equal(checks["public-home"].attempts, 3);
-  assert.equal(calls.filter((call) => call.url === `${T.publicOrigin}/`).length, 3);
-  assert.equal(checks["public-asset-js"].ok, false);
-  assert.match(checks["public-asset-js"].detail, /did not load/);
+  assert.equal(checks["public-home"].attempts, 1);
+  assert.deepEqual(checks["public-home"].slis, ["public-availability", "public-latency"], "the failure itself is measured");
+  assert.equal(calls.filter((call) => call.url === `${T.publicOrigin}/`).length, 1);
+  for (const id of ["public-asset-js", "public-asset-css"]) {
+    assert.equal(checks[id].ok, false);
+    assert.match(checks[id].detail, /did not load/);
+    assert.deepEqual(checks[id].slis, [], `${id} measured nothing`);
+  }
   // The other pages are still checked.
   assert.equal(checks["public-page-about"].ok, true);
+});
+
+test("a home page refused by Cloudflare: the refusal is named, and the files it would name say why they were not checked", async () => {
+  const block = '<title>Access denied | diamondecho.com used Cloudflare to restrict access</title><span data-translate="error">Error</span> <span>1010</span>';
+  const { fetch } = site({ [`${T.publicOrigin}/`]: { status: 403, headers: { ...html, server: "cloudflare", "cf-ray": "abc-ATL" }, body: block } });
+  const checks = byId(await run(ctx(fetch)));
+  assert.match(checks["public-home"].detail, /^Cloudflare refused the request \(403, error 1010/);
+  assert.match(checks["public-asset-js"].detail, /^The home page was refused by Cloudflare, so the file it asks for is not known\. See docs\/sre\/runbooks\/cloudflare-outage\.md\.$/);
 });
 
 test("an unknown address that answers 200 fails (search engines would list pages that do not exist)", async () => {

@@ -65,13 +65,13 @@ counts toward (an *SLI* is a measured share of good answers; see
 | `inquiry-page` | Contact page | inquiry | sev2 | page test, the request form is there and the "call or email us" card is not |
 | `inquiry-preflight` | Inquiry form is allowed to send from the website | inquiry | sev2 | The browser's permission question (`OPTIONS`, the *CORS preflight*) for the form is answered yes for `https://diamondecho.com`, POST and the form's headers |
 | `inquiry-route` | Inquiry route exists | inquiry | sev2 | `GET /api/v1/inquiries` answers 405 "POST only": the route is there |
-| `inquiry-queue` | Inquiry queue is switched on | inquiry | sev2 | `GET /api/v1/inquiries/staff` without sign-in answers 401 (a 503 "not configured" means the queue is off) |
+| `inquiry-queue` | Inquiry queue is switched on | inquiry | sev2 | `GET /api/v1/inquiries/staff` without sign-in answers 401 (a 503 "not configured" means the queue is off; the body is read only for a 503) |
 | `api-health` | API is up | api | sev2 | `/health` says ok |
 | `api-identity` | API identity | api | sev2 | `/api/` names the DiamondEcho API; reports the revision and commit when the API publishes them |
 | `api-cors-allowed` | API accepts calls from the website | api | sev2 | the identity answer lets `https://diamondecho.com` read it |
 | `api-cors-refused` | API refuses calls from other sites | api | sev3 | the same question from an unknown site gets no permission |
 | `staff-home` | Staff site loads with its protections | staff-site | sev2 | 200, HTML, `no-store`, `default-src 'none'`, `X-Frame-Options: DENY` |
-| `staff-api-auth` | Staff API asks for sign-in | staff-site | sev2 | 401 without sign-in, `no-store`, readable by the staff site only; a 200 is reported as a security incident |
+| `staff-api-auth` | Staff API asks for sign-in | staff-site | sev2 | 401 without sign-in, `no-store`, readable by the staff site only; a 200 is reported as a security incident. The answer's body is never read |
 
 SLIs: page checks count toward `public-availability` and `public-latency`
 (the search page too); calculator page checks toward `calculators-availability`;
@@ -92,7 +92,7 @@ requests, if GitHub runs every scheduled time.
 | Id | Name | Component | Severity | What passes |
 | --- | --- | --- | --- | --- |
 | `api-docs-off` | API route list is not published | api | sev3 | `/docs`, `/redoc` and `/openapi.json` answer 404 (launch audit finding F4) |
-| `search-idx-provider` | Georgia MLS search (outside provider) | search | sev3 | One GET of `https://georgeolugbe.georgiamls.com/idxsearch/` (at most one retry) answers 200 HTML and does not forbid being shown inside our page |
+| `search-idx-provider` | Georgia MLS search (outside provider) | search | sev3 | One GET of `https://georgeolugbe.georgiamls.com/idxsearch/` (at most two attempts, see below) answers 200 HTML and does not forbid being shown inside our page |
 
 The slow suite also runs the edge security role's certificate, DNS, domain
 and edge checks (`checks/tls.mjs`, `dns.mjs`, `domain.mjs`, `edge.mjs`); see
@@ -102,15 +102,38 @@ and edge checks (`checks/tls.mjs`, `dns.mjs`, `domain.mjs`, `edge.mjs`); see
 
 Everything above, once, after a merge to `main`.
 
-### When a check module itself breaks
+### Retries, time limits and what a failure means
 
-The runner loads the ten modules from a fixed list. If one is missing,
-throws, returns something outside the contract or runs past 90 seconds, its
-checks are replaced by one failed sev3 check named `monitor-<module>`
-("Monitor could run the … checks"), and every other module still runs. A
-blind spot is reported, never skipped in silence. A whole run stops starting
-new modules after 7 minutes, so it always files a result before the
-workflow's 10-minute limit.
+- **Only "no answer" is tried again.** A request that got no answer at all
+  (the connection failed or nothing came back within 10 seconds) is tried
+  again after 0.5 s and then 1.5 s: at most three attempts. A wrong answer,
+  a server error (5xx) included, is reported at once, after one attempt:
+  retrying it would hide from the SLOs errors that visitors meet. Two
+  exceptions try fewer times: the reference calculation (at most two
+  attempts) and, once a host has failed to answer at all, every later
+  request to that host in the same run (one 5-second attempt). The Georgia
+  MLS check, which feeds no SLO, is the only one that also tries a server
+  error once more (at most two attempts).
+- **Latency is the whole request.** `latency_ms` runs from sending the
+  first attempt to the last byte of the answer, with the failed attempts and
+  the waits between them included. A page that needed a retry shows the
+  time the visitor would have waited.
+- **Time limits.** Each module has 90 seconds and the whole run 7 minutes,
+  so a run always files a result before the workflow's 10-minute limit.
+  Each request is shortened to the module's time left. When the time is
+  gone, nothing more is sent: each remaining check is filed as failed under
+  its own id and severity with the detail "Not tried: the module's time ran
+  out." A check that was never sent measured nothing, so it counts toward no
+  SLO; the same goes for the script and stylesheet checks when the home page
+  gave nothing to read them from. The checks that ran keep their result, so
+  a site that swallows every connection still shows as a failed sev1 home
+  page, not as a monitor fault.
+- **When a check module itself breaks.** The runner loads the ten modules
+  from a fixed list. If one is missing, throws, returns something outside
+  the contract, or does not hand in its checks within 5 seconds after its
+  time, its checks are replaced by one failed sev3 check named
+  `monitor-<module>` ("Monitor fault, not the site: …"), and every other
+  module still runs. A blind spot is reported, never skipped in silence.
 
 ## What is deliberately not checked, and why
 
@@ -152,31 +175,39 @@ To apply (Gbenga, once the observability role's `apply.sh` is merged): sign
 in to Cloud Shell on project `diamondecho-prod` and run
 `bash deploy/monitoring/apply.sh` as that script describes. Nothing is
 created until then. After applying, look at each check in the console
-(Monitoring > Uptime checks) and confirm all six pass: see the Cloudflare note
-below, because a Cloudflare rule could refuse Google's checkers too.
+(Monitoring > Uptime checks) and confirm all six pass: see the Cloudflare
+section below, because Cloudflare's browser check could refuse Google's
+checkers too.
 
-## A Cloudflare rule refuses the monitor's plain User-Agent (found 2026-11-13)
+## Cloudflare's browser check refuses the monitor (found 2026-11-13)
 
-On 2026-11-13, from this sandbox, `https://diamondecho.com/` answered
-403 "Access denied … used Cloudflare to restrict access" to the monitor's
-User-Agent `DiamondEcho-SRE-Monitor/1 (+https://github.com/Ggeorge73/DiamondEcho)`,
-and also to `DiamondEcho-SRE-Monitor/1` alone, while it answered 200 to
-`curl/8.5.0`, to `node` and to
-`Mozilla/5.0 (compatible; DiamondEcho-SRE-Monitor/1; +https://github.com/Ggeorge73/DiamondEcho)`.
-The refusal page names Cloudflare error 1010: the visitor's "browser
-signature" was refused, which is usually Cloudflare's Browser Integrity Check
-(a zone setting that turns away requests whose headers look unlike a
-browser's). Only the Cloudflare dashboard (Security > Events) can confirm
-which setting it was. The www redirect and the API are not affected: the
-redirect is answered before that check, and the API is not behind Cloudflare.
+On 2026-11-13, from the sandbox the checks were built in,
+`https://diamondecho.com/` and `https://staff.diamondecho.com/` answered
+403 "Access denied … used Cloudflare to restrict access" (Cloudflare error
+1010, the browser signature check, usually Browser Integrity Check) to the
+monitor's User-Agent `DiamondEcho-SRE-Monitor/1
+(+https://github.com/Ggeorge73/DiamondEcho)`, while ordinary clients got
+200. The www redirect and the API were not affected: the redirect is answered
+before that check, and the API is not behind Cloudflare.
 
-Until it is resolved, a check that meets Cloudflare's refusal says
-"Cloudflare refused the request (403, error 1010: …)" rather than a bare
-status, so nobody mistakes it for the site being down. The proposed fix is
-the browser-style form above (the usual shape for an honest automated
-client, as search engines' crawlers use). It goes in `USER_AGENT` in
-`scripts/sre/targets.mjs`. Google's uptime checkers may meet the same check
-once the Cloud Monitoring tier is applied.
+Gbenga chose to let the monitor through with a Cloudflare rule and keep its
+plain name ([needs-from-gbenga.md](needs-from-gbenga.md), item 1.1: a custom
+rule that skips Browser Integrity Check only, for GET and HEAD from that
+User-Agent to our three hosts). **The rule must be in place before this
+monitoring is merged.** Without it every website, search, calculator,
+contact and staff page check fails from the first run, and the alert engine
+opens incidents for an outage visitors are not having. After adding the
+rule, run the "SRE monitor" workflow by hand and check that the website
+checks pass.
+
+When a check meets Cloudflare's own refusal page, its detail starts
+"Cloudflare refused the request" and points to
+[cloudflare-outage.md](runbooks/cloudflare-outage.md), and the script and
+stylesheet checks say the home page was refused by Cloudflare. A 403 that
+the site itself serves (Cloudflare Pages adds Cloudflare's headers to every
+answer) is reported as a plain status. Google's uptime checkers may meet the
+same browser check once the Cloud Monitoring tier is applied; the rule above
+does not cover their User-Agent, so check them after applying.
 
 ## Running the checks yourself
 
@@ -204,7 +235,8 @@ deploy/monitoring/uptime-checks/uptime-checks.test.mjs`, and
    HEAD or OPTIONS. If it needs a POST, stop and ask: only the reference
    calculation is allowed (rules 1 to 3 of `scripts/sre/README.md`).
 2. Put it in the module of its component in `scripts/sre/checks/`. Use
-   `request()` from `lib/http.mjs` (time limit, retries, the monitor's
+   `request()` from `lib/http.mjs` (time limit, the module's deadline,
+   retries only when nothing answered, the monitor's
    User-Agent, no redirects followed, nothing logged) and `toCheck()`.
 3. Give it a new kebab-case id, a name a visitor would understand, a
    component from `COMPONENTS` in `lib/schema.mjs`, a severity and its SLIs

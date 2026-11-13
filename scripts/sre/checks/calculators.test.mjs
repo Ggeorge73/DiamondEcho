@@ -74,13 +74,17 @@ test("an answer without a formula version, or not JSON, fails", () => {
   assert.equal(analysisProblem(JSON.parse(analysis())), "");
 });
 
-test("a refused or failing calculation fails; a server error is tried once more, not twice", async () => {
+test("a refused or failing calculation fails at once; only no answer at all is tried once more", async () => {
   const { fetch } = site({ [`POST ${ANALYZE}`]: { status: 422, headers: json, body: '{"detail":"invalid"}' } });
   assert.equal(byId(await run(ctx(fetch)))["calculators-api-analyze"].detail, "Answered 422, expected 200.");
   const { fetch: broken, calls } = site({ [`POST ${ANALYZE}`]: { status: 500, headers: json, body: "{}" } });
   const check = byId(await run(ctx(broken)))["calculators-api-analyze"];
   assert.equal(check.ok, false);
-  assert.equal(calls.filter((call) => call.method === "POST").length, 2);
+  assert.equal(calls.filter((call) => call.method === "POST").length, 1, "a server error is not hidden by a retry");
+  const { fetch: silent, calls: tries } = site({ [`POST ${ANALYZE}`]: undefined });
+  const unanswered = byId(await run(ctx(silent)))["calculators-api-analyze"];
+  assert.equal(unanswered.attempts, 2);
+  assert.equal(tries.filter((call) => call.method === "POST").length, 2);
 });
 
 test("a calculator page that fails is reported under the calculators, not the website", async () => {

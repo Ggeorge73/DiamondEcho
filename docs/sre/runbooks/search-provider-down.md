@@ -9,6 +9,9 @@
 
 ## Symptoms
 
+- If the detail starts with **"Cloudflare refused the request"**, this is
+  not a Georgia MLS problem: Cloudflare turned the monitor away from our own
+  page. Use [cloudflare-outage.md](cloudflare-outage.md) instead.
 - A visitor opens https://diamondecho.com/search (or the search on the home
   page) and the search box area stays blank, shows a browser error such as
   "refused to connect", or shows a Georgia MLS error page.

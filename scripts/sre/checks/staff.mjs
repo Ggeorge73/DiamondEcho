@@ -30,7 +30,9 @@ export async function run(ctx) {
   // Asked the way the staff page asks (with its own Origin) but with no
   // sign-in. 401 is the healthy answer. 200 would be a leak; 403 means the
   // API no longer knows the staff site's address; 503 means the queue is off.
-  const api = await request(ctx, `${apiOrigin}/api/v1/inquiries/staff`, { headers: { Origin: staffOrigin } });
+  // The body is never read: if the route ever answered without a sign-in,
+  // what it sent would be the queue itself, and the monitor must not hold it.
+  const api = await request(ctx, `${apiOrigin}/api/v1/inquiries/staff`, { headers: { Origin: staffOrigin }, read: "none" });
   checks.push(toCheck(
     { id: "staff-api-auth", name: "Staff API asks for sign-in", component: "staff-site", severity: "sev2", slis: SLIS },
     api, firstProblem(api, [

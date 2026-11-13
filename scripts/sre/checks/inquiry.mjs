@@ -82,7 +82,9 @@ export async function run(ctx) {
     ])));
 
   // 4. The queue is switched on. No Origin and no sign-in are sent.
-  const queue = await request(ctx, `${apiOrigin}${INQUIRY_PATH}/staff`);
+  // Its body is read only for a 503, the one answer whose words matter: a
+  // 200 here would be the queue itself, which the monitor must never hold.
+  const queue = await request(ctx, `${apiOrigin}${INQUIRY_PATH}/staff`, { readWhen: (status) => status === 503 });
   checks.push(toCheck(
     { id: "inquiry-queue", name: "Inquiry queue is switched on", component: "inquiry", severity: "sev2", slis: SLIS },
     queue, firstProblem(queue, [

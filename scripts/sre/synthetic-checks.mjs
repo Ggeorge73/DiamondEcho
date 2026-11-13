@@ -41,11 +41,23 @@ const MODULE_INFO = Object.freeze({
 
 // No module may hold a run longer than this, and no run longer than the
 // second figure: the workflow job stops at 10 minutes, and a run that is cut
-// off there files nothing at all. The slowest honest case is the pages module
-// against a site that swallows every connection: three 10 s attempts on the
-// home page, then one 5 s attempt for each of the other nine requests, about
-// 85 s (see lib/http.mjs, "quiet origins").
+// off there files nothing at all.
+//
+// Each module gets a deadline (ctx.deadline, ctx.signal) that lib/http.mjs
+// keeps: an attempt is shortened to the time left, and once it is gone no
+// request is sent and each remaining check is filed failed, "not tried",
+// under its own id and severity. So the first checks of a module (the home
+// page comes first) are always measured and keep their severity.
+//
+// The slowest case is the pages module against a site that swallows every
+// connection: the home page takes three 10 s attempts plus 2 s of waiting
+// (32 s); the public host is then "quiet", so five pages and the not-found
+// check get one 5 s attempt each (30 s); www is another host and takes 32 s
+// again. About 94 s, so the www check is the one cut short at 90 s. The
+// grace is how long a module may take after its deadline to hand in those
+// checks before the runner gives up on it.
 export const MODULE_TIME_LIMIT_MS = 90_000;
+export const MODULE_GRACE_MS = 5_000;
 export const RUN_TIME_LIMIT_MS = 420_000;
 
 // GitHub's hosted runners are Azure machines. Azure's instance metadata
@@ -58,13 +70,19 @@ const COMMIT = /^[0-9a-f]{7,40}$/;
 const realSleep = (ms) => new Promise((done) => setTimeout(done, ms));
 
 // The clock. With SRE_NOW set (an ISO time, used by tests and the fire drill)
-// time starts there and moves at the real pace, so latencies stay real.
+// time starts there and moves at the real pace, so latencies stay real. It
+// starts on its first reading, not when it is made, so the run's started_at
+// is exactly SRE_NOW however long the setup in between took.
 export function makeClock(env = process.env, realNow = Date.now) {
   if (!env.SRE_NOW) return realNow;
   const base = Date.parse(env.SRE_NOW);
   if (Number.isNaN(base)) throw new UsageError(`SRE_NOW is not an ISO time: ${String(env.SRE_NOW).slice(0, 40)}`);
-  const start = realNow();
-  return () => base + (realNow() - start);
+  let start = null;
+  return () => {
+    const real = realNow();
+    if (start === null) start = real;
+    return base + (real - start);
+  };
 }
 
 export async function detectVantage(env = process.env, fetcher = fetch) {
@@ -92,7 +110,7 @@ function moduleFailure(name, reason) {
   return makeCheck({
     id: `monitor-${name}`, name: `Monitor could run the ${info.label} checks`, component: info.component,
     severity: "sev3", ok: false, status: null, latency_ms: null, attempts: 1, slis: [],
-    detail: `The ${info.label} checks did not run: ${reason}. The monitor cannot see this part of the site until it is fixed.`,
+    detail: `Monitor fault, not the site: the ${info.label} checks did not run (${reason}). This part of the site is not being watched until it is fixed.`,
   });
 }
 
@@ -109,12 +127,15 @@ const defaultLoad = (name) => import(new URL(`./checks/${name}.mjs`, import.meta
 // Run every module that belongs to the suite and return the run document.
 export async function runSuite({
   suite, env = process.env, fetch: fetcher = globalThis.fetch, now = makeClock(env), sleep = realSleep,
-  loadModule = defaultLoad, modules = MODULES, timeLimitMs = MODULE_TIME_LIMIT_MS, runLimitMs = RUN_TIME_LIMIT_MS, targets = TARGETS.production,
+  loadModule = defaultLoad, modules = MODULES, timeLimitMs = MODULE_TIME_LIMIT_MS, graceMs = MODULE_GRACE_MS,
+  runLimitMs = RUN_TIME_LIMIT_MS, targets = TARGETS.production,
   log = () => {}, vantage,
 }) {
   if (!SUITES.includes(suite)) throw new UsageError(`--suite must be one of ${SUITES.join(", ")}`);
   const started_at = new Date(now()).toISOString();
-  const ctx = { fetch: fetcher, now, targets, env, suite, sleep };
+  // `memory` is shared by every module, so lib/http.mjs keeps its pace and
+  // its list of quiet hosts across the whole run.
+  const ctx = { fetch: fetcher, now, targets, env, suite, sleep, memory: {} };
   const checks = [];
   const seen = new Set();
 
@@ -140,14 +161,24 @@ export async function runSuite({
       continue;
     }
 
+    // The module's deadline. The abort cancels anything still in flight when
+    // it passes, and anything the module tries to send afterwards (even after
+    // the runner has moved on) is answered "not tried" without being sent.
+    const budget = Math.min(timeLimitMs, left);
+    const controller = new AbortController();
+    const abortTimer = setTimeout(() => controller.abort(new DOMException("The module's time ran out", "TimeoutError")), budget);
+    const moduleCtx = { ...ctx, deadline: now() + budget, signal: controller.signal };
     let results;
     try {
-      results = await withTimeLimit(Promise.resolve().then(() => module.run(ctx)), Math.min(timeLimitMs, left));
+      results = await withTimeLimit(Promise.resolve().then(() => module.run(moduleCtx)), budget + graceMs);
     } catch (error) {
       log(`checks/${name}.mjs broke: ${safeMessage(error)}`);
       if (error?.stack) log(error.stack.split("\n").filter((line) => line.trim().startsWith("at ")).slice(0, 5).join("\n"));
       checks.push(moduleFailure(name, error?.name === "TimeLimit" ? error.message : `it stopped with an error (${safeMessage(error)})`));
       continue;
+    } finally {
+      clearTimeout(abortTimer);
+      controller.abort(new DOMException("The module has finished", "AbortError"));
     }
 
     // A module's results are checked against the contract here, so one

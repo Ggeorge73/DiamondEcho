@@ -56,6 +56,18 @@ test("a staff API that answers without sign-in is reported as a security inciden
   assert.match(check.detail, /security incident/);
 });
 
+test("the staff API's answer is never read: a leak is reported without holding what leaked", async () => {
+  let cancelled = false;
+  const healthy = site();
+  const fetch = async (url, init = {}) => {
+    if (url !== STAFF_API) return healthy.fetch(url, init);
+    return new Response(new ReadableStream({ start(c) { c.enqueue(new TextEncoder().encode('{"items":[{"reference":"DE-1"}]}')); }, cancel() { cancelled = true; } }), { status: 200, headers: refused });
+  };
+  const check = byId(await run(ctx(fetch)))["staff-api-auth"];
+  assert.match(check.detail, /security incident/);
+  assert.equal(cancelled, true);
+});
+
 test("a staff API that no longer knows the staff site (403) or is off (503) fails", async () => {
   for (const status of [403, 503]) {
     const { fetch } = site({ api: { status, body: '{"detail":"Staff origin denied."}' } });

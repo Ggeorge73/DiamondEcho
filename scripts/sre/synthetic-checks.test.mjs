@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MODULES, AZURE_REGION_URL, runSuite, main, makeClock, detectVantage, safeMessage, summary } from "./synthetic-checks.mjs";
+import { MODULES, AZURE_REGION_URL, MODULE_TIME_LIMIT_MS, RUN_TIME_LIMIT_MS, runSuite, main, makeClock, detectVantage, safeMessage, summary } from "./synthetic-checks.mjs";
+import { request } from "./lib/http.mjs";
 import { runProblems } from "./lib/schema.mjs";
 
 const NOW = "2026-11-13T00:00:00.000Z";
@@ -86,12 +87,73 @@ test("a module that returns results outside the contract, or reuses an id, is re
 });
 
 test("a module that never finishes is cut off at its time limit and reported", async () => {
-  const run = await runSuite({ ...quiet, suite: "fast", modules: ["dns", "staff"], timeLimitMs: 20, loadModule: loader({
+  const run = await runSuite({ ...quiet, suite: "fast", modules: ["dns", "staff"], timeLimitMs: 20, graceMs: 20, loadModule: loader({
     dns: { suites: ["fast"], run: () => new Promise(() => {}) },
     staff: fakeModule(["fast"], [check("staff-home")]),
   }) });
   assert.deepEqual(run.checks.map((c) => [c.id, c.ok]), [["monitor-dns", false], ["staff-home", true]]);
-  assert.match(run.checks[0].detail, /did not finish within 0 s/);
+  assert.match(run.checks[0].detail, /^Monitor fault, not the site: .*did not finish within 0 s/);
+});
+
+test("a public site that swallows every connection: public-home still comes back sev1 and failed, inside the time limit", async () => {
+  // The edge review's case. Every diamondecho.com host accepts the connection
+  // and never answers; a request ends only when its signal fires.
+  // Counts what is sent after the first request was cut off: the deadline
+  // has passed by then, so it must stay 0.
+  let cutOff = false;
+  let sentAfterCutOff = 0;
+  const hanging = (url, init) => {
+    if (cutOff) sentAfterCutOff += 1;
+    return new Promise((_, reject) => init.signal.addEventListener("abort", () => { cutOff = true; reject(init.signal.reason); }));
+  };
+  const limit = 400;
+  const started = Date.now();
+  const run = await runSuite({ env: {}, fetch: hanging, sleep: async () => {}, suite: "fast", modules: ["pages"], timeLimitMs: limit, graceMs: 2000, vantage: { provider: "local", region: null } });
+  const elapsed = Date.now() - started;
+  // Without the deadline this run takes about 94 s; the margin only absorbs
+  // a slow machine.
+  assert.ok(elapsed < limit + 3000, `took ${elapsed} ms`);
+  const byId = Object.fromEntries(run.checks.map((c) => [c.id, c]));
+  assert.equal(byId["monitor-pages"], undefined, "the module handed in its own checks");
+  const home = byId["public-home"];
+  assert.deepEqual([home.severity, home.ok, home.component], ["sev1", false, "public-site"]);
+  assert.match(home.detail, /^No answer: the module's time ran out while waiting\./);
+  assert.deepEqual(home.slis, ["public-availability", "public-latency"], "the home page was measured: it did not answer");
+  for (const id of ["public-page-about", "public-not-found", "public-www-redirect"]) {
+    assert.equal(byId[id].ok, false, id);
+    assert.equal(byId[id].detail, "Not tried: the module's time ran out.", id);
+    assert.deepEqual(byId[id].slis, [], id);
+  }
+  assert.equal(byId["public-www-redirect"].severity, "sev2", "each check keeps its own severity");
+  assert.equal(cutOff, true);
+  assert.equal(sentAfterCutOff, 0, "nothing was sent after the deadline");
+});
+
+test("a module that overruns its time sends nothing more once the runner has moved on", async () => {
+  const calls = [];
+  const fetch = async (url) => { calls.push(url); return new Response("ok"); };
+  let late;
+  const finished = new Promise((done) => {
+    const overrun = { suites: ["fast"], run: async (ctx) => {
+      await new Promise((wait) => setTimeout(wait, 80));
+      late = await request(ctx, "https://diamondecho.com/late");
+      done();
+      return [check("public-home")];
+    } };
+    runSuite({ ...quiet, fetch, now: Date.now, env: {}, suite: "fast", modules: ["pages"], timeLimitMs: 20, graceMs: 20, loadModule: loader({ pages: overrun }) })
+      .then((run) => assert.match(run.checks[0].detail, /did not finish/));
+  });
+  await finished;
+  assert.deepEqual(calls, []);
+  assert.equal(late.notTried, true);
+});
+
+test("the worst case in the runner's comment fits: per-module and whole-run limits inside the workflow's 10 minutes", () => {
+  // pages module, every host silent: 32 s (home) + 6 x 5 s (quiet host) + 32 s (www) = 94 s,
+  // so the last check is cut short at the 90 s module limit and filed "not tried".
+  assert.equal(32 + 6 * 5 + 32, 94);
+  assert.ok(MODULE_TIME_LIMIT_MS < 94_000);
+  assert.ok(RUN_TIME_LIMIT_MS + MODULE_TIME_LIMIT_MS + 5_000 < 600_000);
 });
 
 test("once the run has used its time, the remaining modules are reported as not run", async () => {
@@ -121,6 +183,11 @@ test("SRE_NOW sets the clock but time still moves at the real pace", () => {
   assert.equal(new Date(now()).toISOString(), NOW);
   real += 250;
   assert.equal(now() - Date.parse(NOW), 250);
+  // Time that passes between making the clock and first reading it (on a
+  // busy CI runner, a millisecond or more) does not move the start.
+  const late = makeClock({ SRE_NOW: NOW }, () => real);
+  real += 7;
+  assert.equal(new Date(late()).toISOString(), NOW);
   assert.throws(() => makeClock({ SRE_NOW: "yesterday" }), /SRE_NOW is not an ISO time/);
   const plain = () => 42;
   assert.equal(makeClock({}, plain), plain);

@@ -41,8 +41,10 @@ async function ourPage(ctx) {
 }
 
 async function provider(ctx) {
-  // One attempt and one retry, no more: it is somebody else's server.
-  const result = await request(ctx, ctx.targets.idxOrigin + IDX_SEARCH_PATH, { read: "none", retries: 1 });
+  // One attempt and one retry, no more: it is somebody else's server. This
+  // check feeds no SLO, so a server error is tried once more too, to spare
+  // Georgia MLS's support desk a report about a single hiccup.
+  const result = await request(ctx, ctx.targets.idxOrigin + IDX_SEARCH_PATH, { read: "none", retries: 1, retryStatus: (status) => status >= 500 });
   return [toCheck(
     { id: "search-idx-provider", name: "Georgia MLS search (outside provider)", component: "search", severity: "sev3", slis: [] },
     result, firstProblem(result, [

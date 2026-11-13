@@ -1,7 +1,7 @@
 // The public website: every page a visitor can land on, the "Page not found"
 // answer, the www redirect, and the script and stylesheet the home page needs.
 // All of it is GET, one request each, in order.
-import { request, toCheck, notRun, firstProblem, expectStatus, expectType, expectBody, jsonOrNull } from "../lib/http.mjs";
+import { request, toCheck, notRun, firstProblem, expectStatus, expectType, expectBody, jsonOrNull, cloudflareRefused } from "../lib/http.mjs";
 
 export const suites = ["fast", "post-deploy"];
 
@@ -112,7 +112,12 @@ export async function run(ctx) {
       (result) => result.headers.get("location") === `${publicOrigin}/about` ? "" : "The redirect does not point at the same page on the bare domain.",
     ])));
 
-  const homeFailed = "The home page did not load, so the file it asks for is not known.";
+  // Why the script and stylesheet could not be checked, when the home page
+  // gave nothing to read them from.
+  const homeFailed = cloudflareRefused(home.result)
+    ? "The home page was refused by Cloudflare, so the file it asks for is not known. See docs/sre/runbooks/cloudflare-outage.md."
+    : home.result.notTried ? "Not tried: the module's time ran out."
+      : "The home page did not load, so the file it asks for is not known.";
   checks.push(await checkAsset(ctx,
     { id: "public-asset-js", name: "Site script loads", component: "public-site", severity: "sev1", slis: ["public-availability"] },
     assets.script, ["application/javascript", "text/javascript"],

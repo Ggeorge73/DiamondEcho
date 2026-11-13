@@ -99,6 +99,21 @@ test("a missing inquiry route fails", async () => {
   assert.match(check.detail, /^Answered 404 to a GET/);
 });
 
+test("the queue route's body is never read unless it is a 503: a 200 would be the queue itself", async () => {
+  let cancelled = false;
+  const routes = site();
+  const fetch = async (url, init = {}) => {
+    if (url === `${ROUTE}/staff`) {
+      return new Response(new ReadableStream({ start(c) { c.enqueue(new TextEncoder().encode('{"items":[{"reference":"DE-1"}]}')); }, cancel() { cancelled = true; } }), { status: 200, headers: json });
+    }
+    return routes.fetch(url, init);
+  };
+  const check = byId(await run(ctx(fetch)))["inquiry-queue"];
+  assert.equal(check.ok, false);
+  assert.equal(check.detail, "Answered 200, expected 401.");
+  assert.equal(cancelled, true);
+});
+
 test("a queue that is switched off is named as such; another 503 is reported as a plain status", async () => {
   const { fetch } = site({ [`GET ${ROUTE}/staff`]: { status: 503, headers: json, body: '{"detail":"Inquiry queue is not configured."}' } });
   const off = byId(await run(ctx(fetch)))["inquiry-queue"];
