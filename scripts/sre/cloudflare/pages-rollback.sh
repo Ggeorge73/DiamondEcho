@@ -41,7 +41,7 @@ while [ $# -gt 0 ]; do
     --apply) APPLY=1; shift ;;
     --to) [ $# -ge 2 ] || die "--to needs a deployment ID."; WANTED="$2"; shift 2 ;;
     --expect-live-commit) [ $# -ge 2 ] || die "--expect-live-commit needs a commit."; EXPECT="$2"; shift 2 ;;
-    -h|--help) sed -n '2,28p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,26p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) die "Unknown argument: $1" ;;
   esac
 done

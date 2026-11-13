@@ -7,7 +7,9 @@ name: SRE post-merge check
 # issue names the merge, what failed and how to roll back. The site is rolled
 # back automatically only when the Cloudflare secrets exist AND the repository
 # variable SRE_PAGES_AUTOROLLBACK is `enabled`; otherwise the issue carries
-# the steps. See docs/sre/release-safety.md.
+# the steps. The Cloudflare secrets live in the GitHub environment
+# `pages-rollback`, which only main may use, never in repository secrets.
+# See docs/sre/release-safety.md.
 #
 # On pull requests that touch the release scripts, only their tests run.
 on:
@@ -63,6 +65,10 @@ jobs:
     needs: release-script-tests
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # The Cloudflare secrets are environment secrets: set the environment's
+    # deployment branches to main only, with no reviewer (the check must not
+    # wait for a person). Without the environment's secrets, rollback is off.
+    environment: pages-rollback
     permissions:
       contents: read
       issues: write
@@ -78,6 +84,7 @@ jobs:
       - name: Wait for the build, check it, report
         env:
           COMMIT: ${{ inputs.commit || github.sha }}
+          # Only this step talks to GitHub's API (the incident issue).
           GITHUB_TOKEN: ${{ github.token }}
           # Dormant until Gbenga sets them (docs/sre/needs-from-gbenga.md).
           SRE_PAGES_AUTOROLLBACK: ${{ vars.SRE_PAGES_AUTOROLLBACK }}
@@ -96,5 +103,6 @@ jobs:
           path: |
             post-deploy.json
             run.json
+            run-recheck.json
           if-no-files-found: ignore
           retention-days: 30

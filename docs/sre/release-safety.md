@@ -50,10 +50,13 @@ curl -s https://diamondecho-api-180189726732.us-east1.run.app/api/
   Cloudflare's `CF_PAGES_COMMIT_SHA`, else GitHub's `GITHUB_SHA`, else
   `unknown`.
 - The API's `revision` comes from Cloud Run; its `commit` is the setting
-  `APP_COMMIT`, which only `deploy.sh` sets. Both are `null` until the first
-  API deploy that includes this change. A plain `gcloud run deploy` without
-  `deploy.sh` keeps the old `APP_COMMIT`, which would then be wrong: always
-  deploy with the script.
+  `APP_COMMIT`, which `deploy.sh` sets. Both are `null` until the first
+  API deploy that includes this change.
+- **`APP_COMMIT` goes stale after a hand deploy.** A plain
+  `gcloud run deploy --source backend` keeps the `APP_COMMIT` of the last
+  scripted deploy, so `/api/` would name the wrong commit, and the monitor and
+  the automatic rollback would reason from it. Deploy with the script, or add
+  `--update-env-vars APP_COMMIT=$(git rev-parse HEAD)` to the hand command.
 - Nothing else is published on either address.
 
 ## The post-merge check (public site)
@@ -72,14 +75,29 @@ curl -s https://diamondecho-api-180189726732.us-east1.run.app/api/
    issue titled "Post-merge check failed for …" (or adds to the open one),
    naming the merge, what failed and the rollback steps. When a later merge
    passes, it closes that issue.
-5. **Automatic site rollback** happens only when all of these hold: the merged
-   build is the live one, a website check of severity 1 or 2 failed, the
-   secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` exist, and the
-   repository variable `SRE_PAGES_AUTOROLLBACK` is `enabled`. Otherwise the
-   issue says what it would have put back.
+5. **Automatic site rollback** happens only when all of these hold:
+   - the merged build itself is the live one (not a later merge that
+     includes it: that merge's own check decides);
+   - a website check of severity 1 or 2 failed that a rollback could fix: not
+     a refusal by Cloudflare itself (a security setting, the same for every
+     build) and not the www redirect (a Cloudflare zone rule);
+   - the same check failed again on a second look about a minute later;
+   - the secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` exist in
+     the GitHub environment `pages-rollback`, and the repository variable
+     `SRE_PAGES_AUTOROLLBACK` is `enabled`.
+
+   Otherwise the issue says why nothing was rolled back, or what it would
+   have put back.
 
 If the build never appears it never rolls back: the old build is still
 serving, and rolling back would go one build further back than wanted.
+
+The Cloudflare secrets are **environment** secrets, not repository secrets:
+GitHub, the repository, Settings, Environments, New environment
+`pages-rollback`; under "Deployment branches and tags" choose "Selected
+branches" and add `main` only; no required reviewer (the check must not wait
+for a person); then add the two secrets there. A workflow run from any other
+branch cannot read them.
 
 Known problem, 2026-11-13: from the agents' sandbox, Cloudflare answered
 `403` ("error code: 1010", a refusal based on the client's signature) to the
@@ -125,7 +143,13 @@ steps the whole run takes about ten minutes.
 Exit codes: `0` deployed (or dry run); `1` refused or rolled back, the old
 revision serves; `2` could not start, nothing moved; `3` a rollback was needed
 and did not complete: follow [runbooks/bad-deploy.md](runbooks/bad-deploy.md)
-at once. Stopping the script part-way (Ctrl-C) also rolls back.
+at once. Stopping the script part-way (Ctrl-C) also rolls back, and a second
+Ctrl-C does not interrupt that rollback (it runs in a session of its own).
+
+A refused or rolled-back run leaves the service **pinned** to the old
+revision, with the refused image still in the service's template: read
+"After a rollback" before changing any setting. The script prints the exact
+safe command.
 
 Settings, all optional: `GCP_PROJECT_ID` (default `diamondecho-prod`),
 `GCP_REGION` (`us-east1`), `CLOUD_RUN_SERVICE` (`diamondecho-api`),
@@ -135,13 +159,58 @@ reads if the signed-in account cannot read logs), and
 `DEPLOY_IGNORE_SETTINGS` (setting names the comparison may ignore, for a
 settings change Gbenga has agreed to make in the same deploy).
 
-**From GitHub instead of Cloud Shell.** `.github/workflows/sre-deploy-api.yml`
-runs the same script. Start it by hand from `main`, give the commit, and type
+### Deploying from GitHub
+
+`.github/workflows/sre-deploy-api.yml` runs the same script. Start it by hand
+from `main`, give the full 40-character commit, and type
 `deploy diamondecho-api`. GitHub then asks Gbenga to approve the run (the
 `production` environment), and the record appears on the run's summary page.
-It stops with a message until Workload Identity Federation and its five
-repository variables exist. Only commits that contain `deploy.sh` can be
-deployed this way.
+Only commits that contain `deploy.sh` can be deployed this way.
+
+**Do not cancel a running deploy.** If a run is cancelled or times out, its
+last step (`scripts/sre/cloudrun/cleanup.sh`) gives the traffic back to the
+revision that served before and removes the candidate tag, but a rollout left
+to finish, or to roll itself back, is cleaner.
+
+It stops with a message until all of this exists. **Do not switch it on
+before Cloud Build runs as a service account of its own:** today builds may
+run as the default compute account, which holds Editor on the project
+(`docs/security-operations.md`, finding on the default compute account), and
+a deploy identity that can start builds could then act as Editor.
+
+1. A **deploy identity of its own**, never the monitor's
+   (`auto-remediation.md`): a Workload Identity pool provider for GitHub and a
+   service account, for example `sre-deploy@diamondecho-prod.iam.gserviceaccount.com`.
+   The provider maps `attribute.repository_id`, and its condition admits only
+   this workflow, from main, in the protected environment:
+   ```
+   assertion.repository_id == '<the repository's numeric ID>' &&
+   assertion.sub == 'repo:Ggeorge73/DiamondEcho:environment:production' &&
+   assertion.workflow_ref == 'Ggeorge73/DiamondEcho/.github/workflows/sre-deploy-api.yml@refs/heads/main'
+   ```
+2. **Roles for the deploy account, and nothing else** (a first list from
+   what `gcloud run deploy --source` and `deploy.sh` call; confirm it on
+   staging before production):
+   - `roles/run.developer` on the service `diamondecho-api` (deploy, move
+     traffic, read revisions);
+   - `roles/iam.serviceAccountUser` on the runtime account
+     `diamondecho-api-runtime@` only (a revision runs as it);
+   - `roles/cloudbuild.builds.editor` on the project (`--source` starts a build);
+   - `roles/storage.objectAdmin` on the bucket the source uploads already go
+     to (read its name from the last build:
+     `gcloud builds list --limit 1 --format 'value(source.storageSource.bucket)' --project diamondecho-prod`);
+   - `roles/artifactregistry.reader` on the repository `cloud-run-source-deploy`;
+   - `roles/logging.viewer` on the project (the log gate);
+   - `roles/serviceusage.serviceUsageConsumer` on the project.
+3. A GitHub environment `production`: required reviewer Gbenga; "Deployment
+   branches and tags" set to `main` only. This limit, and Google's condition
+   above, are the real guards: the workflow's own preflight checks run from
+   whatever branch is being run, so they are a convenience, not a control.
+4. Repository variables `GCP_DEPLOY_WORKLOAD_IDENTITY_PROVIDER` (the
+   provider's full name), `GCP_DEPLOY_SERVICE_ACCOUNT`, `GCP_PROJECT_ID`,
+   `GCP_REGION`, `CLOUD_RUN_SERVICE`.
+
+The two Google actions are pinned by commit, and gcloud by version.
 
 **When the page and the API both change**, deploy the API first and make the
 API accept both the old and the new page; then merge the page. The page
@@ -230,14 +299,39 @@ gcloud run services update-traffic diamondecho-api --to-revisions=<revision>=100
 ## After a rollback
 
 An API rollback names a revision (`--to-revisions=<revision>=100`), so the
-service is **pinned** to it: a later settings change, including the inquiry
-switch in the "Undo" section of `docs/de13-production-setup.md`, makes a new
-revision that gets **no** traffic. While pinned:
+service is **pinned** to it. A refused `deploy.sh` run leaves the same pin
+even when no traffic moved, because `--no-traffic` pins the serving revision.
+Two things are then true at once:
 
-- To change a setting, also move the traffic:
-  `gcloud run services update-traffic diamondecho-api --to-latest --project diamondecho-prod --region us-east1`
-  after checking that the newest revision is the one you want serving.
-- The next `deploy.sh` run ends the pin: its last step is `--to-latest`.
+- A later settings change, including the inquiry switch in the "Undo"
+  section of `docs/de13-production-setup.md`, makes a new revision that gets
+  **no** traffic.
+- The service's template, which every new revision is built from, still holds
+  the **refused** image and its `APP_COMMIT`. So
+  `update-traffic --to-latest` puts the refused code back on 100 percent, and
+  a plain `gcloud run services update --update-env-vars …` builds a new
+  revision from the refused image.
+
+While pinned, change a setting only like this:
+
+1. `bash scripts/sre/cloudrun/status.sh`: note the serving revision's
+   `image`. Its commit is what `/api/` names.
+2. Name that image, and its `APP_COMMIT`, in the same command as the setting:
+   ```bash
+   gcloud run services update diamondecho-api --image <the serving revision's image> \
+     --update-env-vars NAME=VALUE,APP_COMMIT=<its commit> --project diamondecho-prod --region us-east1
+   ```
+   (If the serving revision has no `APP_COMMIT`, use
+   `--update-env-vars NAME=VALUE --remove-env-vars APP_COMMIT`.) `deploy.sh`
+   prints this command with the real image filled in.
+3. `status.sh` again: the newest revision must show that same image, and a
+   `settings` fingerprint that differs only by the setting you meant.
+4. Only then: `gcloud run services update-traffic diamondecho-api --to-latest --project diamondecho-prod --region us-east1`.
+
+Also:
+
+- The next successful `deploy.sh` run ends the pin: its last step is
+  `--to-latest`, after its own checks.
 - The bad revision stays, with no traffic, for diagnosis. Its tagged address
   is removed.
 
@@ -248,9 +342,9 @@ published as usual.
 
 | Part | Needs | Without it |
 | --- | --- | --- |
-| Automatic website rollback | Secrets `CLOUDFLARE_API_TOKEN` (Cloudflare Pages: Edit, this account only) and `CLOUDFLARE_ACCOUNT_ID`; variable `SRE_PAGES_AUTOROLLBACK` = `enabled` | The post-merge check still runs and opens issues; rollback is by hand |
+| Automatic website rollback | Secrets `CLOUDFLARE_API_TOKEN` (Cloudflare Pages: Edit, this account only) and `CLOUDFLARE_ACCOUNT_ID` in the environment `pages-rollback` (main only); variable `SRE_PAGES_AUTOROLLBACK` = `enabled` | The post-merge check still runs and opens issues; rollback is by hand |
 | `pages-rollback.sh` | The same two secrets (or the same values in a shell) | Dashboard rollback |
-| API deploy from GitHub | Workload Identity Federation; variables `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_SRE_SERVICE_ACCOUNT`, `GCP_PROJECT_ID`, `GCP_REGION`, `CLOUD_RUN_SERVICE`; a `production` environment with Gbenga as required reviewer | `deploy.sh` from Cloud Shell, as today |
+| API deploy from GitHub | Cloud Build on its own service account first; then a deploy identity of its own (Workload Identity Federation, condition and roles in "Deploying from GitHub"); variables `GCP_DEPLOY_WORKLOAD_IDENTITY_PROVIDER`, `GCP_DEPLOY_SERVICE_ACCOUNT`, `GCP_PROJECT_ID`, `GCP_REGION`, `CLOUD_RUN_SERVICE`; a `production` environment, main only, with Gbenga as required reviewer | `deploy.sh` from Cloud Shell, as today |
 | The log gate in `deploy.sh` | The signed-in account can read logs (Gbenga's owner account can) | `DEPLOY_LOG_GATE=off`; the probes still gate |
 
 ## How this was tested
@@ -259,8 +353,9 @@ Every script was run by `node --test` against a fake `gcloud` and a fake
 `curl` that model Cloud Run and the Cloudflare Pages API
 (`scripts/sre/cloudrun/fakes/`, `scripts/sre/cloudflare/fakes/`): a full
 deploy, a failed candidate check, a gate failing at 50 percent and the
-rollback, a 500 logged at 10 percent, a settings change, an interrupted run,
-dirty checkouts, and the dry runs changing nothing. None of it has run
+rollback, a 500 logged at 10 percent, a settings change, interrupted runs
+(including a second Ctrl-C during the rollback), the clean-up after a killed
+run, dirty checkouts, and the dry runs changing nothing. None of it has run
 against real Cloud Run or Cloudflare. Before the first real use: a dry run in
 Cloud Shell, then, if staging (DE-33) exists, an `--apply` there with
 `GCP_PROJECT_ID` set to the staging project.

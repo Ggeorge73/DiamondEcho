@@ -8,16 +8,22 @@ name: SRE deploy API
 #
 # Dormant. It runs only when started by hand, from main, with the confirmation
 # typed exactly, AFTER Gbenga has set up Workload Identity Federation (a
-# short-lived Google sign-in for this workflow, no stored key) and these
-# repository variables: GCP_WORKLOAD_IDENTITY_PROVIDER, GCP_SRE_SERVICE_ACCOUNT,
+# short-lived Google sign-in, no stored key) for a DEPLOY identity of its own,
+# never the monitor's, and these repository variables:
+# GCP_DEPLOY_WORKLOAD_IDENTITY_PROVIDER, GCP_DEPLOY_SERVICE_ACCOUNT,
 # GCP_PROJECT_ID, GCP_REGION, CLOUD_RUN_SERVICE. Without them it stops with a
 # message. Each run also waits for Gbenga's approval in the protected
-# `production` environment. See docs/sre/needs-from-gbenga.md.
+# `production` environment, which must allow the main branch only: that limit,
+# and Google's condition on the workflow and environment, are the real guards.
+# The preflight checks below run from whatever branch is being run, so they
+# are a convenience, not a control. Setup: docs/sre/release-safety.md,
+# "Deploying from GitHub". Do not cancel a running deploy: it is rolled back
+# by the last step, but a rollout that finishes is cleaner.
 on:
   workflow_dispatch:
     inputs:
       commit:
-        description: 'Commit on main to deploy (7 to 40 characters)'
+        description: 'Commit on main to deploy (the full 40-character SHA)'
         required: true
         type: string
       confirm:
@@ -46,8 +52,8 @@ jobs:
     steps:
       - name: Stop unless set up, confirmed and started from main
         env:
-          GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          GCP_SRE_SERVICE_ACCOUNT: ${{ vars.GCP_SRE_SERVICE_ACCOUNT }}
+          GCP_DEPLOY_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_DEPLOY_WORKLOAD_IDENTITY_PROVIDER }}
+          GCP_DEPLOY_SERVICE_ACCOUNT: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           GCP_REGION: ${{ vars.GCP_REGION }}
           CLOUD_RUN_SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
@@ -57,7 +63,7 @@ jobs:
         shell: bash
         run: |
           missing=""
-          for name in GCP_WORKLOAD_IDENTITY_PROVIDER GCP_SRE_SERVICE_ACCOUNT GCP_PROJECT_ID GCP_REGION CLOUD_RUN_SERVICE; do
+          for name in GCP_DEPLOY_WORKLOAD_IDENTITY_PROVIDER GCP_DEPLOY_SERVICE_ACCOUNT GCP_PROJECT_ID GCP_REGION CLOUD_RUN_SERVICE; do
             [ -n "${!name}" ] || missing="$missing $name"
           done
           if [ -n "$missing" ]; then
@@ -68,8 +74,8 @@ jobs:
             echo "::error::The confirmation was not typed exactly as: deploy diamondecho-api. Nothing was changed."
             exit 1
           fi
-          if ! [[ "$COMMIT" =~ ^[0-9a-fA-F]{7,40}$ ]]; then
-            echo "::error::Not a commit: $COMMIT. Nothing was changed."
+          if ! [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Give the full 40-character commit SHA (lower case), not: $COMMIT. Nothing was changed."
             exit 1
           fi
           if [ "$REF" != refs/heads/main ]; then
@@ -102,15 +108,18 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 20
-      - uses: google-github-actions/auth@v2
+      # Pinned by commit: these two handle the Google sign-in.
+      - uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2.1.13
         with:
-          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ vars.GCP_SRE_SERVICE_ACCOUNT }}
-      - uses: google-github-actions/setup-gcloud@v2
+          workload_identity_provider: ${{ vars.GCP_DEPLOY_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f # v2.2.1
         with:
           version: '570.0.0'
       - name: Deploy (record goes to the run summary)
         working-directory: repo
+        # Shorter than the job, so the clean-up below still has time to run.
+        timeout-minutes: 35
         env:
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           GCP_REGION: ${{ vars.GCP_REGION }}
@@ -122,5 +131,23 @@ jobs:
           if [ "$DRY_RUN" = true ]; then
             bash scripts/sre/cloudrun/deploy.sh --commit "$COMMIT" | tee -a "$GITHUB_STEP_SUMMARY"
           else
-            bash scripts/sre/cloudrun/deploy.sh --apply --commit "$COMMIT" | tee -a "$GITHUB_STEP_SUMMARY"
+            DEPLOY_STATE_FILE="$RUNNER_TEMP/deploy-state" \
+              bash scripts/sre/cloudrun/deploy.sh --apply --commit "$COMMIT" | tee -a "$GITHUB_STEP_SUMMARY"
           fi
+      # A cancelled or timed-out run can stop deploy.sh before its own
+      # rollback finishes. This gives the traffic back to the revision that
+      # served before and removes the candidate tag. It never undoes a deploy
+      # that finished (deploy.sh notes done=1), and does nothing when traffic
+      # is already settled.
+      - name: Clean up after a cancelled or failed deploy
+        if: (cancelled() || failure()) && inputs.dry_run != true
+        working-directory: repo
+        timeout-minutes: 8
+        env:
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ vars.GCP_REGION }}
+          CLOUD_RUN_SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
+        shell: bash
+        run: |
+          bash scripts/sre/cloudrun/status.sh || true
+          bash scripts/sre/cloudrun/cleanup.sh --state "$RUNNER_TEMP/deploy-state" --apply 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"

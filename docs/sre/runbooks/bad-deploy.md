@@ -67,9 +67,13 @@ Roll back first, find the cause afterwards.
    bash scripts/sre/cloudrun/rollback.sh --to <revision before the deploy> --apply
    ```
    The revision before is in the deploy's record ("Before: …"). Worked when:
-   `status.sh` shows it at 100 percent and `/api/` names it. Then read
-   [release-safety.md, "After a rollback"](../release-safety.md#after-a-rollback):
-   the service is pinned.
+   `status.sh` shows it at 100 percent and `/api/` names it.
+   **The service is now pinned, and its template still holds the bad image.**
+   Do not run `update-traffic --to-latest` or a plain `services update`: both
+   put the bad code back. Change settings only as
+   [release-safety.md, "After a rollback"](../release-safety.md#after-a-rollback)
+   says. The same holds after `deploy.sh` refused a candidate, even when no
+   traffic moved.
 3. **AI role agent.** Prepare a revert of the merge as a pull request, so the
    next build does not publish the change again. **Needs Gbenga's yes** to
    merge it.
@@ -95,9 +99,9 @@ escalate".
       is closed (the post-merge issue closes itself when a later merge
       passes).
 - [ ] Post the "resolved" update ([incident-response.md](../incident-response.md)).
-- [ ] After an API rollback: the bad revision stays at 0 percent; the service
-      stays pinned until the next `deploy.sh` run or an `update-traffic
-      --to-latest` by Gbenga.
+- [ ] After an API rollback or a refused deploy: the bad revision stays at 0
+      percent; the service stays pinned until the next successful `deploy.sh`
+      run. Never end the pin with a bare `--to-latest`.
 - [ ] Record the API rollback in `docs/de13-production-setup.md` (revision,
       times, why).
 - [ ] Ask why the checks before the merge or the candidate checks missed it,

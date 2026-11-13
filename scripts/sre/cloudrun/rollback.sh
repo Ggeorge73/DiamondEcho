@@ -30,7 +30,7 @@ while [ $# -gt 0 ]; do
     --to) [ $# -ge 2 ] || die "--to needs a revision name."; TARGET="$2"; shift 2 ;;
     --to=*) TARGET="${1#--to=}"; shift ;;
     --apply) APPLY=1; shift ;;
-    -h|--help) sed -n '2,23p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,22p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) die "Unknown argument: $1. Usage: rollback.sh --to REVISION [--apply]" ;;
   esac
 done

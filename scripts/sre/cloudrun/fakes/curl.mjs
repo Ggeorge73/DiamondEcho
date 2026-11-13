@@ -11,6 +11,8 @@
 //   wrong-commit      /api/ names another commit
 //   docs-on           /docs answers 200
 //   old-formula       the analysis answers an older formula
+//   old-fails         the original revision's /health answers 500 (an
+//                     unhealthy rollback target)
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 
 const args = process.argv.slice(2);
@@ -50,6 +52,7 @@ if (!revision) {
   status = 200; body = { status: "ok" };
   if (isNew && scenario.has("candidate-fails")) { status = 500; body = "error"; }
   if (isNew && scenario.has("fail-at-50") && share === 50) { status = 503; body = "error"; }
+  if (revisionName === state.original && scenario.has("old-fails")) { status = 500; body = "error"; }
 } else if (pathname === "/api/" && method === "GET") {
   status = 200;
   body = { service: "DiamondEcho API", revision: revisionName, commit: isNew && scenario.has("wrong-commit") ? "1111111" : commit };

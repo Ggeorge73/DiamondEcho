@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { childEnv, ISSUE_TITLE, makeClock, parseCli, postDeploy, UsageError } from "./post-deploy.mjs";
+import { childEnv, ISSUE_TITLE, makeClock, parseCli, postDeploy, RECHECK_DELAY_MS, rollbackTriggers, UsageError } from "./post-deploy.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const MERGED = "1111111111111111111111111111111111111111";
@@ -21,7 +21,7 @@ function world({ site = [MERGED], api = { status: 200, commit: OLD }, checks = {
   backendChanged = true, ancestors = {}, rollback = null, openIssues = [], env = {} } = {}) {
   let clock = Date.parse("2026-11-13T10:00:00Z");
   const siteAnswers = [...site];
-  const calls = { fetch: [], github: [], rollback: [], checks: 0, sleeps: 0 };
+  const calls = { fetch: [], github: [], rollback: [], checks: [], sleeps: 0, slept: [] };
   let live = null;
   const fetcher = async (url) => {
     calls.fetch.push(url);
@@ -44,8 +44,9 @@ function world({ site = [MERGED], api = { status: 200, commit: OLD }, checks = {
   const deps = {
     fetcher, github,
     now: () => clock,
-    sleep: async (ms) => { calls.sleeps += 1; clock += ms; },
-    runChecks: async () => { calls.checks += 1; return checks; },
+    sleep: async (ms) => { calls.sleeps += 1; calls.slept.push(ms); clock += ms; },
+    // `checks` is one answer for every look, or [first look, second look].
+    runChecks: async (label) => { calls.checks.push(label); return Array.isArray(checks) ? checks[calls.checks.length - 1] : checks; },
     isAncestor: (a, b) => Boolean(ancestors[`${a}..${b}`]),
     backendChanged: () => backendChanged,
     pagesRollback: async (args) => {
@@ -69,7 +70,7 @@ test("the merged build goes live, every check passes: no issue, no rollback", as
   assert.equal(result.outcome, "ok");
   assert.equal(result.build.attempts, 3);
   assert.equal(w.calls.sleeps, 2);
-  assert.equal(w.calls.checks, 1);
+  assert.deepEqual(w.calls.checks, ["first"], "no second look when everything passed");
   assert.deepEqual(w.calls.rollback, []);
   assert.deepEqual(w.calls.github, [["list", "sre-incident"]]);
   assert.equal(result.api.state, "current");
@@ -80,7 +81,7 @@ test("a build that never goes live fails visibly, opens an issue, and rolls noth
   const result = await w.run({ env: { ...configured, SRE_PAGES_AUTOROLLBACK: "enabled", GITHUB_SERVER_URL: "https://github.com", GITHUB_REPOSITORY: "o/r" } });
   assert.equal(result.outcome, "build-not-live");
   assert.equal(result.build.attempts, 31, "one look every 30 s for 15 minutes");
-  assert.equal(w.calls.checks, 0);
+  assert.deepEqual(w.calls.checks, []);
   assert.deepEqual(w.calls.rollback, []);
   const created = w.calls.github.find(([kind]) => kind === "create")[1];
   assert.equal(created.title, `${ISSUE_TITLE} for 1111111`);
@@ -96,6 +97,9 @@ test("a failed website check rolls the site back only when set up AND enabled, a
   const result = await w.run({ env: { ...configured, SRE_PAGES_AUTOROLLBACK: "enabled" } });
   assert.equal(result.outcome, "checks-failed");
   assert.deepEqual(w.calls.rollback, [["--apply", "--expect-live-commit", MERGED]]);
+  assert.deepEqual(w.calls.checks, ["first", "recheck"], "the failure is looked at twice");
+  assert.ok(w.calls.slept.includes(RECHECK_DELAY_MS) && RECHECK_DELAY_MS === 60_000, "a minute apart");
+  assert.deepEqual(result.recheck.still_failing, ["public-home"]);
   assert.equal(result.rollback.action, "rolled-back");
   assert.match(result.rollback.text, /build of `0000000` was put back and diamondecho.com\/version.json names it/);
   const body = w.calls.github.find(([kind]) => kind === "create")[1].body;
@@ -226,4 +230,40 @@ test("SRE_NOW starts the clock at a fixed time that still moves", () => {
   real += 5000;
   assert.equal(new Date(now()).toISOString(), "2026-11-13T10:00:05.000Z");
   assert.throws(() => makeClock({ SRE_NOW: "yesterday" }), UsageError);
+});
+
+const enabled = { ...configured, SRE_PAGES_AUTOROLLBACK: "enabled" };
+
+test("a website failure that passes on the second look a minute later rolls nothing back", async () => {
+  const passing = { code: 0, run: { checks: [check("public-home", "public-site", "sev1", true)] } };
+  const w = world({ checks: [failedSite, passing] });
+  const result = await w.run({ env: enabled });
+  assert.equal(result.outcome, "checks-failed", "the first failure is still reported");
+  assert.deepEqual(w.calls.checks, ["first", "recheck"]);
+  assert.deepEqual(w.calls.rollback, []);
+  assert.equal(result.rollback.action, "none");
+  assert.match(result.rollback.text, /passed on a second look a minute later/);
+});
+
+test("Cloudflare refusing the monitor, or a broken www redirect, never rolls the build back", async () => {
+  const refused = { ...check("public-home", "public-site", "sev1", false,
+    "Cloudflare refused the request (403, error 1010: the browser signature check, usually Browser Integrity Check): a Cloudflare security setting is blocking the monitor, and perhaps visitors too."), status: 403 };
+  const www = check("public-www-redirect", "public-site", "sev2", false, "The redirect does not point at the same page on the bare domain.");
+  for (const failing of [refused, www]) {
+    const w = world({ checks: { code: 1, run: { checks: [failing] } } });
+    const result = await w.run({ env: enabled });
+    assert.equal(result.outcome, "checks-failed", failing.id);
+    assert.equal(result.rollback.action, "none", failing.id);
+    assert.deepEqual(w.calls.rollback, [], failing.id);
+    assert.deepEqual(w.calls.checks, ["first"], "no second look either");
+  }
+  assert.deepEqual(rollbackTriggers([{ ...refused, status: 500 }]).length, 1, "a 500 with the same words still counts");
+});
+
+test("no automatic rollback when a later merge is the live build", async () => {
+  const w = world({ site: [LATER], ancestors: { [`${MERGED}..${LATER}`]: true }, checks: failedSite });
+  const result = await w.run({ env: enabled });
+  assert.equal(result.outcome, "checks-failed");
+  assert.deepEqual(w.calls.rollback, []);
+  assert.match(result.rollback.text, /a later merge \(`2222222`\) is live, and its own post-merge check decides/);
 });

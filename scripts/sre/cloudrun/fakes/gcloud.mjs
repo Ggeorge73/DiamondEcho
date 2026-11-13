@@ -12,6 +12,10 @@
 //   logs-5xx      the new revision has logged a 500
 //   logs-5xx-live the new revision logs a 500 once it has visitors
 //   traffic-fails update-traffic fails
+//   slow-traffic  the first traffic step takes 2 s (a signal can land mid-call)
+//   slow-rollback giving all traffic back to the original revision takes 2 s
+// The fake writes "MARK traffic-step" and "MARK rollback" lines to FAKE_LOG
+// as those calls start, so a test can send a signal at a known moment.
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 
 const args = process.argv.slice(2);
@@ -91,6 +95,15 @@ if (group === "run" && resource === "services" && verb === "describe") {
   requireTarget();
   if (scenario.has("traffic-fails")) fail("traffic update failed");
   const toRevisions = flag("--to-revisions");
+  const pause = () => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 2000);
+  const mark = (what) => process.env.FAKE_LOG && appendFileSync(process.env.FAKE_LOG, `MARK ${what}\n`);
+  if (toRevisions && toRevisions.startsWith(`${state.original}=100`)) {
+    mark("rollback");
+    if (scenario.has("slow-rollback")) pause();
+  } else if (toRevisions && !toRevisions.startsWith(state.original)) {
+    mark("traffic-step");
+    if (scenario.has("slow-traffic") && !state.slowed) { state.slowed = true; pause(); }
+  }
   if (args.includes("--to-latest")) {
     setTraffic([{ revisionName: service().status.latestReadyRevisionName, percent: 100, latestRevision: true }]);
   } else if (toRevisions) {

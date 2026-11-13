@@ -148,9 +148,13 @@ jobs:
         run: node scripts/sre/state.mjs record --run "$RUN_FILE" --state-dir "$STATE_DIR"
 
       - name: Work out the error budgets
+        # Runs even if an earlier step broke, so an outage is still raised.
+        if: ${{ !cancelled() }}
         run: node scripts/sre/slo-calc.mjs --state-dir "$STATE_DIR" --window-days 28 --out "$STATE_DIR/slo.json"
 
       - name: Open, update or close incidents
+        # Runs even if an earlier step broke, so an outage is still raised.
+        if: ${{ !cancelled() }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
           SRE_ALERT_WEBHOOK_URL: ${{ secrets.SRE_ALERT_WEBHOOK_URL }}
@@ -184,6 +188,8 @@ jobs:
         run: node scripts/sre/remediate.mjs --check-access --out "$RUNNER_TEMP/access.json"
 
       - name: Decide on an automatic fix
+        # Only when every step before it worked: the engine must never act on
+        # a state that failed to update.
         env:
           SRE_AUTOREMEDIATE: ${{ (vars.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && github.ref == 'refs/heads/main') && vars.SRE_AUTOREMEDIATE || 'disabled' }}
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}

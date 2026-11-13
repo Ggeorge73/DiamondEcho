@@ -13,7 +13,8 @@
 // secrets exist AND the repository variable SRE_PAGES_AUTOROLLBACK is
 // "enabled", it puts the previous build of the site back
 // (cloudflare/pages-rollback.sh --apply). A rollback is only ever made when
-// the merged build is the live one and a website check failed.
+// the merged build itself is the live one and a website check that a
+// rollback could fix failed twice, a minute apart.
 //
 // The API is deployed by hand, not by the merge. When the merge changed
 // backend/ and the live API still runs an older commit, the summary says so;
@@ -34,6 +35,10 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, "..", "..");
 const COMMIT = /^[0-9a-f]{7,40}$/;
 const SITE_SEVERITIES = new Set(["sev1", "sev2"]);
+// Website checks a rollback of the build cannot fix: the www redirect is a
+// Cloudflare zone rule, not part of the build.
+const NOT_THE_BUILD = new Set(["public-www-redirect", "edge-www-redirect"]);
+export const RECHECK_DELAY_MS = 60_000;
 export const ISSUE_TITLE = "Post-merge check failed";
 export const LABEL = { name: "sre-incident", color: "d93f0b", description: "Opened and closed by the SRE monitor" };
 
@@ -104,7 +109,8 @@ export async function apiNote({ merged, fetcher, backendChanged, origin }) {
 function failedChecks(run) {
   return (Array.isArray(run?.checks) ? run.checks : []).filter((check) => check && check.ok === false)
     .map((check) => ({ id: String(check.id), name: String(check.name), component: String(check.component),
-      severity: String(check.severity), detail: String(check.detail || "").slice(0, 200) }));
+      severity: String(check.severity), status: Number.isInteger(check.status) ? check.status : null,
+      detail: String(check.detail || "").slice(0, 200) }));
 }
 
 const ROLLBACK_STEPS = [
@@ -173,7 +179,7 @@ export async function postDeploy(options, deps) {
     result.rollback = { action: "none", text: "not attempted: the merged build never went live, so the previous one is still serving." };
   } else {
     log(`Live: ${short(result.build.commit)}. Running the post-deploy checks.`);
-    const checks = await runChecks();
+    const checks = await runChecks("first");
     if (checks.code === 0 || checks.code === 1) result.failed = failedChecks(checks.run);
     if (checks.code === 0 && result.failed.length === 0) {
       result.outcome = "ok";
@@ -185,7 +191,7 @@ export async function postDeploy(options, deps) {
     if (result.outcome === "checks-broke") {
       result.rollback = { action: "none", text: "not attempted: the checks did not finish, so there is no evidence against the build." };
     } else if (result.outcome === "checks-failed") {
-      result.rollback = await decideRollback({ result, env, apply, pagesRollback, fetcher, sleep, origin: targets.publicOrigin });
+      result.rollback = await decideRollback({ result, env, apply, pagesRollback, runChecks, fetcher, sleep, origin: targets.publicOrigin });
     }
   }
 
@@ -205,16 +211,36 @@ export async function postDeploy(options, deps) {
   return result;
 }
 
-async function decideRollback({ result, env, apply, pagesRollback, fetcher, sleep, origin }) {
-  const siteFailed = result.failed.some((check) => check.component === "public-site" && SITE_SEVERITIES.has(check.severity));
-  if (!siteFailed) {
-    return { action: "none", text: "not attempted: no website check of severity 1 or 2 failed, so rolling back the site would not help." };
+// A failed check that a rollback of the build could fix: a website check of
+// severity 1 or 2, not refused by Cloudflare itself (a security setting, the
+// same for every build), and not the www redirect.
+export function rollbackTriggers(failed) {
+  return failed.filter((check) => check.component === "public-site" && SITE_SEVERITIES.has(check.severity)
+    && !NOT_THE_BUILD.has(check.id) && !(check.status === 403 && /^Cloudflare refused/.test(check.detail)));
+}
+
+async function decideRollback({ result, env, apply, pagesRollback, runChecks, fetcher, sleep, origin }) {
+  const first = rollbackTriggers(result.failed);
+  if (first.length === 0) {
+    return { action: "none", text: "not attempted: no failed website check that a rollback could fix (a severity 1 or 2 website check, not refused by Cloudflare itself, not the www redirect)." };
+  }
+  if (result.build.later) {
+    return { action: "none", text: `not attempted: a later merge (\`${short(result.build.commit)}\`) is live, and its own post-merge check decides about it.` };
   }
   const configured = Boolean(env.CLOUDFLARE_API_TOKEN && env.CLOUDFLARE_ACCOUNT_ID);
   const enabled = env.SRE_PAGES_AUTOROLLBACK === "enabled";
   const args = ["--expect-live-commit", result.build.commit];
   if (!configured) {
     return { action: "not-set-up", text: "off: the Cloudflare secrets are not set (docs/sre/needs-from-gbenga.md). Roll back by hand with the steps below." };
+  }
+  // A second look about a minute later: one passing blip must not take a
+  // build off the site. Only a check that fails both times counts.
+  await sleep(RECHECK_DELAY_MS);
+  const again = await runChecks("recheck");
+  const againIds = new Set(rollbackTriggers(failedChecks(again.run)).map((check) => check.id));
+  result.recheck = { code: again.code, still_failing: first.filter((check) => againIds.has(check.id)).map((check) => check.id) };
+  if (result.recheck.still_failing.length === 0) {
+    return { action: "none", text: "not attempted: the failed website checks passed on a second look a minute later (or the second look did not run)." };
   }
   if (!(apply && enabled)) {
     const dry = await pagesRollback(args);
@@ -303,11 +329,13 @@ export function defaultDeps({ env, runOut }) {
     sleep: (ms) => new Promise((done) => setTimeout(done, ms)),
     isAncestor: gitIsAncestor,
     backendChanged: gitBackendChanged,
-    async runChecks() {
+    // "first" writes run.json; the second look writes run-recheck.json.
+    async runChecks(label = "first") {
+      const out = label === "first" ? runOut : runOut.replace(/(\.json)?$/, "-recheck.json");
       const { code } = await runChild(process.execPath,
-        [join(HERE, "synthetic-checks.mjs"), "--suite", "post-deploy", "--out", runOut, "--fail-on-failure"], childEnv(env, false), 9 * 60_000);
+        [join(HERE, "synthetic-checks.mjs"), "--suite", "post-deploy", "--out", out, "--fail-on-failure"], childEnv(env, false), 9 * 60_000);
       let run = null;
-      try { run = JSON.parse(readFileSync(runOut, "utf8")); } catch { /* no run written */ }
+      try { run = JSON.parse(readFileSync(out, "utf8")); } catch { /* no run written */ }
       return { code, run };
     },
     async pagesRollback(args) {

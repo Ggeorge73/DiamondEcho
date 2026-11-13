@@ -6,6 +6,7 @@
 // Nothing here prints a setting's value. A service description holds the
 // environment variable values (docs/de13-production-setup.md says so of the
 // files left in Cloud Shell), so a difference is reported by name only.
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -35,17 +36,43 @@ export function imageOf(revision) {
   return typeof image === "string" ? image : "";
 }
 
-// The document status.sh prints (shape fixed by scripts/sre/README.md, plus
-// each revision's image). Revisions are newest first.
+// The value of APP_COMMIT a revision was given, or "".
+export function appCommitOf(revision) {
+  const entry = (revision?.spec?.containers?.[0]?.env ?? []).find((item) => item?.name === "APP_COMMIT");
+  return typeof entry?.value === "string" && /^[0-9a-f]{7,40}$/.test(entry.value) ? entry.value : "";
+}
+
+// A short fingerprint of every setting of a revision except the image and
+// APP_COMMIT (the same list settingsDiff compares). Two revisions with the
+// same fingerprint differ at most in code; a different fingerprint means a
+// setting changed. One-way: it reveals no value.
+export function settingsFingerprint(revision) {
+  const entries = [...settingsOf(revision)].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return createHash("sha256").update(JSON.stringify(entries)).digest("hex").slice(0, 16);
+}
+
+// Every traffic tag and the revision behind it. A "candidate" tag means a
+// deploy is in progress (or was left behind by one).
+export function tagsOf(service) {
+  return (service?.status?.traffic ?? [])
+    .filter((entry) => typeof entry?.tag === "string" && entry.tag)
+    .map((entry) => ({ tag: entry.tag, revision: entry.revisionName ?? "" }));
+}
+
+// The document status.sh prints (shape fixed by scripts/sre/README.md:
+// serving, tags, and the revisions with their image and settings
+// fingerprint). Revisions are newest first.
 export function statusDocument(service, revisions) {
   return {
     serving: servingOf(service),
+    tags: tagsOf(service),
     revisions: [...(revisions ?? [])]
       .map((revision) => ({
         name: revision?.metadata?.name ?? "",
         created: revision?.metadata?.creationTimestamp ?? "",
         ready: revisionReady(revision),
         image: imageOf(revision),
+        settings: settingsFingerprint(revision),
       }))
       .filter((revision) => revision.name)
       .sort((a, b) => (a.created < b.created ? 1 : a.created > b.created ? -1 : 0)),
@@ -201,6 +228,8 @@ const commands = {
     const found = taggedRevision(readJson(service), tag);
     return found ? line(found.revision, found.url) : line("", "");
   },
+  // revision-facts REVISION.json -> image, APP_COMMIT
+  "revision-facts": ([revision]) => { const doc = readJson(revision); return line(imageOf(doc), appCommitOf(doc)); },
   // ready REVISION.json -> yes | no
   ready: ([revision]) => `${revisionReady(readJson(revision)) ? "yes" : "no"}\n`,
   // settings-diff BEFORE.json AFTER.json [IGNORED,PATHS] -> one sentence per difference

@@ -34,11 +34,19 @@
 #                          500-or-more answer the new revision logged
 #   DEPLOY_IGNORE_SETTINGS comma-separated setting paths the comparison may
 #                          ignore, for a settings change Gbenga agreed to
+#   DEPLOY_STATE_FILE      optional file where the run notes prev=, new= and
+#                          done= as it goes, so a cleanup step can finish a
+#                          rollback if this run is killed (sre-deploy-api.yml)
+#
+# A refused or rolled-back run leaves the service PINNED to the old revision
+# while its template holds the refused image: see the advice it prints, and
+# docs/sre/release-safety.md, "After a rollback".
 #
 # Exit 0: the new revision serves all traffic (or the dry run finished).
 # Exit 1: the new revision was refused or rolled back; the old one serves.
 # Exit 2: could not start, or the build failed; no traffic was moved.
-# Exit 3: a rollback was needed and did not complete. Act now: see
+# Exit 3: a rollback was needed and did not complete, or the old revision
+#         does not answer /health after it. Act now: see
 #         docs/sre/runbooks/bad-deploy.md.
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
@@ -50,7 +58,7 @@ while [ $# -gt 0 ]; do
     --apply) APPLY=1; shift ;;
     --commit) [ $# -ge 2 ] || die "--commit needs a commit."; EXPECT_COMMIT="$2"; shift 2 ;;
     --commit=*) EXPECT_COMMIT="${1#--commit=}"; shift ;;
-    -h|--help) sed -n '2,42p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,50p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) die "Unknown argument: $1. Usage: deploy.sh [--apply] [--commit SHA]" ;;
   esac
 done
@@ -79,11 +87,15 @@ FINISHED=1
 on_exit() {
   local code=$?
   if [ "$TRAFFIC_MOVED" = 1 ] && [ "$FINISHED" != 1 ]; then
-    FINISHED=1
+    trap '' INT TERM # nothing may interrupt the rollback
     say "ERROR: the deploy stopped part-way (exit $code)."
     roll_back || code=3
+    FINISHED=1
     [ "$code" = 3 ] || code=1
-    print_record "stopped part-way and rolled back to \`$PREV\`." || true
+    untag
+    print_record "stopped part-way; $(rollback_words). $(pin_words)" || true
+  elif [ -n "${NEW:-}" ] && [ "$FINISHED" != 1 ]; then
+    untag
   fi
   rm -rf "$WORK"
   exit "$code"
@@ -124,6 +136,7 @@ PREV="$(printf '%s' "$SERVING" | cut -f1)"
 is_revision_name "$PREV" || die "Could not tell which revision serves now."
 IFS=$'\t' read -r SERVICE_URL _ _ _ < <(helper service-facts "$WORK/before.json")
 describe_revision "$PREV" "$WORK/prev.json"
+IFS=$'\t' read -r PREV_IMAGE PREV_APP_COMMIT < <(helper revision-facts "$WORK/prev.json")
 
 say "Service $SERVICE in $PROJECT ($REGION)."
 say "Serving now: $PREV, 100 percent. Deploying: $SHORT (formula $FORMULA)."
@@ -142,6 +155,26 @@ traffic_cmd() { # STEP NEW -> the command for that step, in TRAFFIC_CMD
 }
 UNTAG_CMD=(gcloud run services update-traffic "$SERVICE" --remove-tags candidate --project "$PROJECT" --region "$REGION")
 
+# The log gate is useless if the logs cannot be read: find out before building.
+if [ "$LOG_GATE" = on ]; then
+  server_errors "$PREV" "$(utc_iso)" >/dev/null \
+    || die "Cannot read the logs of $PREV, which the log gate needs (the Logs Viewer role). Nothing was changed. Fix the access, or run with DEPLOY_LOG_GATE=off."
+fi
+
+# While the service is pinned to $PREV, its template still holds whatever the
+# last deploy put there. The one safe way to change a setting then is to name
+# $PREV's own image (and APP_COMMIT) in the same command.
+pin_words() {
+  local image="${PREV_IMAGE:-}" commit_part
+  [ -n "$image" ] && [ "$image" != - ] || image="<the image status.sh shows for $PREV>"
+  if [ -n "${PREV_APP_COMMIT:-}" ] && [ "$PREV_APP_COMMIT" != - ]; then
+    commit_part="--update-env-vars NAME=VALUE,APP_COMMIT=$PREV_APP_COMMIT"
+  else
+    commit_part="--update-env-vars NAME=VALUE --remove-env-vars APP_COMMIT"
+  fi
+  printf '%s' "The service is pinned to \`$PREV\` and its template still holds the refused image: do NOT run \`update-traffic --to-latest\` or a plain \`services update\`, both would put the refused code back. To change a setting while pinned: \`gcloud run services update $SERVICE --image $image $commit_part --project $PROJECT --region $REGION\`, then status.sh must show the new revision with that image, and only then \`update-traffic --to-latest\` (release-safety.md, \"After a rollback\")."
+}
+
 if [ "$APPLY" != 1 ]; then
   say ""
   say "Dry run. With --apply these commands run, in this order, each step gated:"
@@ -154,12 +187,22 @@ if [ "$APPLY" != 1 ]; then
 fi
 
 # ------------------------------------------------------------------ the record
+# The record goes to the standard output as it was when the script started
+# (fd 3). A signal's trap runs inside whatever command was running, and that
+# may have its output sent to the error stream (change … >&2).
+exec 3>&1
+STATE_FILE="${DEPLOY_STATE_FILE:-}"
+state_note() { [ -z "$STATE_FILE" ] || printf '%s\n' "$1" >> "$STATE_FILE"; }
+state_note "prev=$PREV"
 DAY="$(utc_date)"
 STARTED="$(utc_time)"
 SINCE="$(utc_iso)"
 RECORD=()
 note() { RECORD+=("$*"); say "  $*"; }
 print_record() { # RESULT
+  print_record_lines "$@" >&3
+}
+print_record_lines() {
   printf '### API redeploy from `%s` (%s, %s to %s UTC, deploy.sh)\n\n' "$SHORT" "$DAY" "$STARTED" "$(utc_time)"
   printf -- '- Ran: `deploy.sh --apply`%s, from a clean checkout at `%s` on `main`.\n' \
     "${GITHUB_RUN_ID:+ in GitHub Actions run $GITHUB_RUN_ID}" "$COMMIT"
@@ -170,6 +213,7 @@ print_record() { # RESULT
 }
 
 NEW=""
+ROLLBACK_STATE=""
 FINISHED=0
 # From here on a stop that is not a clean refusal still undoes moved traffic.
 die() { refuse "$*"; }
@@ -177,34 +221,65 @@ die() { refuse "$*"; }
 # Give all traffic back to the revision that served before. rollback.sh reads
 # the traffic back and asks /health, so its exit code is the truth.
 roll_back() {
+  local rc=0 runner=()
   say "Rolling back: all traffic to $PREV."
-  if bash "$CLOUDRUN_DIR/rollback.sh" --to "$PREV" --apply > "$WORK/rollback.out"; then
+  # In a session of its own, so that a second Ctrl-C (sent to the whole
+  # terminal group) or a cancelled workflow cannot stop it half-way. Ignoring
+  # the signals here is not enough: node, which rollback.sh calls, resets them.
+  if command -v setsid >/dev/null 2>&1; then runner=(setsid -w); fi
+  ${runner[@]+"${runner[@]}"} bash "$CLOUDRUN_DIR/rollback.sh" --to "$PREV" --apply > "$WORK/rollback.out" || rc=$?
+  if [ "$rc" = 0 ]; then
+    ROLLBACK_STATE=done
     note "Rolled back at $(utc_time): all traffic to \`$PREV\`, which answers /health."
     return 0
   fi
+  if [ "$rc" = 1 ]; then
+    # rollback.sh exit 1: the traffic is on $PREV, but $PREV is not healthy.
+    ROLLBACK_STATE=unhealthy
+    note "ROLLED BACK BUT UNHEALTHY at $(utc_time): all traffic is on \`$PREV\`, which did not answer /health. Follow docs/sre/runbooks/api-down.md."
+    return 1
+  fi
+  ROLLBACK_STATE=failed
   note "ROLLBACK DID NOT COMPLETE at $(utc_time): $(tail -n 1 "$WORK/rollback.out" 2>/dev/null || true)"
   return 1
+}
+rollback_words() {
+  case "$ROLLBACK_STATE" in
+    done) printf '%s' "rolled back: \`$PREV\` serves; \`${NEW:-the new revision}\` keeps 0 percent for diagnosis" ;;
+    unhealthy) printf '%s' "**rolled back, but \`$PREV\` does not answer /health: follow docs/sre/runbooks/api-down.md now**" ;;
+    *) printf '%s' "**the rollback did not complete: follow docs/sre/runbooks/bad-deploy.md now**" ;;
+  esac
+}
+untag() {
+  [ -n "${NEW:-}" ] || return 0
+  change "${UNTAG_CMD[@]}" >&2 || say "WARNING: could not remove the candidate tag."
 }
 
 # Stop: refuse the new revision. Before any traffic moved there is nothing to
 # undo; after, the traffic goes back to $PREV.
 refuse() {
+  # A second Ctrl-C (or a second signal from a cancelled workflow) must not
+  # stop the rollback half-way. Commands started from here ignore them too.
+  trap '' INT TERM
   local code=1
-  FINISHED=1
   say "REFUSED: $*"
   note "Refused: $*"
   if [ "$TRAFFIC_MOVED" = 1 ] && ! roll_back; then code=3; fi
-  if [ -n "$NEW" ]; then
-    change "${UNTAG_CMD[@]}" >&2 || say "WARNING: could not remove the candidate tag."
-  fi
+  FINISHED=1
+  untag
   if [ "$code" = 3 ]; then
-    print_record "**rollback did not complete. Follow docs/sre/runbooks/bad-deploy.md now.**"
-    say "ACT NOW: the rollback did not complete. Run status.sh, then rollback.sh --to $PREV --apply."
+    print_record "$(rollback_words). $(pin_words)"
+    if [ "$ROLLBACK_STATE" = unhealthy ]; then
+      say "ACT NOW: the traffic is on $PREV but it does not answer /health. Follow docs/sre/runbooks/api-down.md."
+    else
+      say "ACT NOW: the rollback did not complete. Run status.sh, then rollback.sh --to $PREV --apply."
+    fi
   elif [ "$TRAFFIC_MOVED" = 1 ]; then
-    print_record "rolled back. \`$NEW\` keeps 0 percent for diagnosis; \`$PREV\` serves. The service is pinned to \`$PREV\` (release-safety.md, \"After a rollback\")."
+    print_record "$(rollback_words). $(pin_words)"
   else
-    print_record "refused before any traffic moved. \`${NEW:-no revision}\` serves 0 percent; \`$PREV\` serves as before."
+    print_record "refused before any traffic moved. \`${NEW:-no revision}\` serves 0 percent; \`$PREV\` serves as before. $(pin_words)"
   fi
+  say "$(pin_words)"
   exit "$code"
 }
 
@@ -212,7 +287,6 @@ refuse() {
 # not leave visitors split between two revisions.
 on_signal() {
   [ "$FINISHED" = 1 ] && exit 1
-  trap - INT TERM
   refuse "the deploy was interrupted"
 }
 trap on_signal INT TERM
@@ -223,6 +297,9 @@ say "Building and starting the candidate (no traffic). This takes a few minutes.
 if ! change "${DEPLOY_CMD[@]}" >&2; then
   FINISHED=1
   say "ERROR: the deploy command failed. No traffic was moved; $PREV serves."
+  # A build can fail after Cloud Run made the revision and tagged it.
+  NEW=candidate untag
+  say "$(pin_words)"
   exit 2
 fi
 describe_service "$WORK/after.json"
@@ -231,6 +308,7 @@ if ! is_revision_name "$NEW" || [ "$NEW" = "$PREV" ] || [[ ! "$CANDIDATE_URL" =~
   NEW=""
   refuse "the deploy did not leave a new revision tagged candidate."
 fi
+state_note "new=$NEW"
 note "Candidate: \`$NEW\` at the tagged address, 0 percent, built at $(utc_time)."
 [ "$(helper serving "$WORK/after.json")" = "$(printf '%s\t100' "$PREV")" ] \
   || refuse "after a deploy with --no-traffic, $PREV no longer has all the traffic."
@@ -333,5 +411,6 @@ else
   note "WARNING: the tag \`candidate\` could not be removed; remove it with: $(shown "${UNTAG_CMD[@]}")"
 fi
 trap - INT TERM
+state_note "done=1"
 print_record "\`$NEW\` (\`$SHORT\`, formula \`$A_FORMULA\`) serves all traffic. Fallback: \`$PREV\`. Add the row to the table in section 1."
 say "Deployed: $NEW serves all traffic."
