@@ -239,7 +239,10 @@ history in seconds. Production runs never set it.
 ## Rules for every script and workflow
 
 1. **Read-only against production.** GET, HEAD and OPTIONS at a human pace.
-   Never load-test production.
+   Never load-test production. One exception: the calculator check sends one
+   small, fixed `POST /api/v1/deals/analyze` per fast run, the same request
+   the website sends. It stores nothing and touches no rate limiter or paid
+   service; `backend/tests/test_monitor_probe.py` proves both. No other POST.
 2. **Never submit an inquiry and never use up a visitor's allowance.**
    `POST /api/v1/inquiries` counts every well-formed JSON attempt, valid or
    not, against 5 per 10 minutes per sender and 30 per hour per instance
