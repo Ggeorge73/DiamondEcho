@@ -25,6 +25,8 @@ Status key: **Open** (waiting on you), **Done** (with the date you did it).
 | 2.4 | **Who to page**: variable `SRE_OWNER` = your GitHub user name. | A sev1 that is not acknowledged mentions you on the issue. | Open |
 | 2.5 | **Protected environment** named `production` with you as the required reviewer. | Each run of the manual API deploy workflow waits for your approval. | Open |
 | 2.6 | **Branch protection on `main`**: require a pull request and the CI checks. | Code review is the only limit on what the deploy and rollback automation can do. | Open |
+| 2.6a | **Get the alert emails**: on the repository page, Watch, Custom, tick Issues; and keep GitHub email notifications on. Incident issues reach you by email only this way. | Without it you are never told. | Open |
+| 2.6b | **Two labels** for the issue forms: `incident` and `postmortem` (Issues, Labels, New label). | Issues opened from the incident and postmortem forms get their label. | Open |
 | 2.7 | **Keep the schedule alive**: GitHub pauses scheduled workflows in a public repository after 60 days with no commits. If the monitor stops, re-enable it under Actions. | A paused monitor sees nothing. The weekly report flags monitoring gaps. | Note |
 
 ## 3. Google Cloud (`diamondecho-prod`), in Cloud Shell
@@ -41,6 +43,7 @@ Status key: **Open** (waiting on you), **Done** (with the date you did it).
 | # | Decision | Where | Status |
 | --- | --- | --- | --- |
 | 4.1 | **Accept or change the proposed SLO targets** after one full 28-day window of data. Until then the error-budget policy is advice only. | `docs/sre/slo.md`, `docs/sre/error-budget-policy.md` | Open |
+| 4.1a | **Incident targets**: accept or change the proposed time to acknowledge and to fix for each severity, and whether sev2 chat messages may arrive at night. | `docs/sre/severity-and-escalation.md` | Open |
 | 4.2 | **A backup contact** for when you cannot answer an incident. Today there is no second person. | `docs/sre/severity-and-escalation.md` | Open |
 | 4.3 | **Edge hardening**, each with its risk and undo: DNSSEC, a CAA record, minimum TLS 1.2, WAF managed rules, a rate-limiting rule, putting the API behind Cloudflare. | `docs/sre/edge.md` | Open |
 | 4.4 | **Privacy page**: Cloudflare's bot-detection script (`/cdn-cgi/challenge-platform/…`) is on the home page; does the Privacy page need to mention it? | `docs/sre/edge.md` | Open |
