@@ -14,8 +14,8 @@ import { mkdirSync, writeFileSync, appendFileSync } from "node:fs";
 import { cpus, platform, release } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { checkTarget, SafetyError, STAGING_CAPS, STAGING_FLAG } from "./safety.mjs";
-import { runScenario } from "./runner.mjs";
+import { checkTarget, SafetyError, scenarioProblems, STAGING_CAPS, STAGING_FLAG, verifyIdentity } from "./safety.mjs";
+import { realIo, runScenario } from "./runner.mjs";
 import { evaluateThresholds } from "./stats.mjs";
 import { SCENARIOS, STANDARD, findScenario } from "./scenarios.mjs";
 
@@ -185,8 +185,20 @@ function printScenario(scenario, log) {
  */
 export async function run(options, { io, log = console.log, clock = () => new Date() } = {}) {
   // Refuse before anything is selected, printed or sent.
-  const target = checkTarget(options.target, { stagingApproved: options.stagingApproved === true });
+  const stagingApproved = options.stagingApproved === true;
+  const checked = checkTarget(options.target, { stagingApproved });
   const scenarios = selectScenarios(options.scenario, options.overrides);
+  // Every scenario is checked before anything is sent, the identity request
+  // included, so a refused run sends nothing at all.
+  for (const scenario of scenarios) {
+    const problems = scenarioProblems(scenario, checked.kind);
+    if (problems.length) throw new SafetyError("scenario-refused", `Scenario "${scenario.id}" refused:\n- ${problems.join("\n- ")}`);
+  }
+  // Then ask the target who it is, before any load: a port on this machine
+  // may be forwarded to a deployed service (safety.mjs, verifyIdentity).
+  const network = io ?? realIo();
+  const identity = await verifyIdentity(checked, { stagingApproved, io: network });
+  const target = { ...checked, kind: identity.kind };
   const where = options.label ?? (target.kind === "staging" ? "staging" : "this machine");
   const note = `Measured on ${where}; not a production measurement.`;
   log(`Target ${target.origin} (${target.kind}). ${note}`);
@@ -195,10 +207,7 @@ export async function run(options, { io, log = console.log, clock = () => new Da
   const results = [];
   for (const scenario of scenarios) {
     log(`\nRunning ${scenario.id}: ${scenario.description}`);
-    const outcome = await runScenario(scenario, options.target, {
-      stagingApproved: options.stagingApproved === true,
-      ...(io ? { io } : {}),
-    });
+    const outcome = await runScenario(scenario, options.target, { stagingApproved, io: network, verifiedKind: target.kind });
     const stated = options.noThresholds ? {} : scenario.thresholds?.[target.kind] ?? {};
     const thresholds = evaluateThresholds(outcome.report, stated);
     const entry = {
@@ -229,7 +238,7 @@ export async function run(options, { io, log = console.log, clock = () => new Da
     production: false,
     label: where,
     note,
-    target: { origin: target.origin, kind: target.kind },
+    target: { origin: target.origin, kind: target.kind, revision: identity.revision },
     started_at: started.toISOString(),
     finished_at: clock().toISOString(),
     environment: {

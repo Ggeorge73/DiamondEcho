@@ -10,11 +10,15 @@
 ## Symptoms
 
 - Deal Studio takes many seconds after "Analyze", then may show "The
-  analysis could not be completed. Review the assumptions and try again."
-  The visitor's figures are fine: the service was busy. (Deal Studio does not
+  analysis service could not be reached, so nothing was calculated. Check
+  your connection and try again." (Google refused or cut off the request), or
+  "Request failed with status code 503" (or another number). The visitor's
+  figures and connection are fine: the service was busy. Deal Studio does not
   calculate on the device when the service is busy or down; see
-  [capacity.md](../capacity.md).)
-- The form says "Online requests are busy right now" or fails to send.
+  [capacity.md](../capacity.md).
+- The form says "We could not send your request just now. Nothing was
+  submitted." (Google refused it), or "Online requests are busy right now…
+  call or email us." (our own hourly limit).
 - The assistant gives an error, or the market brief section stays empty.
 - The incident issue names `api-latency`, or an API check failed with
   HTTP 429, 503 or 504.
@@ -29,9 +33,12 @@
 The API works on at most three requests at once (three instances, one
 request each). When all three are busy, other requests wait, and after a
 while Google refuses them. Deal Studio, the assistant, the inquiry form and
-the market brief all share those three places. A refused inquiry is not
-stored and the visitor is asked to call or email, so it is not lost silently,
-but the visitor may not try again. The pages themselves, search, the mortgage
+the market brief all share those three places, and every page load asks for
+the market brief, so a busy site is a busy API. A refused inquiry is never
+stored. When our own limit refuses it, the visitor is asked to call or email.
+When Google refuses it, the visitor only reads "We could not send your
+request just now. Nothing was submitted." with no suggestion to call, so the
+inquiry may be lost to the business even though nothing was lost silently. The pages themselves, search, the mortgage
 simulator and the seller net sheet keep working.
 
 ## Check first
@@ -89,25 +96,53 @@ at a human pace is enough.
 2. **Gbenga.** If heavy simulations from a script are filling the instances,
    follow [traffic-spike-or-abuse.md](traffic-spike-or-abuse.md). It has the
    steps for a flood.
-3. **Gbenga. Needs Gbenga's yes:** if real visitors are filling all three
-   instances (instance count pinned at 3, requests ordinary), allow five for
-   now:
+3. **Gbenga.** Before changing any setting, see whether the service is
+   pinned to a revision (it is after a rollback). Read-only:
    ```bash
-   gcloud run services update diamondecho-api --region us-east1 --project diamondecho-prod --max-instances 5
+   bash scripts/sre/cloudrun/status.sh
+   gcloud run services describe diamondecho-api --region us-east1 --project diamondecho-prod --format='value(status.traffic[].latestRevision)'
    ```
+   Not pinned: the second command prints `True` (one entry per traffic line;
+   the line with 100% is the one that counts), and the revision serving 100%
+   in `status.sh` is the newest one listed. Pinned: `False` or nothing for
+   that line, or the serving revision is not the newest. If in doubt, treat
+   it as pinned. Then a
+   new revision would get **no** traffic, and a later `--to-latest` could put
+   the bad image back. In that case use only the steps in "After a rollback"
+   in [release-safety.md](../release-safety.md), which name the serving image
+   in the same command as the setting.
+4. **Gbenga. Needs Gbenga's yes:** if real visitors are filling all three
+   instances (instance count pinned at 3, requests ordinary), allow five for
+   now. Google documents a service-level maximum that applies **without a
+   new revision**:
+   ```bash
+   gcloud run services update diamondecho-api --region us-east1 --project diamondecho-prod --max 5
+   ```
+   Not yet tried on this project, and it is not confirmed whether a
+   service-level maximum above the revision's own maximum (3) takes effect.
+   Run `status.sh` afterwards. If a new revision appeared, or the instance
+   count still stops at 3, use the revision-level flag `--max-instances 5`
+   instead: if not pinned, as a plain `gcloud run services update`; if
+   pinned, through "After a rollback" in
+   [release-safety.md](../release-safety.md).
    Cost: more instances bill while busy. Risk: the in-memory inquiry and
    heavy-route limits are per instance, so their ceilings rise too. Worked
-   when: 429s on ordinary paths stop and latency falls within 10 minutes.
-   Undo afterwards: the same command with `--max-instances 3`.
-4. **Gbenga. Needs Gbenga's yes:** if the slowness is cold starts (slow first
-   answers after quiet spells, fast afterwards), keep one instance running:
+   when: 429s on ordinary paths stop and latency falls within 10 minutes;
+   `status.sh` shows the same revision at 100% (service-level change), or
+   the **new** revision at 100% (revision-level change). Undo afterwards: the
+   same command with `--max 3` (or `--max-instances 3`).
+5. **Gbenga. Needs Gbenga's yes:** if the slowness is cold starts (slow first
+   answers after quiet spells, fast afterwards), keep one instance running,
+   service-level, without a new revision:
    ```bash
-   gcloud run services update diamondecho-api --region us-east1 --project diamondecho-prod --min-instances 1
+   gcloud run services update diamondecho-api --region us-east1 --project diamondecho-prod --min 1
    ```
    Cost: one idle instance all month; see the formula in
-   [capacity.md](../capacity.md). Worked when: the first answer after 20
-   quiet minutes is under a second. Undo: `--min-instances 0`.
-5. **AI role agent.** Run Actions > **SRE load test** on the commit that is
+   [capacity.md](../capacity.md). Run `status.sh` afterwards: no new
+   revision should appear. If one did, check step 3 again. Worked when: the
+   first answer after 20 quiet minutes is under a second, and `status.sh`
+   shows the same revision at 100%. Undo: `--min 0`.
+6. **AI role agent.** Run Actions > **SRE load test** on the commit that is
    live and compare with [capacity.md](../capacity.md). If a route has become
    several times slower, prepare a fix as a draft pull request. It changes
    nothing until Gbenga merges it.
@@ -129,8 +164,8 @@ If none of these works within the time to mitigate for the severity, go to
       incident issue has closed.
 - [ ] Post the "resolved" update (wording in
       [incident-response.md](../incident-response.md)).
-- [ ] Undo any temporary instance change (`--max-instances 3`,
-      `--min-instances 0`) unless Gbenga decided to keep it, and record the
+- [ ] Undo any temporary instance change (`--max 3`, `--min 0`, or the
+      revision-level forms you used) unless Gbenga decided to keep it, and record the
       decision in [capacity.md](../capacity.md).
 - [ ] Add what was learned (peak instance count, latency, which paths) to
       [capacity.md](../capacity.md), labelled with the date and "production,

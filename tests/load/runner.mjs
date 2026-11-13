@@ -11,17 +11,17 @@
 //
 // Everything that touches the network or the clock comes in through `io`, so
 // the tests run this file without either.
-import { checkRoute, checkTarget, scenarioProblems, SafetyError } from "./safety.mjs";
+import { checkRoute, checkTarget, LOADGEN_USER_AGENT, scenarioProblems, SafetyError } from "./safety.mjs";
 import { buildReport } from "./stats.mjs";
 
-const realIo = () => ({
+export const realIo = () => ({
   fetch: globalThis.fetch,
   now: () => performance.now(),
   setTimeout: (fn, ms) => setTimeout(fn, ms),
   clearTimeout: (id) => clearTimeout(id),
 });
 
-const USER_AGENT = "DiamondEcho-LoadTest/1 (never production; tests/load)";
+const USER_AGENT = LOADGEN_USER_AGENT;
 
 /** Classify a thrown fetch error into a short kind. */
 export function errorKind(error) {
@@ -91,8 +91,12 @@ export function plan(scenario) {
  * so this function cannot be handed production by a caller that forgot to.
  * Returns { samples, warmupRequests, measuredSeconds, report }.
  */
-export async function runScenario(scenario, target, { stagingApproved = false, io = realIo() } = {}) {
-  const checked = checkTarget(target, { stagingApproved });
+export async function runScenario(scenario, target, { stagingApproved = false, io = realIo(), verifiedKind = null } = {}) {
+  const host = checkTarget(target, { stagingApproved });
+  // The identity check (verifyIdentity, run once by loadgen.mjs) can only
+  // make the rules stricter: a local port that turned out to lead to staging
+  // is held to the staging ceilings.
+  const checked = verifiedKind === "staging" ? { ...host, kind: "staging" } : host;
   const problems = scenarioProblems(scenario, checked.kind);
   if (problems.length) {
     throw new SafetyError("scenario-refused", `Scenario "${scenario.id}" refused:\n- ${problems.join("\n- ")}`);
@@ -183,6 +187,9 @@ export async function runScenario(scenario, target, { stagingApproved = false, i
     await Promise.all(pending);
   }
 
+  // No new request starts after the planned end, but one started just before
+  // it may run on for up to timeoutMs. On staging, safety.mjs requires the
+  // planned time plus that timeout to fit the staging ceiling.
   // Throughput is measured over the time load was really applied: a scenario
   // that stops early at maxRequests is not averaged over its unused time.
   const measuredSeconds = Math.max(0, (elapsed() - measuredStartMs) / 1000);

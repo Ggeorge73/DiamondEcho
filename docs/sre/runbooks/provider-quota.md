@@ -42,14 +42,21 @@ nothing is lost.
 Never call `/api/v1/properties/lookup` or `/suggest` to test: each call costs
 money. Read the dashboards and logs instead.
 
-1. **Gbenga.** Which providers production has keys for. In Cloud Shell
-   (prints names only, never values):
+1. **Gbenga.** Which providers production has keys for, and how each is
+   held. In Cloud Shell (prints each setting's name and whether it is a
+   plain value or a Secret Manager secret; never a value):
    ```bash
-   gcloud run services describe diamondecho-api --region us-east1 --project diamondecho-prod --format='value(spec.template.spec.containers[0].env[].name)'
+   gcloud run services describe diamondecho-api --region us-east1 --project diamondecho-prod --format=json \
+     | python3 -c 'import json, sys
+   for e in json.load(sys.stdin)["spec"]["template"]["spec"]["containers"][0].get("env", []):
+       ref = e.get("valueFrom", {}).get("secretKeyRef")
+       print(e["name"], "->", "secret " + ref["name"] + " version " + ref.get("key", "latest") if ref else "plain value (not shown)")'
    ```
    `RENTCAST_API_KEY` and `MAPBOX_ACCESS_TOKEN` mean those providers are on;
    `MARKET_BRIEF_ENABLED` means the brief is on. A provider that is not
-   listed is off by design: the page says so, and nothing is broken.
+   listed is off by design: the page says so, and nothing is broken. Note
+   for each key whether it is a secret (and its secret's name) or a plain
+   value: Fix step 3 depends on it.
 2. **Gbenga.** Google Cloud > Logging, query:
    ```
    resource.labels.service_name="diamondecho-api"
@@ -87,18 +94,48 @@ money. Read the dashboards and logs instead.
 2. **Gbenga. Needs Gbenga's yes:** used up by one sender or a script: follow
    [traffic-spike-or-abuse.md](traffic-spike-or-abuse.md) (usage caps, key
    rotation).
-3. **Gbenga. Needs Gbenga's yes:** a key was revoked or expired: create a new
-   one at the provider and set it on the service as its secret, the same
-   way it was first set (`backend/PROPERTY_DATA_SETUP.md`). Never paste it
-   into an issue or a chat.
+3. **Gbenga. Needs Gbenga's yes:** a key was revoked, expired or must be
+   replaced. Never put a key on a command line, in an issue or in a chat.
+   1. Create the new key in the provider's dashboard. Leave the page open.
+   2. Before changing the service, see whether it is pinned to a revision:
+      step 3 of "Fix" in [api-slow-or-saturated.md](api-slow-or-saturated.md).
+      Pinned: make the change in step 3.4 through "After a rollback" in
+      [release-safety.md](../release-safety.md) (same flag, plus the serving
+      image).
+   3. If "Check first" step 1 showed the key as a **secret** (name `NAME`),
+      add the new key as its next version. `read -rs` asks for it without
+      showing it or saving it in the shell history; paste and press Enter:
+      ```bash
+      read -rs KEY && printf '%s' "$KEY" | gcloud secrets versions add NAME --data-file=- --project diamondecho-prod; unset KEY
+      ```
+      If it showed a **plain value**, first make a secret for it (for
+      example `rentcast-api-key`) with
+      `gcloud secrets create rentcast-api-key --replication-policy automatic --project diamondecho-prod`,
+      add the key with the `read -rs` command above, and give the API's
+      runtime service account read access to that one secret
+      (`roles/secretmanager.secretAccessor` on the secret: an IAM change).
+   4. Point the service at the new version. This makes a new revision.
+      For a key that was a plain value, add
+      `--remove-env-vars RENTCAST_API_KEY` to the same command:
+      ```bash
+      gcloud run services update diamondecho-api --region us-east1 --project diamondecho-prod --update-secrets RENTCAST_API_KEY=NAME:latest
+      ```
+      (`MAPBOX_ACCESS_TOKEN` the same way.)
+   5. Worked when: `bash scripts/sre/cloudrun/status.sh` shows the **new**
+      revision at 100%, and the provider's dashboard shows successful calls
+      from real visitors. Then revoke the old key in the provider's dashboard
+      and disable the old version:
+      `gcloud secrets versions disable OLD_VERSION --secret NAME --project diamondecho-prod`.
 4. **Gbenga. Needs Gbenga's yes:** to stop a provider costing anything while
    it is sorted out, remove its key. Lookup then fails closed (visitors type
-   the figures) and suggestions fall back to nothing:
+   the figures) and suggestions fall back to nothing. This makes a new
+   revision, so check for a pin first (step 3.2 above):
    ```bash
    gcloud run services update diamondecho-api --region us-east1 --project diamondecho-prod --remove-env-vars RENTCAST_API_KEY
    ```
-   (Use `--remove-secrets` instead if the key is set as a secret.) Undo:
-   set the key again as in step 3.
+   Use `--remove-secrets RENTCAST_API_KEY` instead if step 1 showed a
+   secret. Worked when: `status.sh` shows the new revision at 100%. Undo: set
+   the key again as in step 3.4.
 5. **Gbenga. Needs Gbenga's yes:** text-to-speech over quota: in Quotas and
    Metrics, ask Google for a higher quota, or wait for it to reset. Not
    enabled or billing stopped: enable the API or settle billing. The brief

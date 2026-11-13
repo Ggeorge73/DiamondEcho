@@ -145,6 +145,82 @@ export function productionReason(hostname) {
   return null;
 }
 
+// The load generator's User-Agent, on every request it sends.
+export const LOADGEN_USER_AGENT = "DiamondEcho-LoadTest/1 (never production; tests/load)";
+
+// What a target says it is. The host name alone is not enough: a port on this
+// machine can be forwarded to a deployed service (`gcloud run services proxy`,
+// `ssh -L`). So before any load the generator asks GET /api/, where the API
+// publishes its Cloud Run revision (null when it runs on a machine, not on
+// Cloud Run), and refuses anything that answers as a deployed revision other
+// than staging.
+export const IDENTITY_PATH = "/api/";
+export const IDENTITY_TIMEOUT_MS = 5000;
+export const STAGING_REVISION_PREFIX = "diamondecho-api-staging-";
+
+/**
+ * Decide from the answer to GET /api/. `target` is checkTarget's result;
+ * `answer` is { status, body } or { error }. Returns { kind, revision }:
+ * the kind can only get stricter (local becomes staging when a forwarded port
+ * leads to staging). Throws SafetyError otherwise.
+ */
+export function identityDecision(target, answer, { stagingApproved = false } = {}) {
+  const where = `${target.origin}${IDENTITY_PATH}`;
+  if (!answer || answer.error || answer.status !== 200) {
+    const why = answer?.error ? `no answer (${answer.error})` : `status ${answer?.status ?? "none"}`;
+    throw new SafetyError("identity-unknown", `Refused: ${where} gave ${why}, so the target cannot be told apart from production. Start the API there first.`);
+  }
+  let identity;
+  try {
+    identity = JSON.parse(answer.body);
+  } catch {
+    identity = null;
+  }
+  if (!identity || typeof identity !== "object" || Array.isArray(identity)) {
+    throw new SafetyError("identity-unknown", `Refused: ${where} did not answer with the API's identity, so the target cannot be told apart from production.`);
+  }
+  const revision = identity.revision;
+  if (revision !== undefined && revision !== null) {
+    const name = String(revision).slice(0, 80);
+    if (typeof revision === "string" && revision.startsWith(STAGING_REVISION_PREFIX)) {
+      if (!stagingApproved) {
+        throw new SafetyError("staging-needs-approval", `Refused: ${where} answers as the staging revision ${name}. A staging run needs Gbenga's yes and the flag ${STAGING_FLAG}.`);
+      }
+      return { kind: "staging", revision };
+    }
+    throw new SafetyError(
+      "production",
+      `Refused: ${where} answers as the deployed revision "${name}", which is not staging. A port forwarded to a deployed service is treated as production, and production is never load-tested.`,
+    );
+  }
+  if (identity.service !== "DiamondEcho API") {
+    throw new SafetyError("identity-unknown", `Refused: ${where} does not answer as the DiamondEcho API.`);
+  }
+  return { kind: target.kind, revision: null };
+}
+
+/** Ask the target who it is (one GET /api/) and decide. `io` as in runner.mjs. */
+export async function verifyIdentity(target, { stagingApproved = false, io }) {
+  const controller = new AbortController();
+  const timer = io.setTimeout(() => controller.abort(), IDENTITY_TIMEOUT_MS);
+  let answer;
+  try {
+    const response = await io.fetch(target.origin + IDENTITY_PATH, {
+      method: "GET",
+      redirect: "manual",
+      signal: controller.signal,
+      headers: { "User-Agent": LOADGEN_USER_AGENT, Accept: "application/json" },
+    });
+    const body = Buffer.from(await response.arrayBuffer()).toString("utf8");
+    answer = { status: response.status, body };
+  } catch (error) {
+    answer = { error: error?.name === "AbortError" ? "timed out" : "could not connect" };
+  } finally {
+    io.clearTimeout(timer);
+  }
+  return identityDecision(target, answer, { stagingApproved });
+}
+
 const isLoopback = (host) => host === "localhost" || host === "[::1]" || /^127(\.\d{1,3}){3}$/.test(host);
 
 /**
@@ -314,6 +390,10 @@ export function scenarioProblems(scenario, kind) {
   }
   if (totalSeconds(scenario) > caps.totalSeconds) {
     problems.push(`${totalSeconds(scenario)} seconds (warm-up included) is over the ceiling of ${caps.totalSeconds} for ${where}`);
+  } else if (kind === "staging" && totalSeconds(scenario) + scenario.timeoutMs / 1000 > caps.totalSeconds) {
+    // A request started just before the end may run on for up to its timeout,
+    // so on staging the whole run, that overrun included, must fit the ceiling.
+    problems.push(`${totalSeconds(scenario)} seconds plus a ${scenario.timeoutMs / 1000}-second request timeout can run past the ceiling of ${caps.totalSeconds} seconds for ${where}`);
   }
   const ceiling = requestCeiling(scenario);
   if (ceiling !== null && ceiling > caps.requests) {

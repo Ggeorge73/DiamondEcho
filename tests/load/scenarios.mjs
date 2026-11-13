@@ -89,7 +89,7 @@ export const SCENARIOS = [
     warmupSeconds: 3,
     timeoutMs: 10000,
     steps: [analyzeRental, analyzeFlip, analyzeLand],
-    thresholds: { local: { error_rate: 0, p95_ms: 100, p99_ms: 250, min_throughput_rps: 20 } },
+    thresholds: { local: { min_requests: 1, error_rate: 0, p95_ms: 100, p99_ms: 250, min_throughput_rps: 20 } },
   },
   {
     id: "analyze-crowd",
@@ -100,7 +100,7 @@ export const SCENARIOS = [
     warmupSeconds: 3,
     timeoutMs: 10000,
     steps: [analyzeRental, analyzeFlip, analyzeLand],
-    thresholds: { local: { error_rate: 0, p95_ms: 500, p99_ms: 1000, min_throughput_rps: 20 } },
+    thresholds: { local: { min_requests: 1, error_rate: 0, p95_ms: 500, p99_ms: 1000, min_throughput_rps: 20 } },
   },
   {
     id: "read-routes",
@@ -111,7 +111,7 @@ export const SCENARIOS = [
     warmupSeconds: 2,
     timeoutMs: 5000,
     steps: [health, apiRoot, assistantHealth, profiles],
-    thresholds: { local: { error_rate: 0, p95_ms: 100, p99_ms: 250, min_throughput_rps: 50 } },
+    thresholds: { local: { min_requests: 1, error_rate: 0, p95_ms: 100, p99_ms: 250, min_throughput_rps: 50 } },
   },
   {
     id: "visitor-session",
@@ -124,7 +124,7 @@ export const SCENARIOS = [
     warmupSeconds: 3,
     timeoutMs: 10000,
     steps: visitorSteps,
-    thresholds: { local: { error_rate: 0, p95_ms: 250, p99_ms: 500 } },
+    thresholds: { local: { min_requests: 1, error_rate: 0, p95_ms: 250, p99_ms: 500 } },
   },
   {
     id: "spike",
@@ -141,7 +141,7 @@ export const SCENARIOS = [
     ],
     timeoutMs: 10000,
     steps: [analyzeRental, chatEarnest, analyzeFlip, profiles, analyzeLand],
-    thresholds: { local: { error_rate: 0, p95_ms: 500, p99_ms: 1000 } },
+    thresholds: { local: { min_requests: 1, error_rate: 0, p95_ms: 500, p99_ms: 1000 } },
   },
   {
     id: "heavy-local",
@@ -203,7 +203,7 @@ export const SCENARIOS = [
     ],
     // No latency threshold: the largest run is designed to take the
     // service's own 20-second time budget. It must still answer.
-    thresholds: { local: { error_rate: 0 } },
+    thresholds: { local: { min_requests: 1, error_rate: 0 } },
   },
   {
     id: "staging-gentle",
@@ -219,7 +219,7 @@ export const SCENARIOS = [
     // is reported as the 429, 503 or 504 Google answers, not as our timeout.
     timeoutMs: 35000,
     steps: visitorSteps,
-    thresholds: { staging: { error_rate: 0.02 }, local: { error_rate: 0 } },
+    thresholds: { staging: { min_requests: 1, error_rate: 0.02 }, local: { min_requests: 1, error_rate: 0 } },
   },
   {
     id: "staging-spike",
@@ -234,7 +234,7 @@ export const SCENARIOS = [
     ],
     timeoutMs: 35000,
     steps: [analyzeRental, chatEarnest, analyzeFlip, profiles, analyzeLand],
-    thresholds: { staging: { error_rate: 0.02 }, local: { error_rate: 0 } },
+    thresholds: { staging: { min_requests: 1, error_rate: 0.02 }, local: { min_requests: 1, error_rate: 0 } },
   },
 ];
 

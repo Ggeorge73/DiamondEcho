@@ -43,11 +43,14 @@ async function runMain(args, { respond, env = {} } = {}) {
   });
 }
 
+const LOCAL_IDENTITY = '{"service":"DiamondEcho API","revision":null,"commit":null}';
 const okRoutes = (ms) => (url) => ({
   status: 200,
   ms,
-  body: url.endsWith("/assumption-profiles") ? '{"profiles":[]}' : '{"status":"ok"}',
+  body: url.endsWith("/assumption-profiles") ? '{"profiles":[]}' : url.endsWith("/api/") ? LOCAL_IDENTITY : '{"status":"ok"}',
 });
+// The API answers its identity, and `status` on every other route.
+const failingRoutes = (status) => (url) => (url.endsWith("/api/") ? { status: 200, body: LOCAL_IDENTITY, ms: 1 } : { status, body: "", ms: 2 });
 
 test("the default target is this machine", () => {
   assert.equal(DEFAULT_TARGET, "http://127.0.0.1:8080");
@@ -122,7 +125,8 @@ test("a run that meets its thresholds exits 0 and writes the result", async () =
   assert.equal(result.production, false);
   assert.equal(result.label, "unit test");
   assert.match(result.note, /Measured on unit test; not a production measurement/);
-  assert.deepEqual(result.target, { origin: "http://127.0.0.1:8080", kind: "local" });
+  assert.deepEqual(result.target, { origin: "http://127.0.0.1:8080", kind: "local", revision: null });
+  assert.equal(calls[0].url, "http://127.0.0.1:8080/api/"); // the identity check comes first
   assert.equal(result.passed, true);
   const [scenario] = result.scenarios;
   assert.equal(scenario.id, "read-routes");
@@ -152,7 +156,7 @@ test("--no-thresholds reports without failing", async () => {
 });
 
 test("failures are counted by kind in the result", async () => {
-  const { code, result } = await runMain(["--scenario", "read-routes", "--duration", "1", "--warmup", "0"], { respond: () => ({ status: 503, body: "", ms: 2 }) });
+  const { code, result } = await runMain(["--scenario", "analyze", "--duration", "1", "--warmup", "0"], { respond: failingRoutes(503) });
   assert.equal(code, 1);
   assert.equal(result.scenarios[0].errors.http_503, result.scenarios[0].requests);
   assert.equal(result.scenarios[0].latency_ms.p50, null);
@@ -161,7 +165,8 @@ test("failures are counted by kind in the result", async () => {
 test("SRE_NOW sets the result's clock", async () => {
   const { code, result } = await runMain(["--scenario", "read-routes", "--duration", "1", "--warmup", "0"], { respond: okRoutes(5), env: { SRE_NOW: "2026-11-13T09:00:00.000Z" } });
   assert.equal(code, 0);
-  assert.equal(result.started_at, "2026-11-13T09:00:00.000Z");
+  // Time starts at SRE_NOW and runs on at the real pace (the identity check comes first).
+  assert.ok(result.started_at >= "2026-11-13T09:00:00.000Z" && result.started_at < "2026-11-13T09:00:01.000Z", result.started_at);
   assert.ok(result.finished_at >= result.started_at);
   assert.ok(result.finished_at < "2026-11-13T09:01:00.000Z");
 });
@@ -207,4 +212,51 @@ test("markdownSummary says 'no data' rather than inventing a number", () => {
   });
   assert.match(text, /\| x \| 2 \| 2 \(connection: 2\) \| 0 \| no data \| no data/);
   assert.match(text, /p95_ms is no data, the limit is 100/);
+});
+
+test("a local port that answers as a production revision is refused before any load", async () => {
+  // As if `gcloud run services proxy` or `ssh -L` forwarded 127.0.0.1:8080 to production.
+  for (const body of ['{"revision":"diamondecho-api-00028-zin"}', '{"service":"DiamondEcho API","revision":"diamondecho-api-00028-zin","commit":"59f8d46"}']) {
+    const { code, calls, result, lines } = await runMain(["--scenario", "read-routes", "--duration", "1", "--warmup", "0"], {
+      respond: () => ({ status: 200, body, ms: 5 }),
+    });
+    assert.equal(code, 2, body);
+    assert.equal(calls.length, 1, body); // the identity request only
+    assert.equal(calls[0].url, "http://127.0.0.1:8080/api/");
+    assert.equal(result, null);
+    assert.ok(lines.some((line) => /deployed revision "diamondecho-api-00028-zin"/.test(line)), body);
+  }
+});
+
+test("a local port that leads to staging needs the flag and is held to staging ceilings", async () => {
+  const staging = () => ({ status: 200, body: '{"service":"DiamondEcho API","revision":"diamondecho-api-staging-00003-gdl"}', ms: 5 });
+  const without = await runMain(["--scenario", "read-routes"], { respond: staging });
+  assert.equal(without.code, 2);
+  assert.equal(without.calls.length, 1);
+  // With the flag, read-routes (a closed loop with no pause) breaks the staging ceilings.
+  const flagged = await runMain(["--scenario", "read-routes", "--i-have-approval-for-staging"], { respond: staging });
+  assert.equal(flagged.code, 2);
+  assert.equal(flagged.calls.length, 1);
+  assert.ok(flagged.lines.some((line) => /think time/.test(line)));
+});
+
+test("a target that does not answer its identity is refused", async () => {
+  for (const respond of [
+    () => ({ throws: new TypeError("fetch failed") }),
+    () => ({ status: 404, body: "", ms: 1 }),
+    () => ({ status: 200, body: "<html>", ms: 1 }),
+    () => ({ status: 200, body: '{"service":"Something else"}', ms: 1 }),
+  ]) {
+    const { code, calls, result } = await runMain(["--scenario", "read-routes"], { respond });
+    assert.equal(code, 2);
+    assert.equal(calls.length, 1);
+    assert.equal(result, null);
+  }
+});
+
+test("a run that measured nothing does not pass", async () => {
+  const { code, result } = await runMain(["--scenario", "read-routes", "--max-requests", "0"], { respond: okRoutes(5) });
+  assert.equal(code, 1);
+  assert.equal(result.scenarios[0].requests, 0);
+  assert.ok(result.scenarios[0].thresholds.some((item) => item.name === "min_requests" && !item.ok));
 });

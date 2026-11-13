@@ -13,6 +13,8 @@ import {
   STAGING_HOSTS,
   checkRoute,
   checkTarget,
+  identityDecision,
+  verifyIdentity,
   peakRate,
   productionReason,
   requestCeiling,
@@ -21,6 +23,7 @@ import {
 } from "./safety.mjs";
 import { SCENARIOS, STANDARD } from "./scenarios.mjs";
 import { TARGETS } from "../../scripts/sre/targets.mjs";
+import { fakeIo } from "./fake-io.mjs";
 
 const refusedWith = (code) => (error) => error instanceof SafetyError && error.code === code;
 
@@ -290,5 +293,70 @@ test("only the staging scenarios may run on staging", () => {
     const problems = scenarioProblems(scenario, "staging");
     if (scenario.id.startsWith("staging-")) assert.deepEqual(problems, [], scenario.id);
     else assert.ok(problems.length > 0, `${scenario.id} should be refused on staging`);
+  }
+});
+
+const LOCAL = checkTarget("http://127.0.0.1:8080");
+const STAGING = checkTarget("https://diamondecho-api-staging-299705773978.us-east1.run.app", { stagingApproved: true });
+const answer = (body, status = 200) => ({ status, body: typeof body === "string" ? body : JSON.stringify(body) });
+
+test("identity: a forwarded port that answers as production is refused (fake network)", async () => {
+  const io = fakeIo({ respond: () => ({ status: 200, body: '{"revision":"diamondecho-api-00028-zin"}', ms: 30 }) });
+  await assert.rejects(io.drive(verifyIdentity(LOCAL, { io })), refusedWith("production"));
+  await assert.rejects(io.drive(verifyIdentity(LOCAL, { io, stagingApproved: true })), refusedWith("production"));
+  assert.equal(io.calls.length, 2);
+  for (const call of io.calls) {
+    assert.equal(call.url, "http://127.0.0.1:8080/api/");
+    assert.equal(call.method, "GET");
+    assert.equal(call.redirect, "manual");
+  }
+});
+
+test("identity: this machine answers with no revision and stays local", async () => {
+  const io = fakeIo({ respond: () => ({ status: 200, body: '{"service":"DiamondEcho API","revision":null,"commit":null}', ms: 3 }) });
+  assert.deepEqual(await io.drive(verifyIdentity(LOCAL, { io })), { kind: "local", revision: null });
+  // An older build without the revision field is also a local run.
+  assert.deepEqual(identityDecision(LOCAL, answer({ service: "DiamondEcho API" })), { kind: "local", revision: null });
+});
+
+test("identity: any deployed revision that is not staging is refused, wherever it answers", () => {
+  for (const revision of ["diamondecho-api-00028-zin", "candidate", "x", "diamondecho-api-stagingx-1", 42]) {
+    assert.throws(() => identityDecision(LOCAL, answer({ service: "DiamondEcho API", revision }), { stagingApproved: true }), refusedWith("production"), String(revision));
+    assert.throws(() => identityDecision(STAGING, answer({ service: "DiamondEcho API", revision }), { stagingApproved: true }), refusedWith("production"), String(revision));
+  }
+});
+
+test("identity: a staging revision needs the flag, and a local port to staging becomes a staging run", () => {
+  const body = answer({ service: "DiamondEcho API", revision: "diamondecho-api-staging-00003-gdl" });
+  assert.throws(() => identityDecision(LOCAL, body), refusedWith("staging-needs-approval"));
+  assert.deepEqual(identityDecision(LOCAL, body, { stagingApproved: true }), { kind: "staging", revision: "diamondecho-api-staging-00003-gdl" });
+  assert.deepEqual(identityDecision(STAGING, body, { stagingApproved: true }), { kind: "staging", revision: "diamondecho-api-staging-00003-gdl" });
+  // Staging running a build from before the identity field.
+  assert.deepEqual(identityDecision(STAGING, answer({ service: "DiamondEcho API" }), { stagingApproved: true }), { kind: "staging", revision: null });
+});
+
+test("identity: no answer, a wrong status or a body that is not the API is refused", async () => {
+  for (const reply of [{ error: "could not connect" }, answer("", 404), answer("", 302), answer("<html>"), answer("[]"), answer({ service: "Other" }), null]) {
+    assert.throws(() => identityDecision(LOCAL, reply), refusedWith("identity-unknown"), JSON.stringify(reply));
+  }
+  const silent = fakeIo({ respond: () => ({ status: 200, body: "{}", ms: 60_000 }) });
+  await assert.rejects(silent.drive(verifyIdentity(LOCAL, { io: silent })), (error) => refusedWith("identity-unknown")(error) && /timed out/.test(error.message));
+  const down = fakeIo({ respond: () => ({ throws: new TypeError("fetch failed") }) });
+  await assert.rejects(down.drive(verifyIdentity(LOCAL, { io: down })), (error) => /could not connect/.test(error.message));
+});
+
+test("on staging the run plus one request timeout must fit the time ceiling", () => {
+  const closedStaging = { ...base, concurrency: 3, thinkTimeMs: 1000, durationSeconds: 100, timeoutMs: 35000 };
+  assert.ok(scenarioProblems(closedStaging, "staging").some((p) => /request timeout can run past/.test(p)));
+  assert.deepEqual(scenarioProblems({ ...closedStaging, durationSeconds: 60 }, "staging"), []);
+  // Locally the overrun is harmless and not checked.
+  assert.deepEqual(scenarioProblems({ ...base, durationSeconds: 590, timeoutMs: 30000 }, "local"), []);
+});
+
+test("every shipped scenario fails a run that measured nothing", () => {
+  for (const scenario of SCENARIOS) {
+    for (const [kind, limits] of Object.entries(scenario.thresholds ?? {})) {
+      assert.ok(limits.min_requests >= 1, `${scenario.id} ${kind}`);
+    }
   }
 });

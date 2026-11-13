@@ -16,22 +16,37 @@ answers and where it starts to struggle. The results feed
 2. **The default target is this machine** (`http://127.0.0.1:8080`). Any
    address that is neither this machine nor a listed staging address is
    refused.
-3. **Staging only with Gbenga's yes.** The staging API is accepted only over
+3. **The target must say who it is.** A port on this machine can be
+   forwarded to a deployed service (`gcloud run services proxy`, `ssh -L`),
+   so the name alone proves nothing. Before any load the generator sends one
+   `GET /api/` and reads `revision`. This machine answers `null` (no Cloud Run
+   revision). A name starting `diamondecho-api-staging-` is accepted only
+   with the staging flag, and is then held to the staging ceilings even
+   through a local port. Any other revision, no answer, or an answer that is
+   not the DiamondEcho API: refused, nothing more is sent. Limit: a deployed
+   build from before the build identity existed answers without a
+   `revision`, so through a forwarded port it would look local. Until every
+   deployed service publishes its revision, never forward a port to a
+   deployed service on a machine where you run this tool.
+4. **Staging only with Gbenga's yes.** The staging API is accepted only over
    https, only with the flag `--i-have-approval-for-staging` typed on the
    command line, and only under hard ceilings: 5 requests a second, 6 at
-   once, 120 seconds, 600 requests. Only the two `staging-*` scenarios fit
+   once, 120 seconds, 600 requests. The 120 seconds include one request
+   timeout after the planned end, because a request started just before the
+   end may run on that long. A closed loop on staging needs a pause between
+   requests so its rate is bounded. Only the two `staging-*` scenarios fit
    under them. Staging costs money per second of use, so a run is short.
-4. **Never the inquiry route, the paid routes or the market brief.**
+5. **Never the inquiry route, the paid routes or the market brief.**
    `/api/v1/inquiries` (every attempt counts against visitors and reaches the
    staff queue), `/api/v1/properties/*` (RentCast and Mapbox charge per call)
    and `/api/v1/market-brief` (outside sources and paid text-to-speech) are
    refused by name. Only the routes listed in `ALLOWED_ROUTES` in
    `tests/load/safety.mjs` can be requested at all.
-5. **The heavy routes run on this machine only**, at most 9 requests per
+6. **The heavy routes run on this machine only**, at most 9 requests per
    scenario, one at a time. Their own limiter refuses the 11th request in 10
    minutes from one address, so run `heavy-local` at most once per 10
    minutes or the rest are 429s.
-6. **Redirects are never followed**, so a server cannot send the generator
+7. **Redirects are never followed**, so a server cannot send the generator
    somewhere else.
 
 Changing any of these means changing `tests/load/safety.mjs` in a pull
@@ -106,7 +121,7 @@ Two ways of applying load:
 ```json
 { "schema": 1, "tool": "diamondecho-loadgen", "production": false,
   "label": "…", "note": "Measured on …; not a production measurement.",
-  "target": { "origin": "http://127.0.0.1:8080", "kind": "local" },
+  "target": { "origin": "http://127.0.0.1:8080", "kind": "local", "revision": null },
   "started_at": "…", "finished_at": "…", "environment": { "node": "…", "cpus": 4, "cpu_model": "…" },
   "scenarios": [ { "id": "analyze", "requests": 4306, "ok": 4306, "failed": 0, "error_rate": 0,
                    "errors": {}, "throughput_rps": 287.06,
@@ -127,7 +142,9 @@ Two ways of applying load:
   already waiting).
 - **throughput_rps:** successful answers per second over the time load was
   applied. Warm-up requests are sent but not counted.
-- **thresholds:** per scenario, in `tests/load/scenarios.mjs`. Local limits
+- **thresholds:** per scenario, in `tests/load/scenarios.mjs`. Every
+  scenario has `min_requests: 1`, so a run that measured nothing fails
+  instead of passing on empty figures. Local limits
   are set from the 2026-11-13 sandbox measurement with wide headroom (for
   example p95 100 ms where 6.8 ms was measured) because a shared CI runner is
   slower and noisier. They catch a change that makes a route several times

@@ -8,8 +8,15 @@ by load-testing production: that is never done (see
 
 ## In plain words
 
-The public pages are static files served by Cloudflare. They do not run our
-code, so a crowd on the pages costs nothing and does not slow anyone down.
+The public pages are static files served by Cloudflare, and serving them
+costs nothing. **But every page also talks to the API.** The audio brief
+player sits around every page of the site (`BriefAudioProvider` in
+`frontend/src/App.js`). It asks the API for the day's market brief each time
+a visitor opens the site, again every 15 minutes while the page stays open,
+and again each time the visitor comes back to the tab
+(`frontend/src/components/BriefAudio.jsx`, lines 94 to 105). So a crowd on the
+pages is also a crowd on the API: at least one API request per visitor, more
+for visitors who keep the site open or switch tabs.
 
 The API (the service behind Deal Studio, the assistant, the inquiry form and
 the daily market brief) is different. It runs on Google Cloud Run with these
@@ -31,29 +38,55 @@ places, or more requests arriving at once than three places can take.
 
 ## The capacity table
 
-| Question | Answer | Where the figure comes from |
+Each source is labelled: **Measured** (with where), **Documented** (with the
+document), **Code** (read from the repository) or **Estimate** (reasoned from
+the figures beside it, not measured).
+
+| Question | Answer | Kind and source |
 | --- | --- | --- |
-| Simultaneous requests the API can work on | **3** (3 instances x 1 request each). A fourth waits for a free instance. | Production settings, docs/de13-production-setup.md |
-| Everyday calculations per second, one instance | 287 a second at one at a time; 365 a second with 8 waiting. A Deal Studio analysis takes 1.8 to 5.7 ms (median, by strategy) of one CPU. Cloud Run's CPU is slower than the sandbox's: the same simulation took 5.3 s on staging and 3.9 s in the sandbox. | Sandbox measurement, 2026-11-13 (below). Staging figure: docs/pages-cloud-run-firebase-runbook.md, 2026-10-04 |
-| Heavy calculations at once | **3 at most, and then nothing else runs.** One risk simulation (Monte Carlo, a calculation that repeats a deal thousands of times with random changes) can hold an instance for its full 20-second time budget. | Code: `MONTE_CARLO_TIME_BUDGET_SECONDS` default 20. Sandbox: 3 x 5,000 iterations took 18.4 s |
-| Cold-start cost | **7.3 s** on staging for the first request after the service scaled to zero. On this machine the API's own start (Python loading the code) took 0.7 to 0.9 s, so most of the 7.3 s is Google starting the container. Production cold start: not measured (none was seen in today's sample). | Staging, 2026-10-04 (docs/pages-cloud-run-firebase-runbook.md); sandbox, 2026-11-13 |
-| Where rate limiters cut in | Inquiry: 5 per 10 minutes per sender, 30 per hour per instance (90 an hour with 3 instances). Heavy calculations (scenarios, sensitivity, Monte Carlo together): 10 per 10 minutes per sender, 200 per hour per instance. Property lookup: 20 per 10 minutes per sender, 300 per hour per instance. Everything else (analysis, assistant, market brief, health): **no limit of our own**, only the three places. Counts live in each instance's memory and are lost when it stops. | Code: `backend/inquiries/limits.py`, `deal_intelligence/router.py`, `property_data/router.py` |
-| What full looks like | 1. Requests wait in Cloud Run's queue for a free instance: slower answers. 2. If none frees in time, Google refuses the request; its documentation describes this as HTTP 429 "no available instance" (not yet seen on our service). 3. A request over 30 s is cut off (HTTP 504). 4. Our own limiters answer 429 (one sender over its limit) or, on the inquiry route only, 503 "Online requests are busy right now" (the hourly limit). | Cloud Run documentation; code |
-| Signals that show it | Cloud Run metrics: instance count pinned at 3; request latency rising; 429, 503 and 504 counts. Our monitor: `api-latency` SLO (95% of probes under 1,000 ms) burning, `calculators-api-analyze` slow or failing. Logs: `httpRequest.status=429` on paths other than the limited ones (that is Cloud Run, not our limiter). | [api-slow-or-saturated.md](runbooks/api-slow-or-saturated.md) |
-| Headroom for a marketing spike | Every page view calls the API once for the market brief (the player sits on every page), and once more each 15 minutes while a page stays open. Each Deal Studio "Analyze" press is one call; each assistant question is one call. In the sandbox one instance answered 287 analyses a second, so CPU is not the limit for everyday calls. **The real limits are cold starts** (up to 7.3 s for the first visitors while instances start, one at a time up to 3) **and any long request** holding one of the three places. How many visitors a minute production can take has not been measured. The `staging-spike` scenario would measure it, but needs Gbenga's yes. | Frontend code (`BriefAudio.jsx`, `REFRESH_MS` 15 minutes); sandbox measurement |
+| Simultaneous requests the API can work on | **3** (3 instances x 1 request each). A fourth waits for a free instance. | **Documented:** production settings, docs/de13-production-setup.md |
+| Everyday calculations per second, one instance | 287 a second at one at a time; 365 a second with 8 waiting. A Deal Studio analysis takes 1.8 to 5.7 ms (median, by strategy) of one CPU. The same 3 x 1,000-iteration simulation took 5.3 s on staging and 3.9 s in the sandbox, so Cloud Run's CPU is probably about a third slower. | **Measured** in the sandbox, 2026-11-13 (below). **Documented** staging figure: docs/pages-cloud-run-firebase-runbook.md, 2026-10-04. **Estimate:** "about a third slower", from those two figures only |
+| Heavy calculations at once | **3 at most, and then nothing else runs.** One risk simulation (Monte Carlo, a calculation that repeats a deal thousands of times with random changes) can hold an instance for its full 20-second time budget. | **Code:** `MONTE_CARLO_TIME_BUDGET_SECONDS` default 20. **Measured** in the sandbox: 3 x 5,000 iterations took 18.4 s |
+| Cold-start cost | **7.3 s** on staging for the first request after the service scaled to zero. In the sandbox the API's own start (Python loading the code) took 0.7 to 0.9 s, so most of the 7.3 s is probably Google starting the container. Production cold start: not measured (none was seen in today's sample). | **Documented:** staging, 2026-10-04, docs/pages-cloud-run-firebase-runbook.md. **Measured** in the sandbox, 2026-11-13. **Estimate:** "most of it is the container" |
+| Where rate limiters cut in | Inquiry: 5 per 10 minutes per sender, 30 per hour per instance (90 an hour with 3 instances). Heavy calculations (scenarios, sensitivity, Monte Carlo together): 10 per 10 minutes per sender, 200 per hour per instance. Property lookup: 20 per 10 minutes per sender, 300 per hour per instance. Everything else (analysis, assistant, market brief, health): **no limit of our own**, only the three places. Counts live in each instance's memory and are lost when it stops. | **Code:** `backend/inquiries/limits.py`, `deal_intelligence/router.py`, `property_data/router.py` |
+| What full looks like | 1. Requests wait in Cloud Run's queue for a free instance: slower answers. 2. If none frees in time, Google refuses the request; its documentation describes this as HTTP 429 "no available instance" (not yet seen on our service). 3. A request over 30 s is cut off (HTTP 504). 4. Our own limiters answer 429 (one sender over its limit) or, on the inquiry route only, 503 "Online requests are busy right now" (the hourly limit). | **Documented** by Google (Cloud Run documentation; not seen on our service); **Code** for our limiters |
+| Signals that show it | Cloud Run metrics: instance count pinned at 3; request latency rising; 429, 503 and 504 counts. Our monitor: `api-latency` SLO (95% of probes under 1,000 ms) burning, `calculators-api-analyze` slow or failing. Logs: `httpRequest.status=429` on paths other than the limited ones (that is Cloud Run, not our limiter). | **Documented:** [api-slow-or-saturated.md](runbooks/api-slow-or-saturated.md), `scripts/sre/slo.config.mjs` |
+| Headroom for a marketing spike | Every visitor who opens the site calls the API once for the market brief (the player sits on every page), again each 15 minutes while a page stays open, and again each time they come back to the tab. Each Deal Studio "Analyze" press is one call; each assistant question is one call. In the sandbox one instance answered 287 analyses a second, so CPU is probably not the limit for everyday calls. **The likely limits are cold starts** (up to 7.3 s for the first visitors while instances start, one at a time up to 3) **and any long request** holding one of the three places. How many visitors a minute production can take has not been measured. The `staging-spike` scenario would measure it, but needs Gbenga's yes. | **Code:** `BriefAudio.jsx` lines 94 to 105, `REFRESH_MS` 15 minutes. **Measured** in the sandbox. **Estimate:** which limit binds first |
 
 ## What the visitor sees when the API is full
 
-- **Deal Studio** shows "The analysis could not be completed. Review the
-  assumptions and try again." when the API does not answer or answers 429,
-  503 or 504. It does **not** calculate on the device in that case. It does
-  that only when the API answers with an older formula or rejects a new
-  field (read from `frontend/src/pages/InvestmentCalculator.jsx` at commit
-  `672aa79`; not tried in a browser). The request has no time limit of its
-  own, so the visitor waits as long as Cloud Run takes. The mortgage
-  simulator and seller net sheet do not use the API.
-- **The inquiry form** shares the same three places. A refused submission
-  is not stored and the visitor is asked to call or email.
+Read from the code at commit `672aa79`; not tried in a browser.
+
+- **Deal Studio** does **not** calculate on the device when the API is busy
+  or down. It does that only when the API answers with an older formula or
+  rejects a new field (`frontend/src/pages/InvestmentCalculator.jsx`). The
+  message comes from `responseErrorMessage`
+  (`frontend/src/lib/dealValidation.js`, lines 236 to 254):
+  - When Google itself refuses or cuts off the request (its 429, 503 or 504),
+    the browser cannot read the answer, because Google's error carries no
+    CORS header (the permission a browser needs to read another site's
+    answer). The visitor sees: "The analysis service could not be reached,
+    so nothing was calculated. Check your connection and try again." The same
+    text appears when there is no answer at all.
+  - When an answer is readable but carries no message of ours, the visitor
+    sees the browser library's own words, for example "Request failed with
+    status code 503".
+  - "The analysis could not be completed. Review the assumptions and try
+    again." appears only when the error has no text at all.
+  The request has no time limit of its own, so the visitor waits as long as
+  Cloud Run takes. The mortgage simulator and seller net sheet do not use the
+  API.
+- **The inquiry form** shares the same three places, and a refused
+  submission is never stored. What the visitor reads depends on who refused:
+  - Our own limiter (readable answer): "Too many requests were sent from this
+    connection. Please wait a few minutes and try again, or call or email
+    us." (429, one sender), or "Online requests are busy right now. Please
+    try again later, or call or email us." (503, the hourly limit). Only
+    these ask the visitor to call or email.
+  - Google refusing because all instances are busy, or no answer at all: "We
+    could not send your request just now. Nothing was submitted."
+    (`frontend/src/components/InquiryForm.jsx`, lines 104 to 107). It does
+    not suggest calling, so a visitor may simply give up.
 - **The market brief** section stays empty or keeps its last figures; the
   page itself is unaffected.
 - **The assistant** gives an error for that question.
@@ -143,9 +176,18 @@ API start to first answer (process start until `/health` answered): 708,
 
 ### Production, seen from outside, 2026-11-13
 
-A few spaced, read-only requests from the sandbox with curl, at human pace
-(the 01:28 to 01:30 UTC set was taken by the previous session of this role,
-the 17:37 to 17:38 UTC set by this one). The sandbox reaches the internet
+A few spaced requests from the sandbox with curl, at human pace (the 01:28 to
+01:30 UTC set was taken by the previous session of this role, the 17:37 to
+17:38 UTC set by this one).
+
+**A rule was broken here, and it is recorded rather than hidden.** Nine of
+these requests were `POST /api/v1/deals/analyze` sent to production by hand
+(five in the earlier session, four in this one). The role's assignment allowed
+"a handful", but contract rule 1 in `scripts/sre/README.md` allows only GET,
+HEAD and OPTIONS against production. The route stores nothing and has no
+limiter, so no visitor was affected, but future production samples are GET
+only. Server-side timing of the analysis comes from the Cloud Run request
+latency metric (Gbenga's console) instead. The sandbox reaches the internet
 through a proxy, so these times include that detour; they are a sanity check,
 not a monitor.
 
@@ -180,12 +222,26 @@ these.
 
 | # | Option | What it fixes | Cost | Risk |
 | --- | --- | --- | --- | --- |
-| 1 | **Minimum instances 1** (`--min-instances 1`) | The 7.3 s cold start for the first visitor after a quiet spell, while one instance is enough. | One instance kept idle all month: about 2,592,000 seconds x (idle price per vCPU-second x 1 vCPU + idle price per GiB-second x 1 GiB). Check both idle prices; they are lower than the busy prices. | Low. Reversible in one command. Does not help when the 2nd and 3rd instances start. |
-| 2 | **Startup CPU boost** (`--cpu-boost`) | Shortens cold starts by giving extra CPU while an instance starts. How much shorter: not measured; measure on staging. | Extra CPU billed only during startup. | Low. |
-| 3 | **More instances** (for example `--max-instances 5`) | More requests at once: 5 places instead of 3. | Nothing while unused; more under a flood. | Medium. The in-memory limits are per instance, so the inquiry ceiling rises to 30 an hour per instance and an abuser can spend more. `limits.py` asks to keep the maximum small. |
-| 4 | **Concurrency above 1** (for example 4) | Requests that mostly wait on other services (market brief, podcast list, property lookup, inquiry save) stop holding a whole instance each. | None directly. | Medium to high. Gives nothing for calculations (one Python worker). First make `analyze` and `chat` plain `def` routes, then load-test on staging. A Monte Carlo would finish fewer iterations in its 20 seconds. |
-| 5 | **Cache at the edge** (serve the API at an address behind Cloudflare, for example `api.diamondecho.com`) | The market brief and its audio already say "keep for 10 minutes / 1 hour / 1 day", but no shared cache honours that today, so every visitor's browser asks the API. Behind Cloudflare most of those calls would never reach Cloud Run, and Cloudflare's rate limiting becomes available. | Cloudflare Free plan: no charge. Engineering and configuration time. | Medium. A DNS change on the zone that also carries the company email, and CORS and staff-site settings change with the address. |
-| 6 | **Tighter heavy-route limits** (for example 3 per 10 minutes per sender, an engineering change) | Shrinks the window in which one sender can fill the API with 20-second simulations. The website does not call these routes. | None. | Low. A script that uses the routes legitimately (none known) is refused sooner. |
+| 1 | **Minimum instances 1** (service-level `--min 1`) | The 7.3 s cold start for the first visitor after a quiet spell, while one instance is enough. | **Estimate (formula, prices not checked):** one instance kept idle all month, about 2,592,000 seconds x (idle price per vCPU-second x 1 vCPU + idle price per GiB-second x 1 GiB). Check both idle prices; Google lists them lower than the busy prices. | Low. Reversible in one command. Does not help when the 2nd and 3rd instances start. |
+| 2 | **Startup CPU boost** (`--cpu-boost`) | Shortens cold starts by giving extra CPU while an instance starts. How much shorter: not measured; measure on staging. | **Documented** by Google: extra CPU billed only during startup. Amount not estimated. | Low. Makes a new revision: see the note under this table. |
+| 3 | **More instances** (service-level `--max 5`) | More requests at once: 5 places instead of 3. | **Estimate:** nothing while unused (request-based billing); more under a flood, bounded by the $25 budget alert's warning, not by a cap. | Medium. The in-memory limits are per instance, so the inquiry ceiling rises to 30 an hour per instance and an abuser can spend more. `limits.py` asks to keep the maximum small. |
+| 4 | **Concurrency above 1** (for example 4) | Requests that mostly wait on other services (market brief, podcast list, property lookup, inquiry save) stop holding a whole instance each. | **Estimate:** none directly; engineering time for the code change and a staging run. | Medium to high. Makes a new revision. Gives nothing for calculations (one Python worker). First make `analyze` and `chat` plain `def` routes, then load-test on staging. A Monte Carlo would finish fewer iterations in its 20 seconds. |
+| 5 | **Cache at the edge** (serve the API at an address behind Cloudflare, for example `api.diamondecho.com`) | The market brief and its audio already say "keep for 10 minutes / 1 hour / 1 day", but no shared cache honours that today, so every visitor's browser asks the API. Behind Cloudflare most of those calls would never reach Cloud Run, and Cloudflare's rate limiting becomes available. | **Documented:** the Cloudflare Free plan the zone already uses costs nothing. **Estimate:** engineering and configuration time. | Medium. A DNS change on the zone that also carries the company email, and CORS and staff-site settings change with the address. |
+| 6 | **Tighter heavy-route limits** (for example 3 per 10 minutes per sender, an engineering change) | Shrinks the window in which one sender can fill the API with 20-second simulations. The website does not call these routes. | **Estimate:** none beyond a normal deploy. | Low. A script that uses the routes legitimately (none known) is refused sooner. |
+
+**Changing a setting can make a new revision.** Revision-level flags
+(`--min-instances`, `--max-instances`, `--cpu-boost`, `--concurrency`,
+`--update-env-vars`) build a new revision from the service's template. After a
+rollback the service is pinned to a named revision: the new one gets no
+traffic, and a later `--to-latest` would serve whatever image the template
+holds, possibly the bad one. Google documents service-level `--min` and
+`--max` on `gcloud run services update` that apply without a new revision;
+they have not been tried on this project, and whether a service-level maximum
+above the revision's own maximum (3) takes effect is not confirmed. So before
+any change: run `bash scripts/sre/cloudrun/status.sh`, and if the service is
+pinned, follow "After a rollback" in [release-safety.md](release-safety.md).
+The runbook [api-slow-or-saturated.md](runbooks/api-slow-or-saturated.md)
+has the exact steps.
 
 Recommendation for Gbenga to weigh, not a decision: options 1 and 6 cost
 least for the most visible gain. Option 4 should wait for the code change and
