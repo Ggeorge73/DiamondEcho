@@ -15,6 +15,7 @@ from market_brief.router import router as market_brief_router
 from podcast.router import router as podcast_router
 from inquiries.router import router as inquiries_router, require_staff, require_store
 from inquiries.firebase import queue_settings
+from deadlines import FIRESTORE_RETRY
 
 load_dotenv(Path(__file__).parent / ".env")
 
@@ -79,7 +80,8 @@ class StatusCheckCreate(BaseModel):
 def create_status_check(value: StatusCheckCreate, account=Depends(require_staff), store=Depends(require_store)):
     check = StatusCheck(client_name=value.client_name)
     try:
-        store.db.collection("status_checks").document(check.id).create(check.model_dump(mode="json"), timeout=5)
+        document = store.db.collection("status_checks").document(check.id)
+        document.create(check.model_dump(mode="json"), retry=FIRESTORE_RETRY, timeout=5)
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Status storage unavailable.") from exc
     return check
@@ -87,7 +89,8 @@ def create_status_check(value: StatusCheckCreate, account=Depends(require_staff)
 @api.get("/status", response_model=list[StatusCheck])
 def get_status_checks(account=Depends(require_staff), store=Depends(require_store)):
     try:
-        return [StatusCheck(**row.to_dict()) for row in store.db.collection("status_checks").limit(100).stream(timeout=5)]
+        rows = store.db.collection("status_checks").limit(100).stream(retry=FIRESTORE_RETRY, timeout=5)
+        return [StatusCheck(**row.to_dict()) for row in rows]
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Status storage unavailable.") from exc
 

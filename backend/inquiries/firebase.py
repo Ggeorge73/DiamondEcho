@@ -1,12 +1,14 @@
 """Firebase Admin uses Cloud Run ADC, never client-supplied credentials."""
 import os
 import re
+from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 from threading import Lock
 from urllib.parse import urlparse
 import firebase_admin
 from firebase_admin import auth, firestore
 from google.api_core.exceptions import AlreadyExists
+from deadlines import FIRESTORE_RETRY, IDENTITY_HTTP_SECONDS
 from .service import QueueUnavailable, StaffUnauthorized, StaffForbidden
 
 def queue_settings():
@@ -37,7 +39,9 @@ def firebase_app(project):
         try:
             return firebase_admin.get_app("diamondecho-" + project)
         except ValueError:
-            return firebase_admin.initialize_app(options={"projectId": project}, name="diamondecho-" + project)
+            # httpTimeout bounds the staff sign-in check; the SDK's default is 120 s.
+            return firebase_admin.initialize_app(options={"projectId": project, "httpTimeout": IDENTITY_HTTP_SECONDS},
+                                                 name="diamondecho-" + project)
 
 def verify_staff(authorization, verifier=None):
     project, allowed, _, _ = queue_settings()
@@ -57,6 +61,10 @@ def verify_staff(authorization, verifier=None):
         raise StaffForbidden()
     return decoded["uid"]
 
+# A staff acknowledgement is waited for this long at most (see acknowledge).
+ACKNOWLEDGE_SECONDS = 10
+_acknowledgements = ThreadPoolExecutor(max_workers=2, thread_name_prefix="inquiry-acknowledge")
+
 class FirestoreInquiryStore:
     def __init__(self, db):
         self.db = db
@@ -65,25 +73,25 @@ class FirestoreInquiryStore:
     def create_once(self, request_id, document):
         reference = self.collection.document(request_id)
         try:
-            result = reference.create(document, timeout=5)
+            result = reference.create(document, retry=FIRESTORE_RETRY, timeout=5)
             if result is None or result.update_time is None:
                 raise RuntimeError("No confirmed Firestore write")
             return document, False
         except AlreadyExists:
-            snapshot = reference.get(timeout=5)
+            snapshot = reference.get(retry=FIRESTORE_RETRY, timeout=5)
             if not snapshot.exists:
                 raise RuntimeError("Replay record unavailable")
             return snapshot.to_dict(), True
 
     def list_newest(self, limit):
         query = self.collection.order_by("submitted_at", direction=firestore.Query.DESCENDING).limit(limit)
-        return [snapshot.to_dict() for snapshot in query.stream(timeout=5)]
+        return [snapshot.to_dict() for snapshot in query.stream(retry=FIRESTORE_RETRY, timeout=5)]
 
     def acknowledge(self, request_id, account, timestamp):
         reference = self.collection.document(request_id)
         @firestore.transactional
         def update(transaction):
-            snapshot = reference.get(transaction=transaction, timeout=5)
+            snapshot = reference.get(transaction=transaction, retry=FIRESTORE_RETRY, timeout=5)
             if not snapshot.exists:
                 return None
             document = snapshot.to_dict()
@@ -92,7 +100,15 @@ class FirestoreInquiryStore:
                 transaction.update(reference, changes)
                 document.update(changes)
             return document
-        return update(self.db.transaction(max_attempts=5))
+        # The transaction's own begin and commit calls take no retry= (60 s each
+        # by default), so the whole of it is waited for ACKNOWLEDGE_SECONDS at
+        # most. One still running then may yet apply, which the staff member's
+        # "not confirmed" answer allows for: acknowledging again changes nothing.
+        job = _acknowledgements.submit(update, self.db.transaction(max_attempts=5))
+        try:
+            return job.result(timeout=ACKNOWLEDGE_SECONDS)
+        finally:
+            job.cancel()  # does nothing once it has started; drops one queued behind a stuck one
 
 @lru_cache(maxsize=4)
 def _store(project):

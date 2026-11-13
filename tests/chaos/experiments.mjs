@@ -75,24 +75,21 @@ const detailOf = (answer) => { try { return JSON.parse(answer.text).detail; } ca
 const leaks = (answer) => LEAKS.filter((needle) => answer.text.includes(needle));
 const short = (answer) => (answer.status === null ? `no answer (${answer.error}) after ${answer.ms} ms` : `${answer.status} in ${answer.ms} ms`);
 
-// Weaknesses already written down, which make a route hang when its
-// dependency hangs. Named in the results; see docs/sre/chaos-and-game-days.md.
-const STAFF_SIGN_IN = "staff-sign-in-no-deadline: backend/inquiries/firebase.py:40 starts Firebase without httpTimeout, so the staff sign-in check waits up to 120 s";
-const FIRESTORE_RETRY = "firestore-retry: Firestore calls pass timeout=5 or 10 per attempt but keep the client's default retry: against an unreachable database a read took 293 s and a write 57 s before giving up (market_brief/service.py:99, podcast/service.py:79 and :86, inquiries/firebase.py:73 and :80, server.py:90; writes at inquiries/firebase.py:68 and the other create/set/update calls)";
-
 // The routes that need a dependency, with the answer each documents for an
-// outage, and the known weakness that makes it slow when the dependency
-// hangs or refuses at call time.
+// outage. A route a written-down weakness still makes slow when its
+// dependency hangs or refuses at call time names it under `hang` or `refuse`
+// (none today: W1 and W2 in docs/sre/chaos-and-game-days.md were fixed on
+// 2026-11-13).
 function dependentRoutes(token) {
   const staff = { authorization: `Bearer ${token}` };
   return [
-    { name: "inquiry submit", method: "POST", path: "/api/v1/inquiries", json: SYNTHETIC_VISITOR, headers: { "x-idempotency-key": uuid() }, status: [503], refuse: FIRESTORE_RETRY },
-    { name: "staff inquiry list", path: "/api/v1/inquiries/staff", headers: staff, status: [503], hang: STAFF_SIGN_IN },
-    { name: "staff status list", path: "/api/status", headers: staff, status: [503], hang: STAFF_SIGN_IN },
-    { name: "market brief", path: "/api/v1/market-brief", status: [503], hang: FIRESTORE_RETRY, refuse: FIRESTORE_RETRY },
-    { name: "market brief audio", path: "/api/v1/market-brief/audio/2026-10-09.mp3", status: [503], hang: FIRESTORE_RETRY, refuse: FIRESTORE_RETRY },
-    { name: "podcast episodes", path: "/api/v1/podcast/episodes", status: [503], hang: FIRESTORE_RETRY, refuse: FIRESTORE_RETRY },
-    { name: "staff podcast episodes", path: "/api/v1/podcast/staff/episodes", headers: staff, status: [503], hang: STAFF_SIGN_IN },
+    { name: "inquiry submit", method: "POST", path: "/api/v1/inquiries", json: SYNTHETIC_VISITOR, headers: { "x-idempotency-key": uuid() }, status: [503] },
+    { name: "staff inquiry list", path: "/api/v1/inquiries/staff", headers: staff, status: [503] },
+    { name: "staff status list", path: "/api/status", headers: staff, status: [503] },
+    { name: "market brief", path: "/api/v1/market-brief", status: [503] },
+    { name: "market brief audio", path: "/api/v1/market-brief/audio/2026-10-09.mp3", status: [503] },
+    { name: "podcast episodes", path: "/api/v1/podcast/episodes", status: [503] },
+    { name: "staff podcast episodes", path: "/api/v1/podcast/staff/episodes", headers: staff, status: [503] },
     { name: "property lookup", path: "/api/v1/properties/lookup?address=1+Main+St+Atlanta+GA", status: [502] },
     { name: "address suggestions", path: `/api/v1/properties/suggest?q=1+Main&session_token=${uuid()}`, status: [502] },
   ];

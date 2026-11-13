@@ -20,6 +20,7 @@ from __future__ import annotations
 import csv
 import io
 import logging
+import time
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -28,7 +29,10 @@ from datetime import date, datetime
 log = logging.getLogger(__name__)
 
 USER_AGENT = "DiamondEcho-market-brief/1.0 (+https://diamondecho.com)"
-TIMEOUT_SECONDS = 8
+TIMEOUT_SECONDS = 8  # one read
+# All sources together. They are read at once, but the mortgage rates can take
+# three reads one after another (FRED twice, then Freddie Mac's own file).
+COLLECT_SECONDS = 10
 MAX_BYTES = 4_000_000
 
 PMMS_URL = "https://www.freddiemac.com/pmms/docs/PMMS_history.csv"
@@ -229,17 +233,24 @@ DISABLED_SOURCES = (
 )
 
 
-def collect(fetch=fetch_text) -> tuple[list[Figure], list[dict]]:
-    """Read every source at once. Returns the figures and what could not be read."""
+def collect(fetch=fetch_text, within=COLLECT_SECONDS) -> tuple[list[Figure], list[dict]]:
+    """Read every source at once, for `within` seconds at most. Returns the
+    figures and what could not be read. A source still being read when the time
+    is up is reported as not read (TimeoutError); its read ends on its own
+    timeout, in the background."""
     jobs = [("Freddie Mac mortgage rates", lambda: mortgage_rates(fetch))]
     jobs += [(f"{s.publisher} {s.label} ({s.series})", (lambda s=s: [fred_figure(s, fetch)]))
              for s in FRED_SERIES]
     figures, problems = [], []
-    with ThreadPoolExecutor(max_workers=len(jobs)) as pool:
+    deadline = time.monotonic() + within
+    pool = ThreadPoolExecutor(max_workers=len(jobs))
+    try:
         results = [(name, pool.submit(job)) for name, job in jobs]
         for name, future in results:
             try:
-                figures.extend(future.result())
-            except Exception as exc:  # one bad source never stops the rest
+                figures.extend(future.result(timeout=max(0.0, deadline - time.monotonic())))
+            except Exception as exc:  # one bad or slow source never stops the rest
                 problems.append({"source": name, "reason": type(exc).__name__})
+    finally:
+        pool.shutdown(wait=False)  # not waiting for a source that is still being read
     return figures, problems

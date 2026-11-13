@@ -15,6 +15,8 @@ import re
 import uuid
 from datetime import datetime, timezone
 
+from deadlines import FIRESTORE_RETRY, STORAGE_SECONDS
+
 COLLECTION = "podcast_episodes"
 MAX_BYTES = 300 * 1024 * 1024  # about five hours of speech at 128 kbps
 TYPES = {"audio/mpeg": ".mp3", "audio/mp4": ".m4a", "audio/x-m4a": ".m4a"}
@@ -51,20 +53,24 @@ def now() -> str:
 
 class GcsStorage:
     def __init__(self, bucket: str, client=None):
+        from google.cloud.storage.retry import DEFAULT_RETRY
         if client is None:
             from google.cloud import storage
             client = storage.Client()
         self.name = bucket
         self.bucket = client.bucket(bucket)
+        # The SDK's own default is 60 s a try, retried for up to 120 s.
+        self.deadline = {"timeout": STORAGE_SECONDS, "retry": DEFAULT_RETRY.with_timeout(STORAGE_SECONDS)}
 
     def start_upload(self, obj: str, content_type: str, size: int, origin: str) -> str:
         blob = self.bucket.blob(obj)
         blob.cache_control = "public, max-age=86400"
         # The session allows browser requests from the staff site's origin only.
-        return blob.create_resumable_upload_session(content_type=content_type, size=size, origin=origin)
+        return blob.create_resumable_upload_session(content_type=content_type, size=size, origin=origin,
+                                                    **self.deadline)
 
     def size_of(self, obj: str) -> int | None:
-        blob = self.bucket.get_blob(obj)
+        blob = self.bucket.get_blob(obj, **self.deadline)
         return blob.size if blob is not None else None
 
 
@@ -73,17 +79,18 @@ class FirestoreEpisodes:
         self.collection = db.collection(COLLECTION)
 
     def create(self, episode_id: str, data: dict) -> None:
-        self.collection.document(episode_id).create(data, timeout=5)
+        self.collection.document(episode_id).create(data, retry=FIRESTORE_RETRY, timeout=5)
 
     def get(self, episode_id: str) -> dict | None:
-        snapshot = self.collection.document(episode_id).get(timeout=5)
+        snapshot = self.collection.document(episode_id).get(retry=FIRESTORE_RETRY, timeout=5)
         return snapshot.to_dict() if snapshot.exists else None
 
     def update(self, episode_id: str, changes: dict) -> None:
-        self.collection.document(episode_id).update(changes, timeout=5)
+        self.collection.document(episode_id).update(changes, retry=FIRESTORE_RETRY, timeout=5)
 
     def all(self) -> list[dict]:
-        return [row.to_dict() for row in self.collection.limit(LIST_LIMIT).stream(timeout=10)]
+        rows = self.collection.limit(LIST_LIMIT).stream(retry=FIRESTORE_RETRY, timeout=10)
+        return [row.to_dict() for row in rows]
 
 
 class PodcastService:
