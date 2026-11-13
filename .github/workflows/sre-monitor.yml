@@ -10,7 +10,12 @@ name: SRE monitor
 # It only reads the live site. It never submits a form, never calls the paid
 # property routes, and changes nothing in production unless Gbenga has switched
 # automatic rollback on (repository variable SRE_AUTOREMEDIATE = enabled, plus
-# the Google Cloud sign-in described in docs/sre/auto-remediation.md).
+# the Google Cloud sign-in described in docs/sre/auto-remediation.md). Once the
+# read-only sign-in exists (phase 1) the job signs in on every run from main, so
+# the rollback engine's dry runs see the real Cloud Run revisions.
+#
+# This repository is public: run logs and summaries can be read by anyone, so
+# nothing here prints a secret, a token or visitor data.
 #
 # The contract between the steps is scripts/sre/README.md.
 on:
@@ -90,11 +95,13 @@ jobs:
       contents: write # the sre-status branch only (scripts/sre/state-git.sh never touches main)
       issues: write # sre-incident issues
       id-token: write # Google Cloud sign-in, used only when automatic rollback is switched on
-    env:
-      GH_TOKEN: ${{ github.token }}
-      GITHUB_TOKEN: ${{ github.token }}
     steps:
+      # No stored credentials: only the steps that write the status branch or
+      # open issues are given the repository token (state-git.sh passes it to
+      # git without writing it anywhere).
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v7
         with:
           node-version: 22
@@ -123,6 +130,8 @@ jobs:
         run: node scripts/sre/synthetic-checks.mjs --suite "$SUITE" --out "$RUN_FILE"
 
       - name: Open the status branch
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: bash scripts/sre/state-git.sh checkout "$STATE_DIR"
 
       - name: File the result
@@ -133,6 +142,7 @@ jobs:
 
       - name: Open, update or close incidents
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           SRE_ALERT_WEBHOOK_URL: ${{ secrets.SRE_ALERT_WEBHOOK_URL }}
           SRE_OWNER: ${{ vars.SRE_OWNER }}
         run: node scripts/sre/alert.mjs --run "$RUN_FILE" --state-dir "$STATE_DIR" --slo "$STATE_DIR/slo.json" --out "$RUNNER_TEMP/actions.json" --apply
@@ -144,13 +154,13 @@ jobs:
       # dry runs read the real Cloud Run revisions too.
       - name: Sign in to Google Cloud (only once the sign-in is set up)
         if: vars.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && github.ref == 'refs/heads/main'
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2.1.13
         with:
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ vars.GCP_SRE_SERVICE_ACCOUNT }}
       - name: Set up gcloud (only once the sign-in is set up)
         if: vars.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && github.ref == 'refs/heads/main'
-        uses: google-github-actions/setup-gcloud@v2
+        uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f # v2.2.1
 
       - name: Decide on an automatic fix
         env:
@@ -173,6 +183,7 @@ jobs:
       - name: Save the state
         if: always()
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           SUITE: ${{ steps.suite.outputs.suite }}
         run: |
           if [ -d "$STATE_DIR/.git" ]; then
