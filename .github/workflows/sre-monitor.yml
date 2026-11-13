@@ -83,7 +83,14 @@ jobs:
 
   monitor:
     name: Check the site and file the result
-    if: github.event_name != 'pull_request' && github.repository == 'Ggeorge73/DiamondEcho'
+    # Scheduled runs start only once Gbenga has set the repository variable
+    # SRE_MONITOR to "enabled", after adding the Cloudflare rule that lets the
+    # monitor through (docs/sre/needs-from-gbenga.md 1.1). Without that rule
+    # Cloudflare refuses every page to the monitor, and the monitor would
+    # report false outages every five minutes. A run started by hand always runs.
+    if: >-
+      github.event_name != 'pull_request' && github.repository == 'Ggeorge73/DiamondEcho' &&
+      (github.event_name == 'workflow_dispatch' || vars.SRE_MONITOR == 'enabled')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # One writer of the sre-status branch at a time. Shared with the weekly
