@@ -1,7 +1,10 @@
 // The public website: every page a visitor can land on, the "Page not found"
 // answer, the www redirect, and the script and stylesheet the home page needs.
-// All of it is GET, one request each, in order.
+// All of it is GET, one request each, in order. First of all, one question to
+// the wider internet (outside-dns-probe), so a run can tell "the monitor is
+// blind" from "the site is down".
 import { request, toCheck, notRun, firstProblem, expectStatus, expectType, expectBody, jsonOrNull, cloudflareRefused } from "../lib/http.mjs";
+import { makeCheck } from "../lib/schema.mjs";
 
 export const suites = ["fast", "post-deploy"];
 
@@ -77,6 +80,66 @@ async function builtFrom(ctx) {
   return typeof commit === "string" && /^[0-9a-f]{7,40}$/.test(commit) ? { commit } : {};
 }
 
+// ---- The monitor's own network ---------------------------------------------
+// Every other fast check looks at our own hosts, so when the runner's network
+// fails, every one of them fails too and the run looks like a site outage.
+// This check asks one question of the wider internet instead: a DNS-over-HTTPS
+// lookup of a name that is not ours (example.com, which the internet standards
+// reserve for examples). If it fails in the same run as the site checks, the
+// monitor is blind, not the site down; the alert engine reads this id as an
+// outside check. It is run first, so a dead network cannot use up the
+// module's time on our pages before this question is asked.
+//
+// Two resolvers run by two companies, so one resolver's bad day is not taken
+// for the runner's. These addresses are not ours and not in targets.mjs on
+// purpose: they are the outside world this check is about.
+export const OUTSIDE_NAME = "example.com";
+export const OUTSIDE_RESOLVERS = Object.freeze([
+  Object.freeze({ name: "Google's resolver", url: "https://dns.google/resolve" }),
+  Object.freeze({ name: "Cloudflare's resolver", url: "https://cloudflare-dns.com/dns-query" }),
+]);
+const OUTSIDE_TIMEOUT_MS = 3_000;
+const DNS_A = 1;
+
+// "" when a resolver gave a real answer with at least one address.
+export function dnsAnswerProblem(body) {
+  if (!body || !Number.isInteger(body.Status)) return "did not answer in DNS JSON";
+  if (body.Status !== 0) return `answered DNS status ${body.Status}`;
+  const addresses = Array.isArray(body.Answer) ? body.Answer.filter((answer) => answer?.type === DNS_A) : [];
+  return addresses.length ? "" : "gave no address";
+}
+
+export async function outsideDnsProbe(ctx) {
+  const base = { id: "outside-dns-probe", name: "Monitor can reach the internet", component: "dns", severity: "sev4", slis: [] };
+  const misses = [];
+  let attempts = 0;
+  let last = null;
+  for (const resolver of OUTSIDE_RESOLVERS) {
+    // retries: 1 is lib/http.mjs's "nothing answered" rule, kept short: a
+    // wrong answer is not asked again.
+    last = await request(ctx, `${resolver.url}?name=${OUTSIDE_NAME}&type=A`, {
+      headers: { Accept: "application/dns-json" }, timeoutMs: OUTSIDE_TIMEOUT_MS, retries: 1, maxBodyBytes: 16 * 1024,
+    });
+    attempts += Math.max(1, last.attempts);
+    // Plain words, not firstProblem(): its texts are about our own site (a 403
+    // from Cloudflare's resolver is not Cloudflare refusing diamondecho.com).
+    const problem = last.notTried ? "not tried: the module's time ran out"
+      : !last.answered ? `no answer: ${last.error}`
+        : last.status !== 200 ? `answered ${last.status}`
+          : dnsAnswerProblem(jsonOrNull(last.body));
+    if (!problem) {
+      const detail = misses.length ? `${misses.join(" ")} ${resolver.name} did.` : "";
+      return makeCheck({ ...base, ok: true, status: last.status, latency_ms: last.latency_ms, attempts, detail });
+    }
+    misses.push(`${resolver.name} did not answer properly (${problem}).`);
+  }
+  return makeCheck({
+    ...base, ok: false, status: last.status, latency_ms: last.latency_ms, attempts,
+    // The conclusion first: a long reason can be cut at 300 characters.
+    detail: `Neither outside resolver answered: if our own checks failed in this run, the monitor's network is the likely cause, not the site. ${misses.join(" ")}`,
+  });
+}
+
 async function checkAsset(ctx, base, path, types, missing) {
   if (!path) return notRun(base, missing);
   // The headers are enough to know the file is there and is what it says it
@@ -87,7 +150,7 @@ async function checkAsset(ctx, base, path, types, missing) {
 
 export async function run(ctx) {
   const { publicOrigin, wwwOrigin } = ctx.targets;
-  const checks = [];
+  const checks = [await outsideDnsProbe(ctx)];
 
   const [homePage, ...otherPages] = pagesFor("pages");
   const home = await checkPage(ctx, homePage);

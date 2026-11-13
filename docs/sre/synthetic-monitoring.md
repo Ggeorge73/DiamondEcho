@@ -53,6 +53,7 @@ counts toward (an *SLI* is a measured share of good answers; see
 
 | Id | Name | Component | Severity | What passes |
 | --- | --- | --- | --- | --- |
+| `outside-dns-probe` | Monitor can reach the internet | dns | sev4 | Run first. One DNS-over-HTTPS lookup of `example.com` (a name that is not ours) at Google's resolver, or Cloudflare's if Google's does not answer properly, comes back with an address. See "Telling a blind monitor from a down site" below |
 | `public-home` | Home page | public-site | sev1 | 200, HTML, the page's own canonical address and a heading (the empty app shell has neither). Reports the commit the site was built from when `/version.json` says |
 | `public-page-agents`, `-about` | Advisory, About pages | public-site | sev2 | as above |
 | `public-page-podcast`, `-privacy`, `-terms` | Podcast, Privacy, Terms pages | public-site | sev3 | as above |
@@ -82,10 +83,29 @@ again as a calculator outage; the calculator pages themselves still load);
 staff checks toward
 `staff-availability`. The CORS, not-found and redirect checks feed no SLO.
 
-A fast run makes about 25 requests, one at a time with a pause between them:
-16 to the public site, 1 to the staff site and 8 to the API. Only one is a
-POST (the reference calculation). Over a day that is about 2,300 API
-requests, if GitHub runs every scheduled time.
+A fast run makes about 26 requests, one at a time with a pause between them:
+1 to an outside DNS resolver, 16 to the public site, 1 to the staff site and
+8 to the API. Only one is a POST (the reference calculation). Over a day that
+is about 2,300 API requests, if GitHub runs every scheduled time.
+
+### Telling a blind monitor from a down site
+
+Every other fast check looks at our own hosts. When the GitHub runner's own
+network fails, they all fail together, and without something to compare
+with, that run would look like a site outage and page as a sev1.
+`outside-dns-probe` is that comparison: one question to the wider internet,
+asked before our pages so a dead network cannot use up the module's time
+first. It asks about `example.com`, a name reserved for examples, through
+DNS-over-HTTPS (a DNS lookup sent as an ordinary HTTPS request), with a
+3-second limit and one more try only when nothing answered, then the same at
+the second resolver. It never sends anything to our hosts.
+
+It is sev4 and feeds no SLO: on its own it is a notice. Its use is to the
+alert engine, which treats it as an outside check: when it fails in the same
+run as our own checks, the run is read as "monitor blind", not as an outage
+(see [alerting.md](alerting.md)). Its detail starts with that conclusion.
+It runs in the fast and post-deploy suites; the slow suite's own DNS checks
+(`checks/dns.mjs`) ask the same resolvers about our domain.
 
 ### Slow suite: hourly
 

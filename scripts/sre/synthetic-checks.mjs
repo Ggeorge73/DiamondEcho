@@ -49,13 +49,15 @@ const MODULE_INFO = Object.freeze({
 // under its own id and severity. So the first checks of a module (the home
 // page comes first) are always measured and keep their severity.
 //
-// The slowest case is the pages module against a site that swallows every
-// connection: the home page takes three 10 s attempts plus 2 s of waiting
-// (32 s); the public host is then "quiet", so five pages and the not-found
-// check get one 5 s attempt each (30 s); www is another host and takes 32 s
-// again. About 94 s, so the www check is the one cut short at 90 s. The
-// grace is how long a module may take after its deadline to hand in those
-// checks before the runner gives up on it.
+// The slowest case is the pages module when nothing answers at all: the
+// outside DNS probe goes first, two resolvers at up to 3 s + 0.5 s + 3 s each
+// (about 13 s); the home page then takes three 10 s attempts plus 2 s of
+// waiting (32 s, done by about 45 s); the public host is then "quiet", so
+// five pages and the not-found check get one 5 s attempt each (30 s); www is
+// another host and takes 32 s again. About 107 s, so the last checks (www,
+// and not-found if the probe used all its time) are cut short at 90 s; the
+// home page is always measured. The grace is how long a module may take
+// after its deadline to hand in its checks before the runner gives up on it.
 export const MODULE_TIME_LIMIT_MS = 90_000;
 export const MODULE_GRACE_MS = 5_000;
 export const RUN_TIME_LIMIT_MS = 420_000;

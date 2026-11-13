@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { PAGES, UNKNOWN_PATH, homeAssets, hasCanonical, run, suites } from "./pages.mjs";
+import { PAGES, UNKNOWN_PATH, homeAssets, hasCanonical, run, suites, outsideDnsProbe, dnsAnswerProblem, OUTSIDE_RESOLVERS, OUTSIDE_NAME } from "./pages.mjs";
 import { TARGETS } from "../targets.mjs";
 
 const T = TARGETS.production;
@@ -16,6 +16,8 @@ const savedPage = (path, extra = "") =>
   + `<body><h1>A heading</h1>${extra}</body></html>`;
 
 const html = { "content-type": "text/html; charset=utf-8" };
+const DNS_OK = JSON.stringify({ Status: 0, Answer: [{ name: "example.com.", type: 1, TTL: 300, data: "93.184.215.14" }] });
+const [GOOGLE, CLOUDFLARE] = OUTSIDE_RESOLVERS.map((resolver) => `${resolver.url}?name=${OUTSIDE_NAME}&type=A`);
 
 // The live site as it should be, with any answer replaced through `over`
 // (keyed by URL, or "METHOD URL"). An unknown URL fails like a missing host.
@@ -27,6 +29,7 @@ function site(over = {}) {
   routes[`${T.wwwOrigin}/about`] = { status: 301, headers: { location: `${T.publicOrigin}/about` } };
   routes[`${T.publicOrigin}/assets/index-Ab12.js`] = { status: 200, headers: { "content-type": "application/javascript" }, body: "export{}" };
   routes[`${T.publicOrigin}/assets/index-Cd34.css`] = { status: 200, headers: { "content-type": "text/css" }, body: "a{}" };
+  for (const resolver of OUTSIDE_RESOLVERS) routes[`${resolver.url}?name=${OUTSIDE_NAME}&type=A`] = { status: 200, headers: { "content-type": "application/dns-json" }, body: DNS_OK };
   Object.assign(routes, over);
   const calls = [];
   const fetch = async (url, init = {}) => {
@@ -65,7 +68,7 @@ test("a healthy site passes every check, with GET only, and the home page report
   const { fetch, calls } = site();
   const checks = await run(ctx(fetch));
   assert.deepEqual(checks.map((check) => check.id), [
-    "public-home", "public-page-agents", "public-page-about", "public-page-podcast", "public-page-privacy", "public-page-terms",
+    "outside-dns-probe", "public-home", "public-page-agents", "public-page-about", "public-page-podcast", "public-page-privacy", "public-page-terms",
     "public-not-found", "public-www-redirect", "public-asset-js", "public-asset-css",
   ]);
   for (const check of checks) assert.equal(check.ok, true, `${check.id}: ${check.detail}`);
@@ -150,7 +153,7 @@ test("a page that times out fails with the reason; the other pages are still che
 test("a site that does not answer at all fails every check without throwing", async () => {
   const refused = async () => { throw Object.assign(new TypeError("fetch failed"), { cause: { code: "ECONNREFUSED" } }); };
   const checks = await run(ctx(refused));
-  assert.equal(checks.length, 10);
+  assert.equal(checks.length, 11);
   assert.ok(checks.every((check) => check.ok === false));
   assert.match(checks[0].detail, /connection was refused/);
 });
@@ -158,4 +161,63 @@ test("a site that does not answer at all fails every check without throwing", as
 test("the home page's script and stylesheet are read from the page", () => {
   assert.deepEqual(homeAssets(savedPage("/")), { script: "/assets/index-Ab12.js", style: "/assets/index-Cd34.css" });
   assert.deepEqual(homeAssets("<html></html>"), { script: null, style: null });
+});
+
+test("outside-dns-probe: asked first, of a name that is not ours, and passes on a real answer", async () => {
+  const { fetch, calls } = site();
+  const checks = await run(ctx(fetch));
+  const probe = checks[0];
+  assert.deepEqual([probe.id, probe.name, probe.component, probe.severity, probe.slis, probe.ok, probe.detail],
+    ["outside-dns-probe", "Monitor can reach the internet", "dns", "sev4", [], true, ""]);
+  assert.equal(calls[0].url, GOOGLE, "the network is asked about before our pages");
+  assert.equal(calls.filter((call) => call.url === CLOUDFLARE).length, 0, "the second resolver is asked only when needed");
+});
+
+test("outside-dns-probe sends nothing to our hosts, and only DNS-over-HTTPS GETs", async () => {
+  const calls = [];
+  const fetch = async (url, init = {}) => {
+    calls.push({ url, method: init.method || "GET", accept: init.headers?.Accept });
+    return new Response(DNS_OK, { status: 200 });
+  };
+  await outsideDnsProbe(ctx(fetch));
+  const ours = Object.entries(T).filter(([key]) => key.endsWith("Origin")).map(([, origin]) => new URL(origin).hostname);
+  for (const call of calls) {
+    const host = new URL(call.url).hostname;
+    assert.ok(!ours.includes(host) && !host.endsWith(T.domain), call.url);
+    assert.equal(call.method, "GET");
+    assert.equal(call.accept, "application/dns-json");
+    assert.equal(new URL(call.url).searchParams.get("name"), "example.com");
+  }
+});
+
+test("outside-dns-probe falls back to the second resolver and says so", async () => {
+  const { fetch, calls } = site({ [GOOGLE]: { status: 503, headers: {}, body: "" } });
+  const probe = (await run(ctx(fetch)))[0];
+  assert.equal(probe.ok, true);
+  assert.equal(probe.detail, "Google's resolver did not answer properly (answered 503). Cloudflare's resolver did.");
+  assert.equal(calls.filter((call) => call.url === GOOGLE).length, 1, "a wrong answer is not asked again");
+});
+
+test("outside-dns-probe fails when neither resolver answers, and the site checks still run", async () => {
+  const down = new DOMException("timed out", "TimeoutError");
+  const { fetch, calls } = site({ [GOOGLE]: down, [CLOUDFLARE]: down });
+  const checks = await run(ctx(fetch));
+  const probe = checks[0];
+  assert.equal(probe.ok, false);
+  assert.equal(probe.severity, "sev4");
+  assert.match(probe.detail, /^Neither outside resolver answered: if our own checks failed in this run, the monitor's network is the likely cause, not the site\. /);
+  assert.match(probe.detail, /Google's resolver did not answer properly \(no answer: timed out after 3 s\)\. Cloudflare's resolver did not answer properly/);
+  assert.ok(probe.detail.length <= 300);
+  // "Nothing answered" is tried once more per resolver, no more.
+  assert.equal(calls.filter((call) => call.url === GOOGLE).length, 2);
+  assert.equal(calls.filter((call) => call.url === CLOUDFLARE).length, 2);
+  assert.equal(probe.attempts, 4);
+  assert.equal(checks.find((check) => check.id === "public-home").ok, true);
+});
+
+test("a DNS answer is judged by its content, not only its status", () => {
+  assert.equal(dnsAnswerProblem(JSON.parse(DNS_OK)), "");
+  assert.equal(dnsAnswerProblem({ Status: 2 }), "answered DNS status 2");
+  assert.equal(dnsAnswerProblem({ Status: 0, Answer: [] }), "gave no address");
+  assert.equal(dnsAnswerProblem(null), "did not answer in DNS JSON");
 });

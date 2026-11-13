@@ -97,12 +97,15 @@ test("a module that never finishes is cut off at its time limit and reported", a
 
 test("a public site that swallows every connection: public-home still comes back sev1 and failed, inside the time limit", async () => {
   // The edge review's case. Every diamondecho.com host accepts the connection
-  // and never answers; a request ends only when its signal fires.
+  // and never answers; a request ends only when its signal fires. The wider
+  // internet still answers (the outside DNS probe passes), as it does when
+  // the site, not the monitor, is the problem.
   // Counts what is sent after the first request was cut off: the deadline
   // has passed by then, so it must stay 0.
   let cutOff = false;
   let sentAfterCutOff = 0;
-  const hanging = (url, init) => {
+  const hanging = async (url, init) => {
+    if (!url.includes("diamondecho")) return new Response(JSON.stringify({ Status: 0, Answer: [{ type: 1, data: "192.0.2.1" }] }), { status: 200 });
     if (cutOff) sentAfterCutOff += 1;
     return new Promise((_, reject) => init.signal.addEventListener("abort", () => { cutOff = true; reject(init.signal.reason); }));
   };
@@ -110,11 +113,13 @@ test("a public site that swallows every connection: public-home still comes back
   const started = Date.now();
   const run = await runSuite({ env: {}, fetch: hanging, sleep: async () => {}, suite: "fast", modules: ["pages"], timeLimitMs: limit, graceMs: 2000, vantage: { provider: "local", region: null } });
   const elapsed = Date.now() - started;
-  // Without the deadline this run takes about 94 s; the margin only absorbs
+  // Without the deadline this run takes about 94 s (our hosts hang, the
+  // outside probe passes at once); the margin only absorbs
   // a slow machine.
   assert.ok(elapsed < limit + 3000, `took ${elapsed} ms`);
   const byId = Object.fromEntries(run.checks.map((c) => [c.id, c]));
   assert.equal(byId["monitor-pages"], undefined, "the module handed in its own checks");
+  assert.equal(byId["outside-dns-probe"].ok, true);
   const home = byId["public-home"];
   assert.deepEqual([home.severity, home.ok, home.component], ["sev1", false, "public-site"]);
   assert.match(home.detail, /^No answer: the module's time ran out while waiting\./);
@@ -149,10 +154,13 @@ test("a module that overruns its time sends nothing more once the runner has mov
 });
 
 test("the worst case in the runner's comment fits: per-module and whole-run limits inside the workflow's 10 minutes", () => {
-  // pages module, every host silent: 32 s (home) + 6 x 5 s (quiet host) + 32 s (www) = 94 s,
-  // so the last check is cut short at the 90 s module limit and filed "not tried".
-  assert.equal(32 + 6 * 5 + 32, 94);
-  assert.ok(MODULE_TIME_LIMIT_MS < 94_000);
+  // pages module, nothing answers at all: outside DNS probe 2 x (3 + 0.5 + 3) = 13 s,
+  // home 32 s (measured by 45 s), 6 x 5 s on the quiet host, www 32 s = 107 s,
+  // so the last checks are cut short at the 90 s module limit and filed "not tried".
+  const probe = 2 * (3 + 0.5 + 3);
+  assert.equal(probe + 32 + 6 * 5 + 32, 107);
+  assert.ok(probe + 32 < MODULE_TIME_LIMIT_MS / 1000, "the home page is always measured");
+  assert.ok(MODULE_TIME_LIMIT_MS < 107_000);
   assert.ok(RUN_TIME_LIMIT_MS + MODULE_TIME_LIMIT_MS + 5_000 < 600_000);
 });
 
