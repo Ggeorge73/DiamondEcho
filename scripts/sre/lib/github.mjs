@@ -144,9 +144,13 @@ export function githubClient({
     // does not let the runner read the site (scripts/sre/post-deploy.mjs).
     async listCheckRuns(sha) {
       if (dryRun) return [];
-      if (!/^[0-9a-f]{7,40}$/.test(String(sha))) throw new Error("a commit is needed");
+      sha = String(sha).toLowerCase();
+      if (!/^[0-9a-f]{7,40}$/.test(sha)) throw new Error("a commit is needed");
       const answer = await call("GET", `/commits/${sha}/check-runs?per_page=100`);
-      return (answer?.check_runs ?? []).map((row) => ({ name: String(row.name ?? ""), status: String(row.status ?? ""), conclusion: row.conclusion ?? null }));
+      return (answer?.check_runs ?? []).map((row) => ({
+        name: String(row.name ?? ""), status: String(row.status ?? ""), conclusion: row.conclusion ?? null,
+        started_at: typeof row.started_at === "string" ? row.started_at : null,
+      }));
     },
     async addLabels(number, labels) {
       if (dryRun) return would(`add labels [${labels.join(", ")}] to issue #${number}`);

@@ -280,7 +280,7 @@ test("no automatic rollback when a later merge is the live build", async () => {
 
 // ---- Cloudflare's Bot Fight Mode refuses the runner on /version.json ------
 
-const pagesCheck = (status, conclusion = null) => [{ name: "Cloudflare Pages: diamondecho", status, conclusion }, { name: "Backend tests", status: "completed", conclusion: "failure" }];
+const pagesCheck = (status, conclusion = null, started_at = "2026-11-13T10:00:05Z") => [{ name: "Cloudflare Pages: diamondecho", status, conclusion, started_at }, { name: "Backend tests", status: "completed", conclusion: "failure", started_at }];
 const apiOnly = { code: 0, run: { checks: [check("api-health", "api", "sev2", true), check("public-www-redirect", "public-site", "sev2", true)] } };
 
 test("refused by Cloudflare on /version.json: the build counts as live once Cloudflare Pages reports its build of this commit succeeded", async () => {
@@ -317,4 +317,27 @@ test("when the site can be read, Cloudflare Pages' check is not asked", async ()
   const w = world({ pagesChecks: [pagesCheck("completed", "failure")] });
   assert.equal((await w.run()).build.via, "version.json");
   assert.equal(w.calls.github.some(([kind]) => kind === "check-runs"), false);
+});
+
+test("a cancelled, skipped or neutral Pages check is not a failed build: it is waited out", async () => {
+  for (const conclusion of ["cancelled", "skipped", "neutral"]) {
+    const w = world({ site: [403], pagesChecks: [pagesCheck("completed", conclusion)] });
+    const result = await w.run();
+    assert.deepEqual([result.outcome, result.build.build_failed, result.build.attempts], ["build-not-live", undefined, 31], conclusion);
+    assert.match(w.calls.github.find(([kind]) => kind === "create")[1].body, /If another merge followed within minutes/);
+  }
+});
+
+test("after a push, an older preview build of the same commit does not count as the production build", async () => {
+  const preview = pagesCheck("completed", "success", "2026-11-13T08:00:00Z");
+  const pushed = { GITHUB_EVENT_NAME: "push" };
+  // Only the preview's success exists: not live.
+  let w = world({ site: [403], pagesChecks: [preview], env: pushed });
+  assert.equal((await w.run()).outcome, "build-not-live");
+  // The production build, started after the push, then succeeds: live.
+  w = world({ site: [403], checks: apiOnly, pagesChecks: [preview, [...preview, ...pagesCheck("completed", "success", "2026-11-13T09:58:00Z")]], env: pushed });
+  assert.deepEqual([(await w.run()).build.via], ["cloudflare-pages-check"]);
+  // A run started by hand may name an older commit: its build is older too.
+  w = world({ site: [403], checks: apiOnly, pagesChecks: [preview], env: { GITHUB_EVENT_NAME: "workflow_dispatch" } });
+  assert.equal((await w.run()).outcome, "ok");
 });

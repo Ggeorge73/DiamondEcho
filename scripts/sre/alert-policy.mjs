@@ -577,7 +577,9 @@ function judgeComponent(ctx, component) {
   for (const id of Object.keys(memo.members)) {
     if (hasRecovered(engine.checks[id])) {
       delete memo.members[id];
-      changes.push(`${engine.checks[id]?.name ?? id} works again.`);
+      // A check the engine has forgotten was removed from the monitor (or is
+      // no longer made): nothing measured it working.
+      changes.push(engine.checks[id] ? `${engine.checks[id].name} works again.` : `${id} is no longer checked.`);
     }
   }
   if (Object.keys(memo.members).length === 0) {

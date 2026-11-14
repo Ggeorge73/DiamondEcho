@@ -78,16 +78,29 @@ async function readCommit(fetcher, url) {
 // The name of the check Cloudflare Pages puts on a commit for the production
 // project (seen on every pull request and merge of this repository).
 export const PAGES_CHECK_NAME = "Cloudflare Pages: diamondecho";
+// The post-merge job starts a few minutes after the push (its tests run
+// first); Cloudflare starts the production build within seconds of the push.
+export const PUSH_SLACK_MS = 15 * 60_000;
 
 // What Cloudflare Pages itself reported to GitHub about building a commit:
 // "success", "failure", "pending" (not finished, or not reported yet) or
 // "unknown" (GitHub could not be read). Read-only.
-export async function pagesBuildState(github, commit) {
+//
+// Cloudflare puts a check of the same name on a commit for a branch preview
+// build too. A commit that reaches main without a merge commit keeps its
+// preview's result, so with `notBefore` (milliseconds) only a build started
+// at or after that time counts: the production build starts after the push.
+// Only a build that failed or timed out is a failure; a cancelled, skipped or
+// neutral result says nothing about this commit and is waited out.
+const BUILD_FAILED = new Set(["failure", "timed_out"]);
+export async function pagesBuildState(github, commit, { notBefore = null } = {}) {
   try {
-    const runs = (await github.listCheckRuns(commit)).filter((run) => run.name === PAGES_CHECK_NAME);
+    const runs = (await github.listCheckRuns(commit)).filter((run) => run.name === PAGES_CHECK_NAME
+      && (notBefore === null || Date.parse(run.started_at ?? "") >= notBefore));
     if (runs.length === 0) return "pending";
     if (runs.some((run) => run.status !== "completed")) return "pending";
-    return runs.every((run) => run.conclusion === "success") ? "success" : "failure";
+    if (runs.some((run) => BUILD_FAILED.has(run.conclusion))) return "failure";
+    return runs.every((run) => run.conclusion === "success") ? "success" : "pending";
   } catch {
     return "unknown";
   }
@@ -163,6 +176,9 @@ export function issueText(result) {
   } else if (result.outcome === "build-not-live") {
     lines.push(`**What failed:** diamondecho.com did not show this commit within ${result.timeout_minutes} minutes (${result.build.attempts} looks at /version.json). The last answer named ${result.build.commit ? `\`${short(result.build.commit)}\`` : `no commit (status ${result.build.status || "none"})`}.`);
     lines.push("The previous build is most likely still serving, so visitors see the old site. Look at Cloudflare Pages > `diamondecho` > Deployments for a failed or stuck build. Nothing was rolled back.");
+    if (result.build.status === 403) {
+      lines.push("The site answers 403 to this check (Cloudflare's Bot Fight Mode), so the build result was read from the check \"Cloudflare Pages: diamondecho\" on the commit, and none was reported in time. If another merge followed within minutes, Cloudflare may have skipped this build and built the later one: look at that merge's check before treating this as a failure.");
+    }
   } else if (result.outcome === "checks-broke") {
     lines.push("**What failed:** the post-deploy checks themselves did not run to the end, so the new build is unverified. Nothing was rolled back.");
   } else {
@@ -206,7 +222,12 @@ export async function postDeploy(options, deps) {
   log(`Waiting for diamondecho.com to serve ${short(commit)} (up to ${timeoutMinutes} minutes).`);
   result.build = await waitForBuild({ merged: commit, fetcher, sleep, now, isAncestor, origin: targets.publicOrigin,
     timeoutMs: timeoutMinutes * 60_000, intervalMs: intervalSeconds * 1000,
-    pagesBuild: github && !github.dryRun ? (sha) => pagesBuildState(github, sha) : null });
+    // After a push to main only a build started around or after the push
+    // counts (not an older preview build of the same commit). A run started
+    // by hand may name an older commit, whose build is older too.
+    pagesBuild: github && !github.dryRun
+      ? (sha) => pagesBuildState(github, sha, { notBefore: env.GITHUB_EVENT_NAME === "push" ? Date.parse(result.started_at) - PUSH_SLACK_MS : null })
+      : null });
 
   if (!result.build.live) {
     result.outcome = "build-not-live";
