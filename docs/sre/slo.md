@@ -16,15 +16,25 @@ the end of this page.
 
 ## The two-minute version
 
+**Three of these targets get no data at present.** Since 2026-11-14 the
+monitor loads no web page: Cloudflare's Bot Fight Mode refuses it on every
+page, and Gbenga decided that it stays on and that no outside monitoring
+service is added ([synthetic-monitoring.md](synthetic-monitoring.md)).
+Website availability, Website speed and Calculators were measured only by
+loading pages, so nothing feeds them and they are not judged. They are kept
+in the table and in `scripts/sre/slo.config.mjs` so they can come back if
+the decision changes. The Inquiry form and Staff site targets are now fed by
+their API-side checks only.
+
 | What is measured | Good means | Proposed target | Allowed to go wrong per 28 days |
 | --- | --- | --- | --- |
-| Website availability | A public page, or the site's script or stylesheet, answers with its own content | 99.9% | about 40 minutes |
-| Website speed | That page's HTML arrives in under 1.5 seconds | 99% | 1 probe in 100 may be slow |
+| Website availability: **not checked at present (pages are not loaded, 2026-11-14)** | A public page, or the site's script or stylesheet, answers with its own content | 99.9% | about 40 minutes |
+| Website speed: **not checked at present (pages are not loaded, 2026-11-14)** | That page's HTML arrives in under 1.5 seconds | 99% | 1 probe in 100 may be slow |
 | API availability | The API's health, identity and deal-analysis routes answer correctly | 99.5% | about 3 hours 22 minutes |
 | API speed | The API answers in under 1 second | 95% | 1 probe in 20 may be slow |
-| Calculators | The Deal Studio, mortgage simulator and seller net sheet pages load (Deal Studio's analysis itself counts under API availability) | 99.5% | about 3 hours 22 minutes |
-| Inquiry form | The contact page loads and the inquiry route is open (nothing is ever submitted) | 99.5% | about 3 hours 22 minutes |
-| Staff site | The staff sign-in page loads with its protections and the staff API asks for sign-in | 99.5% | about 3 hours 22 minutes |
+| Calculators: **not checked at present (pages are not loaded, 2026-11-14)** | The Deal Studio, mortgage simulator and seller net sheet pages load (Deal Studio's analysis itself counts under API availability, which is still measured) | 99.5% | about 3 hours 22 minutes |
+| Inquiry form | The inquiry route is open (nothing is ever submitted). The contact page loading is part of the target but is not checked at present (pages are not loaded, 2026-11-14) | 99.5% | about 3 hours 22 minutes |
+| Staff site | The staff API asks for sign-in. The staff sign-in page loading with its protections is part of the target but is not checked at present (pages are not loaded, 2026-11-14) | 99.5% | about 3 hours 22 minutes |
 
 Where these numbers come from: a probe (an automated visit) every five
 minutes from one place, GitHub Actions. The minutes are what the budget would
@@ -74,10 +84,10 @@ One finding matters for the monitor itself. When the requests carried the
 monitor's own name (`DiamondEcho-SRE-Monitor/1 …` as the User-Agent),
 Cloudflare refused the home page every time with 403 and "error code: 1010":
 a block based on the visitor's browser signature. The same request with an
-ordinary client name got the page. If GitHub Actions is treated the same
-way, every website probe would fail, and the website budget would be spent
-on an outage no visitor saw. This has to be checked from GitHub Actions
-before the website figures are trusted. It is listed under blind spots below.
+ordinary client name got the page. It was then checked from GitHub Actions
+(monitor run 27, 2026-11-14): every page answered 403 to the monitor. That
+is why no page is loaded now and the website figures have no data. It is
+listed under blind spots below.
 
 ### Why these targets
 
@@ -158,8 +168,9 @@ deciding.
 ## Two views: probes and real requests
 
 **Probes (what the scripts measure).** An outside view: could a visitor have
-done this, five minutes ago, from one place? Probes see the whole path,
-including DNS, Cloudflare and the website pages. They see nothing between
+done this, five minutes ago, from one place? Probes see the path to the
+API, DNS and the redirects Cloudflare answers. They do not see the website
+pages at present (pages are not loaded, 2026-11-14). They see nothing between
 probes, and they come from one place.
 
 **Real requests (Cloud Monitoring, prepared, not switched on).** Google
@@ -242,10 +253,14 @@ missed.
 - **One place, every five minutes, when GitHub keeps time.** Anything
   shorter than the gap between probes can be missed, and GitHub's scheduler
   delays and drops runs. The weekly report lists the gaps.
-- **The monitor's name may be blocked by Cloudflare** (error 1010, seen from
-  the sandbox). Until it is checked from GitHub Actions, a run of website
-  failures with every other part fine should be suspected of being this.
-- **Probes load HTML; they do not run the page.** A page whose script fails
+- **No probe loads a web page (2026-11-14).** Cloudflare's Bot Fight Mode
+  refuses the monitor on every page (measured from GitHub Actions), it stays
+  on, and no outside monitoring service is used. So the website and
+  calculator-page targets have no data, and a broken page or a Cloudflare
+  outage with the API still answering spends no budget and opens no
+  incident. A known gap, decided by the owner.
+- **Probes load HTML; they do not run the page.** (When pages are loaded
+  again.) A page whose script fails
   in a real browser still counts as good if its HTML and files load.
 - **Probes keep the API warm.** A probe every five minutes keeps a copy of the
   API running much of the time. The cold starts a visitor meets after a
@@ -255,7 +270,7 @@ missed.
   visitors' allowance and store a fake request). Delivery to the staff queue
   and the arrival email are not measured here.
 - **Property search results are not in any SLO.** The `/search` page itself
-  counts toward website availability and speed. The Georgia MLS frame inside
+  counts toward website availability and speed (not checked at present). The Georgia MLS frame inside
   it (a third party) is watched by its own check as a dependency only, so a
   search that loads its page but shows no listings is not counted against
   any target.

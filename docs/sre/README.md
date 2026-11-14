@@ -15,8 +15,7 @@ production change. Security work stays with `security-lead`
 
 ```mermaid
 flowchart LR
-    U["UptimeRobot (outside service)<br/>loads every page every 5 min"] --> M
-    M["SRE monitor (GitHub Actions)<br/>every 5 min: API, calculation,<br/>inquiry route, redirects,<br/>and UptimeRobot's page results<br/>every hour: TLS, DNS, domain"] --> S["State on the sre-status branch<br/>status, history, error budgets"]
+    M["SRE monitor (GitHub Actions)<br/>every 5 min: API, calculation,<br/>inquiry route, staff sign-in, redirects<br/>(no web page is loaded)<br/>every hour: TLS, DNS, domain"] --> S["State on the sre-status branch<br/>status, history, error budgets"]
     S --> A["Alert engine<br/>one incident per problem"]
     A --> I["sre-incident issue<br/>(email) + optional chat"]
     S --> P["Public status page"]
@@ -26,19 +25,18 @@ flowchart LR
     W["Weekly reliability report"] --> I
 ```
 
-- **Watching (synthetic checks).** Every five minutes the site is looked at
-  the way a visitor would, by two things working together. An outside uptime
-  service, UptimeRobot, loads the pages: the home page and every public page,
-  the property search page, the Intelligence calculator pages, the contact
-  page and the staff site's home page. A GitHub workflow (the monitor) reads
-  UptimeRobot's verdict on each page, and itself asks the API, one reference
-  Deal Studio calculation, the inquiry route (without ever sending an
-  inquiry), the staff API and the redirects. The pages are loaded by
-  UptimeRobot because Cloudflare's Bot Fight Mode, which Gbenga decided on
-  2026-11-14 to keep on, refuses GitHub's servers and lets UptimeRobot
-  through. Every hour the monitor also checks certificates, DNS (including
-  the mail records) and the domain's expiry date. It only reads; it never
-  submits a form or calls a paid service. [synthetic-monitoring.md](synthetic-monitoring.md)
+- **Watching (synthetic checks).** Every five minutes a GitHub workflow (the
+  monitor) asks the services behind the site the questions a browser would:
+  the API, one reference Deal Studio calculation, the inquiry route (without
+  ever sending an inquiry), the staff API's sign-in and the redirect from
+  `www`. Every hour it also checks certificates, DNS (including the mail
+  records), the domain's expiry date and the Georgia MLS search provider. It
+  only reads; it never submits a form or calls a paid service. **It does not
+  load any web page** of `diamondecho.com` or `staff.diamondecho.com`:
+  Cloudflare's Bot Fight Mode refuses GitHub's servers on every page, and
+  Gbenga decided on 2026-11-14 that it stays on, that no outside monitoring
+  service is added, and that nothing checks the hosting address behind
+  Cloudflare. [synthetic-monitoring.md](synthetic-monitoring.md)
 - **Targets (SLOs).** How reliable each part should be, measured from those
   checks, with an error budget: the minutes of trouble a target allows in 28
   days. The targets are proposals until Gbenga accepts them. [slo.md](slo.md),
@@ -50,7 +48,8 @@ flowchart LR
   stays fixed. One outage pages once. [alerting.md](alerting.md),
   [severity-and-escalation.md](severity-and-escalation.md)
 - **Status page.** A public page that shows only what the monitor measured,
-  including when its data is stale. Published by the monitor from the data
+  including when its data is stale. It carries a notice that the web pages
+  themselves are not loaded by the checks. Published by the monitor from the data
   on the `sre-status` branch.
 - **When something breaks.** A one-page checklist, a runbook per failure
   ([runbooks/README.md](runbooks/README.md), by symptom), and a blameless
@@ -76,7 +75,7 @@ flowchart LR
 
 | Workflow | When | What it does | Changes production? |
 | --- | --- | --- | --- |
-| `sre-monitor.yml` | every 5 min (fast), hourly (slow), once `SRE_MONITOR` = `enabled` | checks (its own, and UptimeRobot's page results), state, alerts, status page | no; the rollback engine only if switched on |
+| `sre-monitor.yml` | every 5 min (fast), hourly (slow), once `SRE_MONITOR` = `enabled` | checks, state, alerts, status page | no; the rollback engine only if switched on |
 | `sre-post-merge-check.yml` | after every merge to `main`, once `SRE_MONITOR` = `enabled` | waits for Cloudflare Pages to report the new site build, then runs the monitor's own checks | no |
 | `sre-weekly-report.yml` | Mondays | reliability report as an issue | no |
 | `sre-chaos.yml` | weekly and by hand | resilience tests, local chaos experiments, monitoring fire drill | no (runs on the GitHub runner only) |
@@ -92,34 +91,32 @@ flowchart LR
   a problem only some visitors have. The Google Cloud uptime checks (once
   applied) add a second view from several continents, and the real-request
   SLOs a third.
-- The monitor does not load the pages itself. It reads what UptimeRobot saw,
-  so a page outage is seen later than an API outage: up to about 5 minutes
-  for UptimeRobot to notice plus up to 5 for the monitor to read it, and two
-  failing reads before an incident opens. If UptimeRobot or its key fails,
-  the pages are not watched. The website then shows "degraded" with an
-  incident saying so, but calculators, the inquiry form and the staff site
-  can still show "operational" from their API checks alone.
-- It no longer checks what is inside a page: the heading, the script and
-  stylesheet, the "page not found" answer, the HSTS header, the analytics
-  beacon, the staff page's protection headers. UptimeRobot only says whether
-  a page loads (and, for the contact page, that the form is in it). The list
-  is in [synthetic-monitoring.md](synthetic-monitoring.md).
-- A page that fails right after a merge can no longer roll the site back
-  automatically. The site rollback is by hand
+- **It does not load any web page** (Gbenga's decisions of 2026-11-14; a
+  known gap, not a defect). If a page is broken or empty, or Cloudflare has
+  an outage, while the API keeps answering, no incident opens and the status
+  page still says "Operational". On the status page, "Website" now means the
+  `www` redirect only, "Property search" the hourly Georgia MLS provider
+  check only, "Intelligence calculators" the deal analysis call only,
+  "Inquiry form" the three API route checks, and "Staff site" the staff
+  API's sign-in check. The website's and the calculator pages' targets get
+  no data ([slo.md](slo.md)). The full list is in
+  [synthetic-monitoring.md](synthetic-monitoring.md).
+- A page that fails right after a merge cannot roll the site back
+  automatically, and nothing checks the pages after a merge. A failed site
+  build still opens an incident. The site rollback is by hand
   ([release-safety.md](release-safety.md)).
-- Nothing here has run against Google Cloud, Cloudflare's API or UptimeRobot
-  yet: those parts were tested with stand-ins and are switched off until
-  Gbenga sets them up.
+- Nothing here has run against Google Cloud or Cloudflare yet: those parts
+  were tested with stand-ins and are switched off until Gbenga sets them up.
 
 ## What Gbenga needs to do
 
 Everything is in one list, in order: [needs-from-gbenga.md](needs-from-gbenga.md).
-The first item is to set up UptimeRobot (12 page monitors, each named after
-its check) and give the monitor its read-only key. It has to come before the
-monitor is switched on with `SRE_MONITOR` = `enabled`: Cloudflare's Bot Fight
-Mode refuses the monitor on every page (measured from GitHub's own runners on
-2026-11-14), so without UptimeRobot no page is watched. Nothing in Cloudflare
-needs changing; the earlier plan for a Cloudflare exemption is withdrawn.
+The first item is to run the monitor once by hand and then switch it on with
+`SRE_MONITOR` = `enabled`. Nothing in Cloudflare needs changing: the earlier
+plan for a Cloudflare exemption is withdrawn, and the monitor no longer asks
+for any page (Bot Fight Mode refused it on every one, measured from GitHub's
+own runners on 2026-11-14). Item 1.2a asks Gbenga to know what is therefore
+not watched, and to accept it or say otherwise.
 
 ## For the agents
 

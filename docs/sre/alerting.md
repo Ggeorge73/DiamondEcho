@@ -50,7 +50,9 @@ the same public text: what visitors notice, the failing checks, the runbook.
   It drops only when the more serious checks have recovered for good; one
   good run in the middle of an outage does not turn "is down" into "on and
   off".
-- **One cause, one page.** The search page, the calculator pages and the
+- **One cause, one page.** (Not in use at present: it is about page-load
+  checks, and no page is loaded since 2026-11-14.) The search page, the
+  calculator pages and the
   contact page are served by Cloudflare Pages exactly like the website. While
   the website has a sev1 or sev2 incident, a part whose only failures are
   those page loads is named in the website incident as "also affected" (in
@@ -71,14 +73,12 @@ the same public text: what visitors notice, the failing checks, the runbook.
 - **Cloudflare refusing the monitor is one problem, not six.** On the first
   run from GitHub's runners every page Cloudflare serves answered 403 to the
   monitor ("Cloudflare refused the request …") while browsers got the pages
-  and the API passed. Since 2026-11-14 the monitor no longer loads those
-  pages: Bot Fight Mode stays on, an outside uptime service (UptimeRobot)
-  loads them, and the monitor reads its verdicts
-  ([synthetic-monitoring.md](synthetic-monitoring.md)). The monitor's only
-  requests to Cloudflare are now the redirects, so this rule can apply only
-  to them, and is not expected to. If Cloudflare refuses UptimeRobot
-  instead, the monitor cannot tell: the pages are reported down like any
-  outage. The rule itself is unchanged: when, in a run, every failing check on the parts
+  and the API passed. Since 2026-11-14 the monitor no longer asks for those
+  pages: Bot Fight Mode stays on and nothing else loads them in the
+  monitor's place ([synthetic-monitoring.md](synthetic-monitoring.md)). The
+  monitor's only requests to Cloudflare are now the redirects, so **this
+  incident can now only come from the redirect checks**. The rule itself is
+  unchanged: when, in a run, every failing check on the parts
   Cloudflare serves (website, search page, calculator pages, contact page,
   staff site) failed with that refusal, or was not made because its page was
   refused, those checks measured the monitor's access, not the site. They
@@ -86,8 +86,8 @@ the same public text: what visitors notice, the failing checks, the runbook.
   one sev2 incident, "Cloudflare is refusing the monitor", pointing at
   [cloudflare-outage.md](runbooks/cloudflare-outage.md). If even one of those
   checks failed for any other reason, nothing is set aside and the normal
-  per-part incidents open. The incident closes after two runs once a page
-  answers the monitor again.
+  per-part incidents open. The incident closes after two runs once a check
+  on those parts gets through again.
 
 ## While it is open
 

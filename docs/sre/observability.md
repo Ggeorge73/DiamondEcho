@@ -24,13 +24,18 @@ today that is Gbenga. Nothing in this work copies it anywhere.
 The public pages are served by Cloudflare Pages. Cloudflare's Real User
 Monitoring was switched off on 2026-10-06 because it added a script the
 Privacy page does not allow for ([DE-13](../de13-production-setup.md)), so
-the only view of the pages is from outside: the monitor and the uptime checks.
+the only view of the pages would be from outside. Since 2026-11-14 there is
+none: the monitor loads no web page (Cloudflare's Bot Fight Mode refuses it
+and stays on, and no outside monitoring service is used: Gbenga's
+decisions), and the Google Cloud uptime checks are not applied and may be
+refused the same way ([synthetic-monitoring.md](synthetic-monitoring.md)).
 
 ## What the SRE work adds
 
 1. **The GitHub monitor and its memory.** Every 5 minutes (and every hour for
-   the slow checks) `scripts/sre/synthetic-checks.mjs` looks at the site like
-   a visitor, and `scripts/sre/state.mjs` files the result on the
+   the slow checks) `scripts/sre/synthetic-checks.mjs` asks the API, the
+   inquiry route, the staff sign-in and the redirects from outside (it loads
+   no web page), and `scripts/sre/state.mjs` files the result on the
    `sre-status` branch. That branch is the record the status page, the alert
    engine, the SLO figures and the weekly report all read. See "The state
    store" below.
@@ -110,7 +115,8 @@ keeps that promise and goes no further than it needs:
 
 - **No measurement in visitors' browsers.** No real-user monitoring, no
   analytics script, no beacon. The `edge-no-analytics-beacon` check fails if
-  one appears in the home page.
+  one appears in the home page; it is not made at present (pages are not
+  loaded, 2026-11-14).
 - **Nothing a visitor typed, in any log we write.** The telemetry never
   writes the address as sent, query strings, request or response bodies,
   headers, cookies, IP addresses, browser strings, exception messages or
@@ -145,6 +151,14 @@ are in `scripts/sre/README.md`; the rules are here.
   - *operational* otherwise (a sev4 failure is a notice only);
   - *unknown* when none of its checks has a fresh result: older than 20
     minutes for a 5-minute check, 150 minutes for an hourly one.
+
+  Since 2026-11-14 no check loads a web page, so a part's state rests on
+  less than its name suggests: Website on the `www` redirect (plus the
+  hourly redirect checks), Property search on the hourly Georgia MLS
+  provider check, Intelligence calculators on the deal analysis call,
+  Inquiry form on the three API route checks, Staff site on the staff API's
+  sign-in check. "Operational" does not confirm that a page displays; the
+  status page carries a notice saying so.
 - **The headline** is the worst real problem; otherwise *unknown* if any part
   has no fresh data; *operational* only when every part was seen working.
 - **"Since"** for an outage or degraded part is when its first failing check
@@ -162,7 +176,8 @@ are in `scripts/sre/README.md`; the rules are here.
   Cloudflare serves was refused by Cloudflare (or not made because its page
   was), those checks are left out the same way: the history line keeps only
   the rest and notes `"refused": N`, and the page shows the last measured
-  result until it goes stale. See [alerting.md](alerting.md).
+  result until it goes stale. Since 2026-11-14 this can only happen to the
+  redirect checks. See [alerting.md](alerting.md).
 - **Deploys.** When a check reports a different `revision` or `commit` than
   last time, a line goes into `deploys.jsonl`. The first sighting is not a
   deploy, and a failed check that could not read the facts does not erase

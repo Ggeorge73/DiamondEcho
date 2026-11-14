@@ -24,9 +24,9 @@ dormant until Gbenga supplies the setting it needs; the list is in
 
 | Part | Today, before this work | With this work |
 | --- | --- | --- |
-| Public site | Merging to `main` makes Cloudflare Pages build and publish the site within minutes. Nothing checks it afterwards. | The same, then the **post-merge check** waits until Cloudflare Pages reports the new build as published and runs the monitor's own checks (API, inquiry route, redirects). A failed build or check opens an `sre-incident` issue with the rollback steps. The pages themselves are checked by the outside uptime service within about five minutes. Site rollback is by hand: no page check is left to trigger the automatic one. |
+| Public site | Merging to `main` makes Cloudflare Pages build and publish the site within minutes. Nothing checks it afterwards. | The same, then the **post-merge check** waits until Cloudflare Pages reports the new build as published and runs the monitor's own checks (API, inquiry route, redirects). A failed build or check opens an `sre-incident` issue with the rollback steps. Nothing checks that the pages of the new build load: no check loads a page (Gbenga's decisions of 2026-11-14). Site rollback is by hand: no page check is left to trigger the automatic one. |
 | API | Gbenga deploys by hand from Cloud Shell: new revision with no traffic, a few checks at its temporary address, then all traffic at once (`docs/de13-production-setup.md`). | The same steps as one script, `deploy.sh`, with every check written down, traffic moved in steps with a gate after each, and an automatic return to the old revision on any failure. Run from Cloud Shell as today, or later from a GitHub workflow that asks Gbenga to approve each run. |
-| Staff site | Cloudflare Pages, built from `main`. | Unchanged. The uptime service loads its home page and the monitor checks the staff API. |
+| Staff site | Cloudflare Pages, built from `main`. | Unchanged. The monitor checks that the staff API asks for sign-in; the staff page itself is not loaded. |
 
 A merge never changes the API. The API changes only when someone deploys it.
 
@@ -81,11 +81,11 @@ curl -s https://diamondecho-api-180189726732.us-east1.run.app/api/
    checks are read-only; no inquiry is sent. This suite now holds only what
    the monitor asks itself: the API, the reference calculation, the inquiry
    route, the staff API, the redirects, and two DNS questions. **It contains
-   no page check.** That the pages of the new build load is seen by
-   UptimeRobot within about five minutes (its own interval) and reaches the
-   normal 5-minute monitor, which opens an incident after two failing reads
-   ([synthetic-monitoring.md](synthetic-monitoring.md)). So "published" is
-   proven here; "the pages load" is proven a few minutes later, elsewhere.
+   no page check.** So "published" is proven here, and **nothing verifies
+   that the pages of the new build load**: not this check, and not the
+   5-minute monitor, which loads no page either
+   ([synthetic-monitoring.md](synthetic-monitoring.md)). After a merge that
+   changes the site, open it yourself.
 3. It notes whether the live API is behind `main` for backend changes. That
    is expected after a backend merge (the API is deployed by hand) and does
    not fail the run.
@@ -126,9 +126,12 @@ branch cannot read them.
 
 Why it works this way: Cloudflare answers `403` to GitHub's runners on every
 page of diamondecho.com, `/version.json` included (measured in monitor run
-27, 2026-11-14). Gbenga decided the same day that Bot Fight Mode stays on,
-and on the Free plan no rule can exempt the runners. So the post-merge check
-does not depend on reading the site. It runs only once the repository
+27, 2026-11-14). Gbenga decided the same day that Bot Fight Mode stays on
+(on the Free plan no rule can exempt the runners), that no outside
+monitoring service is added, and that nothing checks the hosting address
+behind Cloudflare. So the post-merge check does not depend on reading the
+site. The build result it reads comes from GitHub, where Cloudflare Pages
+reports it; that is not an outside service. It runs only once the repository
 variable `SRE_MONITOR` is `enabled` (item 1.1 of
 [needs-from-gbenga.md](needs-from-gbenga.md)); a run started by hand always
 runs.
@@ -140,11 +143,12 @@ Known limits of this:
   the Pages project is renamed, the check finds no result, waits its 15
   minutes and reports that the build did not appear. The name is in one
   place, `PAGES_CHECK_NAME`.
-- A build that publishes but serves a broken page passes the post-merge
-  check. It is caught by UptimeRobot and the 5-minute monitor: up to about 5
-  minutes for UptimeRobot to load the page, up to 5 more for the monitor to
-  read it, and two failing reads before the incident. Nothing rolls it back
-  automatically.
+- A build that publishes but serves a broken or empty page passes the
+  post-merge check, and nothing else catches it: no automatic check loads a
+  page. No incident opens, and nothing rolls it back automatically. A known
+  gap, decided by the owner (item 1.2a of
+  [needs-from-gbenga.md](needs-from-gbenga.md)). A failed build is
+  different: that still opens the incident.
 
 ## Deploying the API
 
@@ -268,9 +272,10 @@ Not covered:
 
 - **A website build whose pages fail.** The post-merge check no longer loads
   a page (Cloudflare refuses GitHub's runners), so it has nothing to trigger
-  the website rollback with, switched on or not. A broken page is reported
-  by the 5-minute monitor from UptimeRobot's results, and the rollback is by
-  hand ("Rolling back the website" below).
+  the website rollback with, switched on or not. Nothing automatic reports a
+  broken page either; a person has to see it
+  ([site-down.md](runbooks/site-down.md)). The rollback is by hand
+  ("Rolling back the website" below).
 - **Low traffic.** At this site's traffic a 10 percent step may see no
   visitor at all in two minutes. The gates mostly prove that the new revision
   keeps answering while it is in the rotation; they are not a statistical
