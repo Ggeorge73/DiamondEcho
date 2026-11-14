@@ -2,10 +2,17 @@ name: SRE monitor
 
 # Watches diamondecho.com from outside, like a visitor would, and keeps the
 # public status page up to date. Every five minutes it runs the fast checks
-# (pages, search, calculators, inquiry route, API); every hour it runs the slow
+# (the API, the calculation service, the inquiry route and the redirects);
+# every hour it runs the slow
 # ones (certificates, DNS, domain registration, third parties). Each run files
 # its result on the sre-status branch, opens or closes sre-incident issues, and
 # decides whether the one safe automatic fix applies (docs/sre/auto-remediation.md).
+#
+# It does not load any page of diamondecho.com or staff.diamondecho.com:
+# Cloudflare's Bot Fight Mode answers 403 to GitHub's runners, it stays on,
+# and no outside service is used in the monitor's place (Gbenga, 2026-11-14).
+# So the pages themselves are not watched here
+# (docs/sre/synthetic-monitoring.md).
 #
 # It only reads the live site. It never submits a form, never calls the paid
 # property routes, and changes nothing in production unless Gbenga has switched
@@ -84,10 +91,8 @@ jobs:
   monitor:
     name: Check the site and file the result
     # Scheduled runs start only once Gbenga has set the repository variable
-    # SRE_MONITOR to "enabled", after adding the Cloudflare rule that lets the
-    # monitor through (docs/sre/needs-from-gbenga.md 1.1). Without that rule
-    # Cloudflare refuses every page to the monitor, and the monitor would
-    # report false outages every five minutes. A run started by hand always runs.
+    # SRE_MONITOR to "enabled" (docs/sre/needs-from-gbenga.md 1.1). A run
+    # started by hand always runs.
     if: >-
       github.event_name != 'pull_request' && github.repository == 'Ggeorge73/DiamondEcho' &&
       (github.event_name == 'workflow_dispatch' || vars.SRE_MONITOR == 'enabled')

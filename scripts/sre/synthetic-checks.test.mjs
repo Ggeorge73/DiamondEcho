@@ -111,7 +111,7 @@ test("a public site that swallows every connection: public-home still comes back
   };
   const limit = 400;
   const started = Date.now();
-  const run = await runSuite({ env: {}, fetch: hanging, sleep: async () => {}, suite: "fast", modules: ["pages"], timeLimitMs: limit, graceMs: 2000, vantage: { provider: "local", region: null } });
+  const run = await runSuite({ env: { SRE_PAGE_SOURCE: "direct" }, fetch: hanging, sleep: async () => {}, suite: "fast", modules: ["pages"], timeLimitMs: limit, graceMs: 2000, vantage: { provider: "local", region: null } });
   const elapsed = Date.now() - started;
   // Without the deadline this run takes about 94 s (our hosts hang, the
   // outside probe passes at once); the margin only absorbs
@@ -282,9 +282,36 @@ test("command: exits 2 when it is used wrongly or cannot do its job", async () =
   assert.equal((await cli(["--suite", "fast", "--out", dir], pages)).code, 2);
 });
 
-test("the real modules: a fast run with no network at all still produces a complete, valid run", async () => {
+test("the real modules: the monitor sends nothing to a page on Cloudflare, and to no outside monitoring service", async () => {
+  const asked = [];
+  const unreachable = async (url, init = {}) => {
+    asked.push(`${init.method || "GET"} ${url}`);
+    throw Object.assign(new TypeError("fetch failed"), { cause: { code: "ENOTFOUND" } });
+  };
+  for (const suite of ["fast", "slow", "post-deploy"]) {
+    asked.length = 0;
+    const run = await runSuite({ env, fetch: unreachable, sleep: async () => {}, suite, vantage: { provider: "local", region: null } });
+    assert.deepEqual(runProblems(run), []);
+    assert.ok(!run.checks.some((c) => c.id.startsWith("monitor-")), "every real module loaded and ran");
+    // To our own names on Cloudflare only the two redirects are asked: the
+    // plain-http address and www. Never a page of the site or the staff site.
+    const OUR_HOSTS = new Set(["diamondecho.com", "www.diamondecho.com", "staff.diamondecho.com"]);
+    const ours = asked.filter((line) => OUR_HOSTS.has(new URL(line.split(" ")[1]).hostname));
+    for (const line of ours) assert.match(line, /^GET (http:\/\/diamondecho\.com\/|https:\/\/www\.diamondecho\.com\/)/, `${suite}: ${line}`);
+    const ids = run.checks.map((c) => c.id);
+    for (const id of ["public-home", "search-page", "calculators-deal-page", "inquiry-page", "staff-home", "public-asset-js", "public-not-found", "edge-hsts"]) {
+      assert.ok(!ids.includes(id), `${suite}: ${id} is not asked by the monitor`);
+    }
+    if (suite === "fast") {
+      assert.deepEqual(ids, ["outside-dns-probe", "public-www-redirect", "api-health", "api-identity", "api-cors-allowed", "api-cors-refused",
+        "calculators-api-analyze", "inquiry-preflight", "inquiry-route", "inquiry-queue", "staff-api-auth"]);
+    }
+  }
+});
+
+test("the real modules, loading the pages directly: a fast run with no network at all still produces a complete, valid run", async () => {
   const unreachable = async () => { throw Object.assign(new TypeError("fetch failed"), { cause: { code: "ENOTFOUND" } }); };
-  const run = await runSuite({ env, fetch: unreachable, sleep: async () => {}, suite: "fast", vantage: { provider: "local", region: null } });
+  const run = await runSuite({ env: { ...env, SRE_PAGE_SOURCE: "direct" }, fetch: unreachable, sleep: async () => {}, suite: "fast", vantage: { provider: "local", region: null } });
   assert.deepEqual(runProblems(run), []);
   assert.ok(run.checks.length >= 20);
   assert.ok(run.checks.every((c) => c.ok === false));

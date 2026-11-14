@@ -156,3 +156,18 @@ test("listComments reads every page, so an ack after the hundredth comment is se
   assert.equal(comments.at(-1).first_line, "ack");
   assert.deepEqual(calls.map((call) => new URL(call.url).searchParams.get("page")), ["1", "2"]);
 });
+
+test("listCheckRuns reads a commit's check runs and refuses anything that is not a commit", async () => {
+  const { client, calls } = live([[200, { check_runs: [
+    { name: "Cloudflare Pages: diamondecho", status: "completed", conclusion: "success", started_at: "2026-11-14T02:03:20Z", output: { text: "ignored" } },
+    { name: "Backend tests", status: "in_progress", conclusion: null },
+  ] }]]);
+  // Upper-case hex is accepted and sent in lower case.
+  assert.deepEqual(await client.listCheckRuns("0D53BD10aeedd0ab438a84d91c07b2c883b65ade"), [
+    { name: "Cloudflare Pages: diamondecho", status: "completed", conclusion: "success", started_at: "2026-11-14T02:03:20Z" },
+    { name: "Backend tests", status: "in_progress", conclusion: null, started_at: null },
+  ]);
+  assert.match(calls[0].url, /\/repos\/owner\/repo\/commits\/0d53bd10aeedd0ab438a84d91c07b2c883b65ade\/check-runs\?per_page=100$/);
+  assert.equal(calls[0].method, "GET");
+  await assert.rejects(client.listCheckRuns("main/../../x"), /a commit is needed/);
+});

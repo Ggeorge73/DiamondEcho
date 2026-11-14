@@ -138,6 +138,20 @@ export function githubClient({
       }));
     },
 
+    // The check runs GitHub holds for a commit (name, status, conclusion):
+    // read-only, and needs the job permission `checks: read`. The post-merge
+    // check reads Cloudflare Pages' own build result here, because Cloudflare
+    // does not let the runner read the site (scripts/sre/post-deploy.mjs).
+    async listCheckRuns(sha) {
+      if (dryRun) return [];
+      sha = String(sha).toLowerCase();
+      if (!/^[0-9a-f]{7,40}$/.test(sha)) throw new Error("a commit is needed");
+      const answer = await call("GET", `/commits/${sha}/check-runs?per_page=100`);
+      return (answer?.check_runs ?? []).map((row) => ({
+        name: String(row.name ?? ""), status: String(row.status ?? ""), conclusion: row.conclusion ?? null,
+        started_at: typeof row.started_at === "string" ? row.started_at : null,
+      }));
+    },
     async addLabels(number, labels) {
       if (dryRun) return would(`add labels [${labels.join(", ")}] to issue #${number}`);
       await call("POST", `${issuePath(number)}/labels`, { labels });

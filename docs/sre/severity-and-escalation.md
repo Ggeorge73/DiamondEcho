@@ -29,18 +29,25 @@ The monitor gives each check a severity (in `scripts/sre/checks/`). These are
 the ones a person will meet most, plus the cases the monitor cannot see,
 marked "declared by a person".
 
+**Page checks are not checked at present (pages are not loaded, 2026-11-14).** The monitor does not load any web page: Bot
+Fight Mode refuses it and stays on, and no outside monitoring service is
+used ([synthetic-monitoring.md](synthetic-monitoring.md)). The entries
+marked "(not checked)" below are kept so they can come back if the decision
+changes. Until then the monitor opens no incident for them: a page that does
+not load is **declared by a person**, at the severity shown.
+
 | Part (component) | sev1 | sev2 | sev3 | sev4 |
 | --- | --- | --- | --- | --- |
-| Website (`public-site`) | Home page or the site script does not load (`public-home`, `public-asset-js`) | Advisory or About page, the stylesheet, or `www` redirect broken | Podcast, Privacy or Terms page broken; unknown addresses no longer answer "page not found" | |
-| Property search (`search`) | | The `/search` page itself does not load (`search-page`) | The Georgia MLS search inside it is down (`search-idx-provider`): a third party, we can only tell visitors and wait | |
-| Intelligence calculators (`calculators`) | | Deal Studio, mortgage simulator or seller net sheet page does not load; or Deal Studio's analysis service fails or gives figures that differ from the reference case (`calculators-api-analyze`). Visitors then see "The analysis service could not be reached, so nothing was calculated" (or "Request failed with status code …"), or those figures; Deal Studio's risk simulation, the mortgage simulator and the seller net sheet run in the browser and still work. (With the whole API down there is an API incident too.) | | |
+| Website (`public-site`) | (not checked) Home page or the site script does not load (`public-home`, `public-asset-js`) | `www` redirect broken (`public-www-redirect`). (not checked) Advisory or About page, or the stylesheet | (not checked) Podcast, Privacy or Terms page broken; unknown addresses no longer answer "page not found" | |
+| Property search (`search`) | | (not checked) The `/search` page itself does not load (`search-page`) | The Georgia MLS search inside it is down (`search-idx-provider`): a third party, we can only tell visitors and wait | |
+| Intelligence calculators (`calculators`) | | (not checked) Deal Studio, mortgage simulator or seller net sheet page does not load. Checked: Deal Studio's analysis service fails or gives figures that differ from the reference case (`calculators-api-analyze`). Visitors then see "The analysis service could not be reached, so nothing was calculated" (or "Request failed with status code …"), or those figures; Deal Studio's risk simulation, the mortgage simulator and the seller net sheet run in the browser and still work. (With the whole API down there is an API incident too.) | | |
 | Inquiry form (`inquiry`) | Declared by a person: requests were confirmed on screen but are missing from the staff queue | The form cannot send (`inquiry-route`, `inquiry-preflight`) or the queue is switched off (`inquiry-queue`): the visitor sees an error and nothing is stored | Declared by a person: requests arrive but the arrival email to realtor@diamondecho.com does not | |
 | API (`api`) | | Not answering, or wrong build (`api-health`, `api-identity`, `api-cors-allowed`) | Answers calls from other sites, or publishes its route list (`api-cors-refused`, `api-docs-off`) | |
-| Staff site (`staff-site`) | | Staff cannot open the queue, or the staff API stops asking for sign-in (`staff-home`, `staff-api-auth`) | | |
+| Staff site (`staff-site`) | | The staff API stops asking for sign-in (`staff-api-auth`). (not checked) Staff cannot open the staff page (`staff-home`) | | |
 | DNS (`dns`) | `diamondecho.com` does not resolve (`dns-apex-resolves`) | Mail records (MX, SPF) wrong, staff address or nameservers wrong | Microsoft 365 or DMARC records wrong | Other records carried over from GoDaddy changed |
 | TLS certificates (`tls`) | A certificate has expired, or expires in under 2 days | Expires in under 7 days; or a connection older than TLS 1.2 | Expires in under 21 days and not yet renewed | |
 | Domain registration (`domain`) | Expired, expires in under 7 days, on hold, or no longer registered | Expires in under 30 days; a transfer to another registrar is under way, or the registry names a different registrar (refuse it at GoDaddy at once if nobody started it) | Expires in under 60 days, or the transfer lock is off | |
-| Monitoring | | Cloudflare is refusing the monitor: every page it serves turns the monitor away while nothing else fails (see "When the monitor itself fails") | The monitor cannot see the site, or a suite has not run | |
+| Monitoring | | Cloudflare is refusing the monitor: it turns the monitor's redirect checks away while nothing else fails (see "When the monitor itself fails") | The monitor cannot see the site, or a suite has not run | |
 | Error budget | | A fast burn (1-hour window): failing so often that the 28-day allowance would be gone in about two days ([error-budget-policy.md](error-budget-policy.md)) | A medium burn (6-hour window) | A slow burn (3-day window): opens no issue; shown in `slo.json` and the weekly report only |
 
 A suspected attack or leak is handled with the security playbook as well,
@@ -193,7 +200,8 @@ practice:
   pointing at [cloudflare-outage.md](runbooks/cloudflare-outage.md): visitors
   may be blocked too. The status page says a recent check was turned away.
   If any of those checks failed for another reason, the normal rules
-  apply.
+  apply. Since 2026-11-14 the monitor loads no page, so the only checks this
+  can happen to are the redirects.
 - **A suite has not run** for 45 minutes (5-minute checks) or 3 hours (hourly
   checks): same sev3 incident. GitHub sometimes starts scheduled runs late.
 - **The whole GitHub workflow stops** (paused, broken, or GitHub down): no

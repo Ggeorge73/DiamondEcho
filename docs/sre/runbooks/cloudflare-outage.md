@@ -3,9 +3,9 @@
 | | |
 | --- | --- |
 | Component | `public-site` (also `staff-site` and `dns`, which Cloudflare also serves) |
-| Usual severity | sev1 when the site does not load for visitors; sev3 when only the monitor is stopped. See [severity-and-escalation.md](../severity-and-escalation.md) |
-| Alerts that lead here | any page or edge check whose text begins "Cloudflare refused the request" or "Cloudflare answered the monitor with a … page"; page checks failing with a Cloudflare error page; `dns-*` failing at both resolvers at once |
-| Last reviewed | 2026-11-13, not yet tested |
+| Usual severity | sev1 when the site does not load for visitors; lower when only the monitor is stopped. See [severity-and-escalation.md](../severity-and-escalation.md) |
+| Alerts that lead here | a redirect check (`public-www-redirect`, `edge-http-redirect`, `edge-www-redirect`) whose text begins "Cloudflare refused the request" or "Cloudflare answered the monitor with a … page"; the incident "Cloudflare is refusing the monitor"; `dns-*` failing at both resolvers at once. **A Cloudflare outage of the pages alone opens no alert**: no check loads a page. A visitor's report, or someone opening the site, leads here instead |
+| Last reviewed | 2026-11-14, not yet tested |
 
 ## Symptoms
 
@@ -17,15 +17,25 @@
     or security-level setting is challenging them;
   - "Error 5xx" with "Cloudflare" in the middle of a diagram, or nothing at
     all: Cloudflare itself, or the path behind it, is failing.
-- The incident issue says "Cloudflare refused the request (403, error 1010:
-  the browser signature check, usually Browser Integrity Check): a Cloudflare
-  security setting is blocking the monitor, and perhaps visitors too." That is
-  a block of the monitor; real visitors may or may not be affected. Error 1010
-  for the monitor usually means the rule `Let the DiamondEcho monitor through`
-  (item 1.1 of [needs-from-gbenga.md](../needs-from-gbenga.md)) is missing,
-  switched off or changed.
-- Several unrelated checks fail at once (pages, staff, DNS): Cloudflare
-  serves all three, so a Cloudflare-wide problem looks like this.
+- **Nothing automatic will tell you the pages are down.** Bot Fight Mode is
+  on (Gbenga's decision, 2026-11-14) and refuses GitHub's servers on every
+  page, so the monitor does not ask for any page, and no outside service
+  does it instead. If Cloudflare stops serving the pages while the API
+  (which is not behind Cloudflare) keeps answering, no incident opens and
+  the status page still says "Operational". You learn of it from a visitor,
+  from someone on the team opening the site, or from
+  https://www.cloudflarestatus.com.
+- **The incident "Cloudflare is refusing the monitor"** can now only come
+  from the redirect checks (`public-www-redirect` every 5 minutes;
+  `edge-http-redirect` and `edge-www-redirect` hourly and after a merge).
+  Cloudflare normally answers a redirect before its bot check. The check
+  says "Cloudflare refused the request (403 …): a Cloudflare security
+  setting is blocking the monitor, and perhaps visitors too", and two such
+  runs in a row open the incident. It means a Cloudflare setting or the
+  redirect rule changed. Real visitors may or may not be affected.
+- The redirect checks and the DNS checks fail at once: Cloudflare serves
+  both, so a Cloudflare-wide problem can look like this. (The pages and the
+  staff site are Cloudflare's too, but no check loads them.)
 - Not for a page that loads but is wrong or old: use [site-down.md](site-down.md)
   or [bad-deploy.md](bad-deploy.md). Not for wrong DNS records: use
   [dns-problem.md](dns-problem.md).
@@ -55,8 +65,8 @@ miss.
    settings** (firewall, bot, redirect rules) is the cause: go to step 4.
 3. **Anyone.** Does a normal browser get through? Open https://diamondecho.com
    in a private window, then on a phone using mobile data. If both load and
-   only the monitor is refused, real visitors are not (or not all)
-   affected: go to Fix step 3.
+   only the monitor's redirect checks are refused, real visitors are not (or
+   not all) affected: go to Fix step 3.
 4. **Gbenga.** Cloudflare > diamondecho.com > Security > Events. Filter the
    last hour by action "Block" or "Challenge". Healthy: few events, none for
    ordinary pages. Note which **service** produced the blocks (for example
@@ -77,22 +87,25 @@ miss.
    started then: put that setting back as it was (the audit log shows the old
    value). Worked when: the private-window and phone loads work and the
    Security Events for ordinary pages stop within minutes.
-3. **Gbenga. Needs Gbenga's yes:** a feature is blocking real visitors or the
-   monitor (step 4 named it). Choose the narrowest change and follow its
-   undo in [edge.md](../edge.md), "Recommended baseline", item 9:
-   - only the monitor is blocked with error 1010: Security > Security rules
-     (older dashboards: WAF) > Custom rules. Check that `Let the DiamondEcho
-     monitor through` exists, is enabled and is first in the list. If it is
-     missing or changed, re-create it exactly as item 1.1 of
-     [needs-from-gbenga.md](../needs-from-gbenga.md) says (Skip, Browser
-     Integrity Check only). Undo: delete the rule. If only Google's uptime
-     checks are blocked, see [edge.md](../edge.md) item 9, "Google's uptime
-     checks";
+3. **Gbenga. Needs Gbenga's yes:** a feature is blocking real visitors or
+   the monitor's redirect checks (step 4 named it). Choose the
+   narrowest change and follow its undo in [edge.md](../edge.md),
+   "Recommended baseline", item 9:
+   - only the monitor's redirect checks are refused: the redirect is no
+     longer answered before the bot check. Look in step 5's audit log for a
+     change to the redirect rules (Rules > Redirect Rules: `www` to the bare
+     name) or to "Always Use HTTPS", and put it back. Do not add an
+     exemption for the monitor: on the Free plan no rule can skip Bot Fight
+     Mode, and the earlier plan for one is withdrawn;
+   - only Google's uptime checks are blocked: see [edge.md](../edge.md) item
+     9, "Google's uptime checks";
    - visitors are blocked by Browser Integrity Check or a custom rule: switch
      that one feature or rule off;
    - visitors are challenged by Bot Fight Mode: switch Bot Fight Mode off.
-   Worked when: the edge checks pass on the next hourly run, or the next
-   page check, and step 3 works on a phone.
+     That reverses the decision of 2026-11-14, so record it in
+     [edge.md](../edge.md).
+   Worked when: the redirect checks pass on the next run and step 3 works
+   on a phone. No check confirms the pages for you: step 3 is the proof.
 4. **Gbenga. Needs Gbenga's yes:** "I'm Under Attack" was left on after an
    attack: set Security Level back to its previous value.
 5. **AI role agent.** Record what changed and why in the incident issue, and
@@ -108,8 +121,8 @@ miss.
 
 ## Afterwards
 
-- [ ] Confirm the edge and page checks pass and the components are
-      operational on the status page; the incident issue has closed.
+- [ ] Confirm by hand that the site and the staff site load (no check does
+      it), the redirect checks pass, and any incident issue has closed.
 - [ ] Post the "resolved" update (wording in
       [incident-response.md](../incident-response.md)).
 - [ ] If a bot or security setting changed, re-check the property search on

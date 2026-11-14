@@ -24,6 +24,22 @@ import { TARGETS } from "./targets.mjs";
 // missing or breaks is reported, never skipped in silence.
 export const MODULES = Object.freeze(["pages", "api", "calculators", "inquiry", "search", "staff", "tls", "dns", "domain", "edge"]);
 
+// Whether the monitor asks for the pages Cloudflare serves (diamondecho.com,
+// staff.diamondecho.com).
+//   "none"    it does not. The default: Cloudflare's Bot Fight Mode answers
+//             403 to GitHub's runners and stays on, and no outside service is
+//             used in the monitor's place (Gbenga, 2026-11-14). The monitor
+//             asks only the API, the inquiry route, the redirects and the
+//             slow suite's certificates, DNS and domain. No page of the site
+//             is watched (docs/sre/synthetic-monitoring.md).
+//   "direct"  it loads the pages itself, as it did before
+//             (SRE_PAGE_SOURCE=direct; only useful for a run from a network
+//             Cloudflare lets through).
+// A check module reads ctx.pageSource; without one (a module's own tests) it
+// loads the pages itself.
+export const PAGE_SOURCES = Object.freeze(["none", "direct"]);
+export const pageSourceFrom = (env = process.env) => (env.SRE_PAGE_SOURCE === "direct" ? "direct" : "none");
+
 // Where a module's own breakdown is filed, and how it is named, when its
 // checks could not be run at all.
 const MODULE_INFO = Object.freeze({
@@ -137,7 +153,7 @@ export async function runSuite({
   const started_at = new Date(now()).toISOString();
   // `memory` is shared by every module, so lib/http.mjs keeps its pace and
   // its list of quiet hosts across the whole run.
-  const ctx = { fetch: fetcher, now, targets, env, suite, sleep, memory: {} };
+  const ctx = { fetch: fetcher, now, targets, env, suite, sleep, memory: {}, pageSource: pageSourceFrom(env) };
   const checks = [];
   const seen = new Set();
 

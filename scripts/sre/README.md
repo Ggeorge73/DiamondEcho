@@ -86,6 +86,21 @@ throws only for a bug. `synthetic-checks.mjs` imports the modules from a fixed
 list: `pages`, `api`, `calculators`, `inquiry`, `search`, `staff`, `tls`,
 `dns`, `domain`, `edge`.
 
+**No page is asked for.** Cloudflare's Bot Fight Mode answers 403 to GitHub's
+runners and stays on, and no outside service loads the pages in the monitor's
+place (Gbenga, 2026-11-14). The runner passes `ctx.pageSource`: `"none"` (the
+default) or `"direct"` when `SRE_PAGE_SOURCE=direct`. A module that would load
+a page Cloudflare serves asks `pagesNotAsked(ctx)` from `checks/pages.mjs`
+first and skips it. With `"none"` the monitor asks only the API, the inquiry
+route, the staff sign-in route, the redirects and the slow suite's
+certificates, DNS and domain. These checks are not produced: every page load
+(`public-home`, `public-page-*`, `search-page`, `calculators-*-page`,
+`inquiry-page`, `staff-home`), `public-not-found`, `public-asset-js`,
+`public-asset-css`, `edge-hsts`, `edge-no-analytics-beacon`, and the home
+page's `commit` fact. The SLIs fed only by pages (`public-availability`,
+`public-latency`, `calculators-availability`) therefore get no data, and the
+status page says that pages are not loaded.
+
 A check may report short facts it read from the live service in `observed`,
 for example `{ "revision": "diamondecho-api-00028-zin", "commit": "59f8d46" }`
 on the API identity check and `{ "commit": "…" }` on the home page check.
@@ -235,7 +250,9 @@ included: `c` is empty and the run counts against no SLO) and `"refused": N`
 `{ ensureLabel(name, color, description), createIssue({ title, body, labels }) -> { number, html_url }, comment(number, body), closeIssue(number), listOpenIssues(label) -> [{ number, title, html_url, labels }] }`,
 plus `editIssue`, `reopenIssue`, `addLabels`, `removeLabel` and
 `listComments(number) -> [{ user, author_association, created_at, first_line }]`
-(only the first line of a comment, at most 300 characters), and a `dryRun`
+(only the first line of a comment, at most 300 characters),
+`listCheckRuns(sha) -> [{ name, status, conclusion }]` (read-only; the
+post-merge check reads Cloudflare Pages' build result with it), and a `dryRun`
 flag (true without a token). `token` defaults to `GITHUB_TOKEN` and
 `repository` to `GITHUB_REPOSITORY`. Only comments whose `author_association`
 is OWNER, MEMBER or COLLABORATOR (or by `SRE_OWNER`) may acknowledge an

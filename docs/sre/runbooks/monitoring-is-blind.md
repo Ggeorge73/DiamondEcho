@@ -5,7 +5,7 @@
 | Component | `monitoring` (an incident about the monitor, not about a part of the site) |
 | Usual severity | sev3, see [severity-and-escalation.md](../severity-and-escalation.md) |
 | Alerts that lead here | "Monitoring cannot see the site" issues; the Google Cloud policy "DiamondEcho SRE: uptime checks have stopped reporting"; the status page showing "stale" |
-| Last reviewed | 2026-11-13, not yet tested |
+| Last reviewed | 2026-11-14, not yet tested |
 
 ## Symptoms
 
@@ -17,18 +17,25 @@
   quiet".
 - This runbook is NOT for: the site itself failing while the monitor works
   (the issue then names a part of the site): use that part's runbook.
+- Also not for this: the monitor never loads a web page of the site or the
+  staff site. That is by Gbenga's decision of 2026-11-14 (Bot Fight Mode
+  stays on, no outside monitoring service), not a fault to fix here. It
+  means a broken page or a Cloudflare outage opens no incident while the API
+  answers ([synthetic-monitoring.md](../synthetic-monitoring.md)).
 
 ## Impact on visitors
 
 None directly: this is about the watch, not the site. The risk is that a
 real outage goes unnoticed while the monitor is blind. The status page tells
-visitors its information is out of date rather than showing "working".
+visitors its information is out of date rather than showing "working". (The
+pages themselves are never watched, blind or not: see above.)
 
 ## Check first
 
 1. **Anyone.** Open https://diamondecho.com and
    https://diamondecho.com/inquire in a private window. Healthy: both load. If
    not, the site is down too: follow [site-down.md](site-down.md) first.
+   Nothing automatic makes this check, so do it by hand every time.
 2. **Anyone.** Open https://www.githubstatus.com. If GitHub Actions has an
    incident, the cause is GitHub: wait for it, and rely on the Google Cloud
    uptime checks meanwhile (if applied).
@@ -41,8 +48,9 @@ visitors its information is out of date rather than showing "working".
    (`outside-dns-probe` in the 5-minute checks; the Georgia MLS search, the
    DNS and the domain-registry checks in the hourly ones), the runner's
    network failed; it usually clears by itself within a few runs. If the
-   outside checks answered and only ours did not, it is the site: go to
-   [site-down.md](site-down.md).
+   outside checks answered and only ours did not, it is the part the issue
+   names (the checks ask the API and the redirects, not the pages): use
+   that part's runbook.
 5. **Anyone.** See what the state branch last recorded:
    ```bash
    git fetch origin sre-status && git show origin/sre-status:status.json | grep -A 3 '"last_runs"'

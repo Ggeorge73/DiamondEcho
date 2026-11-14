@@ -10,7 +10,8 @@ repository has no Cloudflare, GoDaddy or Google Cloud credential and changes
 nothing by itself.
 
 Owner: the edge security engineer role (an AI collaborator). Last reviewed
-2026-11-13.
+2026-11-13; the Bot Fight Mode decision of 2026-11-14 was added by the
+synthetic monitoring role.
 
 ## What we have today
 
@@ -50,9 +51,11 @@ home page; DNSSEC is off; there is no CAA record.
 Four check modules run hourly in the `slow` suite of
 `scripts/sre/synthetic-checks.mjs` (contract: `scripts/sre/README.md`), and
 the edge checks also run after each deploy (`post-deploy` suite). They only
-read: DNS questions to two public resolvers, one registry lookup, three page
-requests and four TLS connections an hour, plus the edge checks' three page
-requests and two DNS questions after a deploy.
+read: DNS questions to two public resolvers, one registry lookup, two
+redirect requests and four TLS connections an hour, plus the edge checks' two
+redirect requests and two DNS questions after a deploy. Since 2026-11-14 the
+edge checks no longer load the home page (see "When Cloudflare stops the
+monitor itself" below).
 
 | Check | What it proves | Fails at |
 | --- | --- | --- |
@@ -65,8 +68,9 @@ requests and two DNS questions after a deploy.
 | `domain-expiry` | Days until the registration expires; holds and deletion states. | under 60 days sev3, under 30 sev2, under 7 or expired sev1 |
 | `domain-registrar-lock` | Transfer lock on; no transfer under way; registrar still GoDaddy. | lock off sev3; transfer or new registrar sev2 |
 | `domain-delegation` | The .com registry points at our two nameservers. | sev2 |
-| `edge-http-redirect`, `edge-www-redirect`, `edge-hsts` | http goes to https; `www` keeps the page; HSTS is sent. | sev3 |
-| `edge-no-analytics-beacon` | Cloudflare's analytics beacon has not come back into the page (the Privacy page promises no analytics). | sev3 |
+| `edge-http-redirect`, `edge-www-redirect` | http goes to https; `www` keeps the page. | sev3 |
+| `edge-hsts` | HSTS is sent. **Not made at present:** it reads the home page, which Bot Fight Mode refuses to the monitor. | sev3 |
+| `edge-no-analytics-beacon` | Cloudflare's analytics beacon has not come back into the page (the Privacy page promises no analytics). **Not made at present**, for the same reason. | sev3 |
 | `edge-dnssec`, `edge-caa` | Whether DNSSEC and CAA are on. | never fail (information) |
 
 **Two resolvers must agree.** A DNS check fails only when Cloudflare's and
@@ -83,13 +87,22 @@ as the site.
 **When a DNS change is meant**, update `deploy/dns/expected-records.json` in
 the same pull request (or the next), or the check will keep reporting it.
 
-**When Cloudflare stops the monitor itself**, every check that reads a page
-says so in the same words, written by `scripts/sre/lib/http.mjs` and by
-`edge.mjs`: "Cloudflare refused the request (403, error 1010: the browser
-signature check, usually Browser Integrity Check): a Cloudflare security
-setting is blocking the monitor, and perhaps visitors too." Only Cloudflare's
-error number is kept from its page. That points at a Cloudflare security
-setting, not at the site: see
+**When Cloudflare stops the monitor itself.** It does, on every page:
+Bot Fight Mode is on by Gbenga's decision (2026-11-14) and answers 403 to
+GitHub's runners. So the monitor no longer asks for any page, and nothing
+else loads the pages in its place
+([synthetic-monitoring.md](synthetic-monitoring.md)). Of the edge checks
+that leaves the two redirects, which Cloudflare answers before its bot
+check. `edge-hsts` and `edge-no-analytics-beacon` need the home page and are
+not made; nothing replaces them. That is a known gap. They come back only in
+a run with `SRE_PAGE_SOURCE=direct`, from a network Cloudflare lets through.
+
+If a request the monitor still makes is refused, the check says so in words
+written by `scripts/sre/lib/http.mjs` and by `edge.mjs`: "Cloudflare refused
+the request (403, error 1010: the browser signature check, usually Browser
+Integrity Check): a Cloudflare security setting is blocking the monitor, and
+perhaps visitors too." Only Cloudflare's error number is kept from its page.
+That points at a Cloudflare security setting, not at the site: see
 [cloudflare-outage.md](runbooks/cloudflare-outage.md) and "Found on
 2026-11-13" below.
 
@@ -107,12 +120,18 @@ Not repeated here: the strength of the security headers, which
    curl's, with Node's default, or with
    `Mozilla/5.0 (compatible; DiamondEcho-SRE-Monitor/1; +https://github.com/Ggeorge73/DiamondEcho)`
    gets the real page. `www` is not affected (its redirect rule answers
-   first). This was seen from the agents' sandbox; GitHub's runners may be
-   treated differently. Until it is fixed, every page check of the monitor
-   would fail. **Gbenga's choice (2026-11-13): a Cloudflare custom rule**, so
-   the monitor keeps its plain name. The exact rule is item 1.1 of
-   [needs-from-gbenga.md](needs-from-gbenga.md) and is summarised under item
-   9 below.
+   first). This was seen from the agents' sandbox. **Measured from
+   GitHub's runners on 2026-11-14** (monitor run 27, 02:36 UTC): every page
+   on `diamondecho.com` and `staff.diamondecho.com` answered 403 to the
+   monitor, error 1010 on most and a Cloudflare challenge page on the home
+   page, the Deal Studio page and the staff home page. The API checks, the
+   inquiry route checks and the `www` redirect (301) passed. **Gbenga's
+   decision (2026-11-14): Bot Fight Mode stays on.** The plan of 2026-11-13,
+   a Cloudflare custom rule for the monitor, is withdrawn: on the Free plan
+   a custom rule cannot skip Bot Fight Mode. He also decided against any
+   outside monitoring service and against checking the hosting address
+   behind Cloudflare. So the monitor does not ask for pages at all; see
+   item 9 below.
 2. **Cloudflare adds a bot-detection script to the page.** The home page as
    served contains `/cdn-cgi/challenge-platform/scripts/jsd/main.js`,
    Cloudflare's "JavaScript detections", which Cloudflare adds while Bot Fight
@@ -243,63 +262,83 @@ code.
   2026-11-13".
 - **Risk to monitors:** the monitor is automated by definition, and runs from
   cloud addresses (GitHub, Google). On the Free plan, Bot Fight Mode cannot be
-  exempted for one client by a firewall rule. If it stops the monitor, every
-  check fails and the status page goes red with the site actually fine.
+  exempted for one client by a firewall rule. It does stop the monitor: on
+  2026-11-14 every page answered 403 to GitHub's runners (see "Found on
+  2026-11-13", item 1). It lets through the services on Cloudflare's list of
+  verified bots.
 - **Risk to the Georgia MLS search:** the search frame loads from
   `georgiamls.com`, which our zone's settings do not reach; the `/search` page
   around it is ours. Not tested with either setting changed: re-check the
   search (DE-32's real-browser check) after any bot setting change.
-- **Today:** Cloudflare's JavaScript detections script is in the page (see
-  "Found on 2026-11-13"), so some bot setting is on. Which one, Gbenga can
-  read under Security > Bots.
-- **Decision (Gbenga, 2026-11-13):** one custom rule, `Let the DiamondEcho
-  monitor through`, exactly as written in item 1.1 of
-  [needs-from-gbenga.md](needs-from-gbenga.md): it matches only `GET` and
-  `HEAD` requests whose User-Agent contains `DiamondEcho-SRE-Monitor` on
-  `diamondecho.com`, `www.diamondecho.com` and `staff.diamondecho.com`, and
-  its action is **Skip** with only **Browser Integrity Check** ticked. That
-  item is the one place the expression is kept; copy it from there, not from
-  here.
-  - **Risk:** anyone who copies that name also skips the browser check, and
-    only that check: the managed rules, any rate limit and Bot Fight Mode
-    still apply to them.
-  - **Undo:** delete the rule. The monitor's page checks then fail again with
-    "Cloudflare refused the request (403, error 1010 …)".
-  - **Worked when:** after a hand-run of the "SRE monitor" workflow, the page
-    and edge checks pass.
-  - **If GitHub's runners are still stopped** (by Bot Fight Mode, which a
-    rule cannot exempt on the Free plan), the remaining choice is switching
-    Bot Fight Mode off (undo: switch it on). **Needs Gbenga's yes.**
+- **Today:** Bot Fight Mode is on, and stays on (Gbenga, 2026-11-14).
+  Cloudflare's JavaScript detections script is in the page (see "Found on
+  2026-11-13"). The exact switches are under Security > Bots.
+- **The options, and the one chosen:**
+  1. **Chosen (Gbenga, 2026-11-14): keep Bot Fight Mode on, and the monitor
+     does not ask for pages.** It asks only the API, the inquiry route, the
+     staff sign-in route and the redirects, plus the hourly certificate, DNS
+     and domain checks. Nothing in Cloudflare changes. What this leaves
+     unwatched is item 1.2a of [needs-from-gbenga.md](needs-from-gbenga.md)
+     and is set out in [synthetic-monitoring.md](synthetic-monitoring.md).
+     - **Risk:** no automatic check loads a web page. A broken or empty
+       page, or a Cloudflare outage, while the API keeps answering, opens no
+       incident and the status page still says "Operational". The monitor
+       no longer checks HSTS, the analytics beacon or the staff page's
+       headers. A known gap, decided by the owner.
+     - **Undo:** choose another option below.
+     - **Worked when:** a hand-run of the "SRE monitor" workflow passes
+       every check (item 1.1 of
+       [needs-from-gbenga.md](needs-from-gbenga.md)).
+  2. **Considered and rejected by Gbenga (2026-11-14), for security
+     reasons: an outside monitoring service** that Cloudflare lets through
+     as a verified bot, loading the pages in the monitor's place. No outside
+     service is used.
+  3. **Rejected by Gbenga (2026-11-14): checking the hosting address behind
+     Cloudflare** (the `pages.dev` address) from the monitor.
+  4. **Withdrawn: a custom rule for the monitor** (the decision of
+     2026-11-13: `Let the DiamondEcho monitor through`, skipping Browser
+     Integrity Check for the monitor's User-Agent). It could never have been
+     enough: a custom rule cannot skip Bot Fight Mode on the Free plan. It
+     also let anyone who copied the monitor's name skip the browser check.
+     If the rule was created, deleting it is item 1.2 of
+     [needs-from-gbenga.md](needs-from-gbenga.md).
+  5. **Not chosen: switch Bot Fight Mode off.** The monitor could then load
+     the pages itself again (with `SRE_PAGE_SOURCE=direct`), if Browser
+     Integrity Check also let it through, which has not been tested. It
+     gives up the bot protection for every visitor. Undo: switch it on.
+     **Needs Gbenga's yes.**
+  6. **Not chosen: a paid Cloudflare plan**, where Cloudflare's bot settings
+     can be skipped by a rule. A cost; see Cloudflare's plans page. **Needs
+     Gbenga's yes.**
 - **Google's uptime checks may meet the same block.** The Cloud Monitoring
   uptime checks in `deploy/monitoring/uptime-checks/` (item 3.3 of
   [needs-from-gbenga.md](needs-from-gbenga.md)) set no User-Agent, so they
   send Google's own checker name. Google documents it as starting
-  `GoogleStackdriverMonitoring-UptimeChecks`. It does not contain
-  `DiamondEcho-SRE-Monitor`, so the rule above does not let them through, and
-  Browser Integrity Check may refuse them with error 1010 as it did the
+  `GoogleStackdriverMonitoring-UptimeChecks`. They run from Google's cloud
+  addresses, so Bot Fight Mode may refuse them with a 403 as it did the
   monitor. Nobody has tested this; they do not exist yet. How Gbenga checks,
   read-only, within an hour of applying them:
   1. Google Cloud > Monitoring > Uptime checks. Open each `DiamondEcho SRE: …`
      check. Healthy: every region passes. A 403 failure in every region
      means a block.
   2. Cloudflare > diamondecho.com > Security > Events, filtered to the last
-     hour and the action "Block". Healthy: no events from Google's checker.
-     A block names the service ("Browser Integrity Check") and shows the exact
-     User-Agent.
-  3. If they are blocked, the fix is a written change to the rule in item
-     1.1: add `or http.user_agent contains "<the name seen in step 2>"`
-     inside the User-Agent part, keeping the method and host conditions. Same
-     risk and undo as above. **Needs Gbenga's yes**, and a review by the
-     security lead, who narrowed the rule.
+     hour and the action "Block" or "Challenge". Healthy: no events from
+     Google's checker. A block names the service (for example "Bot Fight
+     Mode" or "Browser Integrity Check") and shows the exact User-Agent.
+  3. If they are blocked by Bot Fight Mode, no rule on the Free plan can let
+     them through. Leave the page checks unapplied (or remove them); the API
+     uptime check is not behind Cloudflare and is not affected. The pages
+     then stay unwatched, as today. Anything else is one of the options
+     above and **needs Gbenga's yes**.
 
 ### 10. "I'm Under Attack" mode: only during an attack
 
 - **Where:** Security > Settings > Security Level.
 - **What:** shows every visitor a short browser check before the site.
 - **Use:** only during a real flood of the site, as a step in
-  [traffic-spike-or-abuse.md](runbooks/traffic-spike-or-abuse.md). It will
-  stop the monitor too, so the status page will show the site as down while
-  it is on. **Needs Gbenga's yes**; undo: set the level back.
+  [traffic-spike-or-abuse.md](runbooks/traffic-spike-or-abuse.md). The
+  monitor loads no page, so the status page will not show it; whether the
+  monitor's redirect checks are stopped by it has not been tested. **Needs Gbenga's yes**; undo: set the level back.
 
 ## Option: put the API behind Cloudflare (`api.diamondecho.com`)
 
