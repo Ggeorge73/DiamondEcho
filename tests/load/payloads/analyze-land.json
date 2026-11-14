@@ -1,0 +1,28 @@
+{
+  "strategy": "land",
+  "property": { "property_type": "land", "unit_count": 12, "rentable_square_feet": 18000 },
+  "acquisition": {
+    "purchase_price": 3000000, "closing_costs": 75000, "due_diligence_costs": 25000,
+    "initial_capex": 125000, "hold_months": 60
+  },
+  "debt": [
+    {
+      "name": "Construction / development facility", "principal": 3643250,
+      "annual_interest_rate": 0.0675, "amortization_years": 30, "interest_only_months": 0,
+      "term_months": 120, "origination_fee_rate": 0.01
+    }
+  ],
+  "exit": { "selling_cost_rate": 0.06 },
+  "assumptions": { "annual_discount_rate": 0.1 },
+  "land": {
+    "development_type": "single_family_subdivision", "disposition_strategy": "build_and_sell",
+    "site_acres": 2.5, "parcel_count": 1, "entitlement_status": "unentitled",
+    "utility_status": "verify", "access_status": "verify",
+    "environmental_status": "phase_i_required", "geotechnical_status": "not_started",
+    "planned_units": 12, "buildable_square_feet": 18000, "development_months": 24,
+    "absorption_months": 12, "site_work_cost": 300000, "hard_construction_cost": 1500000,
+    "soft_costs": 200000, "permits_impact_fees": 100000, "developer_fee": 100000,
+    "contingency_rate": 0.1, "annual_carrying_costs": 30000,
+    "expected_terminal_value": 4500000, "target_profit_margin": 0.2
+  }
+}

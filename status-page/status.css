@@ -1,0 +1,192 @@
+/* The status page's styles. The colours and the type follow the main site
+   (frontend/src/index.css): abyss and navy grounds, steel accents, light
+   headings, small spaced capitals, square corners. The site's two web fonts
+   are not loaded here, because this page loads nothing from anywhere else;
+   they are used if the reader's device has them, with system fonts behind. */
+
+:root {
+  --ground: #0a141f;
+  --ground-deep: #060c13;
+  --panel: #0f1c2a;
+  --text: #e5edf5;
+  --text-soft: #a9c7e0;
+  --text-muted: #8ba0b3;
+  --accent: #5e9cd0;
+  --line: rgba(229, 237, 245, 0.14);
+  --line-strong: rgba(229, 237, 245, 0.3);
+  --ok: #58c896;
+  --warn: #e6b450;
+  --bad: #ff8f8f;
+  --unknown: #8ba0b3;
+  --day-none: rgba(229, 237, 245, 0.32);
+  --heading: "Sora", "Inter", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --body: "Inter", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --ground: #f3f6f9;
+    --ground-deep: #e7edf3;
+    --panel: #ffffff;
+    --text: #0a141f;
+    --text-soft: #24435c;
+    --text-muted: #4a5f72;
+    --accent: #23587f;
+    --line: rgba(10, 20, 31, 0.14);
+    --line-strong: rgba(10, 20, 31, 0.34);
+    --ok: #17734a;
+    --warn: #855600;
+    --bad: #b3261e;
+    --unknown: #4a5f72;
+    --day-none: rgba(10, 20, 31, 0.42);
+  }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--text);
+  font-family: var(--body);
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, p, ul, ol { margin: 0; }
+ul, ol { padding: 0; list-style: none; }
+
+a { color: var(--accent); text-underline-offset: 3px; }
+a:hover { color: var(--text); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+.wrap { width: 100%; max-width: 880px; margin: 0 auto; padding: 0 20px; }
+
+/* Header */
+.top { background: var(--ground-deep); border-bottom: 1px solid var(--line); }
+.top__inner { min-height: 72px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.wordmark { display: inline-flex; align-items: center; gap: 12px; min-height: 44px; color: var(--text); text-decoration: none; }
+.wordmark__mark { flex: none; color: var(--accent); }
+.wordmark__text { display: flex; flex-direction: column; }
+.wordmark__text strong { font-family: var(--heading); font-size: 14px; font-weight: 500; letter-spacing: 0.3em; text-transform: uppercase; }
+.wordmark__text small { margin-top: 2px; color: var(--text-muted); font-size: 11px; font-weight: 600; letter-spacing: 0.22em; text-transform: uppercase; }
+.top__link { min-height: 44px; display: inline-flex; align-items: center; font-size: 13px; }
+
+/* Headings */
+h1 { margin: 44px 0 20px; font-family: var(--heading); font-size: clamp(30px, 6vw, 44px); font-weight: 300; letter-spacing: -0.02em; line-height: 1.15; }
+h2 { margin-bottom: 18px; padding-bottom: 12px; border-bottom: 1px solid var(--line); color: var(--text-soft); font-family: var(--body); font-size: 12px; font-weight: 600; letter-spacing: 0.24em; text-transform: uppercase; }
+h3 { font-family: var(--heading); font-size: 18px; font-weight: 400; line-height: 1.35; }
+
+.section { margin-top: 52px; }
+main[data-ready="false"] .section { display: none; }
+main { padding-bottom: 64px; }
+
+.empty, .notice { color: var(--text-muted); }
+.notice { margin-top: 20px; padding: 16px 18px; border: 1px solid var(--line-strong); }
+.section__intro { margin-bottom: 14px; color: var(--text-muted); font-size: 14px; }
+
+/* Icons take the colour of the text beside them. */
+.icon { flex: none; width: 1.25em; height: 1.25em; }
+
+/* Banner: the one-line answer to "is it working?" */
+.banner { display: flex; align-items: flex-start; gap: 16px; padding: 22px 22px; background: var(--panel); border: 1px solid var(--line-strong); border-left-width: 6px; }
+.banner .icon { width: 30px; height: 30px; margin-top: 2px; }
+.banner__title { font-family: var(--heading); font-size: clamp(20px, 4.4vw, 26px); font-weight: 400; line-height: 1.3; }
+.banner__line { margin-top: 6px; color: var(--text-soft); font-size: 15px; }
+.banner--operational { border-left-color: var(--ok); }
+.banner--operational .icon { color: var(--ok); }
+.banner--degraded { border-left-color: var(--warn); }
+.banner--degraded .icon { color: var(--warn); }
+.banner--outage { border-left-color: var(--bad); }
+.banner--outage .icon { color: var(--bad); }
+.banner--unknown, .banner--loading { border-left-color: var(--unknown); }
+.banner--unknown .icon { color: var(--unknown); }
+.banner--loading .banner__title { color: var(--text-muted); }
+
+.updated { min-height: 1.6em; margin-top: 12px; color: var(--text-muted); font-size: 14px; }
+
+/* Services */
+.component { padding: 20px 0; border-bottom: 1px solid var(--line); }
+.component:first-child { padding-top: 0; }
+.component__head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 16px; }
+.component__note { margin-top: 2px; color: var(--text-muted); font-size: 13px; }
+
+.state { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; }
+.state--operational { color: var(--ok); }
+.state--degraded { color: var(--warn); }
+.state--outage { color: var(--bad); }
+.state--unknown { color: var(--unknown); }
+
+/* The day-by-day bar. Colour is never the only signal: a day with no data is
+   an outline, a day with failed runs is taller, and every day with failed
+   runs is also written out in the list under the bar. */
+.days { display: flex; align-items: flex-end; gap: 1px; height: 34px; margin-top: 14px; }
+.day { flex: 1 1 0; min-width: 0; height: 24px; background: var(--ok); }
+.day--minor { height: 29px; background: var(--warn); }
+.day--major { height: 34px; background: var(--bad); }
+.day--none { background: transparent; border: 1px solid var(--day-none); }
+.days__axis { display: flex; justify-content: space-between; margin-top: 6px; color: var(--text-muted); font-size: 12px; }
+.days__from--short { display: none; }
+.history__note { margin-top: 8px; color: var(--text-muted); font-size: 13px; }
+
+details { margin-top: 8px; font-size: 14px; }
+summary { display: inline-block; min-height: 32px; padding: 4px 0; color: var(--accent); cursor: pointer; }
+summary:hover { color: var(--text); }
+.problem-days { margin-top: 4px; color: var(--text-soft); }
+.problem-days li { padding: 2px 0; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 20px; color: var(--text-muted); font-size: 13px; }
+.legend__item { display: inline-flex; align-items: flex-end; gap: 8px; }
+.legend .day { flex: none; width: 8px; }
+.legend__text { margin-top: 10px; color: var(--text-muted); font-size: 13px; }
+
+/* Incidents */
+.incident { padding: 18px 20px; background: var(--panel); border: 1px solid var(--line); }
+.incident + .incident { margin-top: 14px; }
+.incident--open { border-color: var(--line-strong); border-left: 6px solid var(--warn); }
+/* A major outage is marked in the outage colour; the words say it too. */
+.incident--sev1 { border-left-color: var(--bad); }
+.incident__facts { margin-top: 4px; color: var(--text-soft); font-size: 13px; font-weight: 600; letter-spacing: 0.04em; }
+.incident__when { margin-top: 4px; color: var(--text-muted); font-size: 13px; }
+.updates { margin-top: 14px; border-left: 1px solid var(--line-strong); }
+.updates li { padding: 0 0 12px 16px; }
+.updates li:last-child { padding-bottom: 0; }
+.updates__time { color: var(--text-muted); font-size: 12px; }
+.updates p { overflow-wrap: anywhere; }
+
+/* Measured reliability */
+.measure { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 16px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.measure__value { font-family: var(--heading); font-size: 18px; font-variant-numeric: tabular-nums; text-align: right; }
+.measure__value--none { color: var(--text-muted); font-family: var(--body); font-size: 14px; }
+.measure__detail { grid-column: 1 / -1; color: var(--text-muted); font-size: 13px; }
+
+/* Footer */
+.foot { padding: 28px 0 40px; background: var(--ground-deep); border-top: 1px solid var(--line); color: var(--text-muted); font-size: 13px; }
+.foot p + p { margin-top: 8px; }
+
+/* Phones: 90 bars would be under 3 pixels each, so show the last 30. The
+   written summary and the list of days with failed runs still cover 90. */
+@media (max-width: 600px) {
+  .wrap { padding: 0 16px; }
+  .top__link { display: none; }
+  h1 { margin-top: 32px; }
+  .banner { padding: 18px 16px; gap: 12px; }
+  .day:nth-child(-n+60) { display: none; }
+  .legend .day { display: block; }
+  .days__from--all { display: none; }
+  .days__from--short { display: inline; }
+  .incident { padding: 16px; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  a, summary { transition: color 0.2s; }
+}
+
+@media (forced-colors: active) {
+  .day { background: CanvasText; }
+  .day--none { background: transparent; border-color: CanvasText; }
+  .banner, .incident--open { border-left-color: CanvasText; }
+}

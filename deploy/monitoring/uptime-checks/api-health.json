@@ -1,0 +1,42 @@
+{
+  "displayName": "DiamondEcho SRE: API is up",
+  "monitoredResource": {
+    "type": "uptime_url",
+    "labels": {
+      "project_id": "${PROJECT_ID}",
+      "host": "diamondecho-api-180189726732.us-east1.run.app"
+    }
+  },
+  "httpCheck": {
+    "requestMethod": "GET",
+    "useSsl": true,
+    "validateSsl": true,
+    "port": 443,
+    "path": "/health",
+    "acceptedResponseStatusCodes": [
+      {
+        "statusValue": 200
+      }
+    ]
+  },
+  "contentMatchers": [
+    {
+      "content": "\"status\":\"ok\"",
+      "matcher": "CONTAINS_STRING"
+    }
+  ],
+  "period": "300s",
+  "timeout": "10s",
+  "checkerType": "STATIC_IP_CHECKERS",
+  "selectedRegions": [
+    "USA",
+    "EUROPE",
+    "SOUTH_AMERICA",
+    "ASIA_PACIFIC"
+  ],
+  "userLabels": {
+    "owner": "sre-synthetic",
+    "component": "api",
+    "check": "api-health"
+  }
+}

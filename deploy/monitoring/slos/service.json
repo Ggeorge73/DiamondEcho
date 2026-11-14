@@ -1,0 +1,8 @@
+{
+  "displayName": "DiamondEcho API (Cloud Run diamondecho-api, us-east1)",
+  "custom": {},
+  "userLabels": {
+    "owner": "sre-slo",
+    "source": "deploy-monitoring-slos"
+  }
+}

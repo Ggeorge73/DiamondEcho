@@ -1,0 +1,13 @@
+{
+  "strategy": "flip",
+  "property": { "property_type": "single_family" },
+  "acquisition": { "purchase_price": 200000, "closing_costs": 5000, "hold_months": 6 },
+  "flip": {
+    "after_repair_value": 320000,
+    "rehab_cost": 40000,
+    "rehab_contingency_rate": 0.1,
+    "monthly_holding_costs": 1000,
+    "other_project_costs": 1000
+  },
+  "exit": { "selling_cost_rate": 0.06 }
+}

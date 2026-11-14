@@ -1,0 +1,18 @@
+{
+  "strategy": "rental",
+  "property": { "property_type": "multifamily", "unit_count": 4 },
+  "acquisition": { "purchase_price": 1000000, "closing_costs": 20000, "hold_months": 60 },
+  "debt": [
+    { "loan_to_value": 0.7, "annual_interest_rate": 0.06, "amortization_years": 30, "term_months": 120 }
+  ],
+  "operating": {
+    "gross_scheduled_rent": 120000,
+    "other_income": 5000,
+    "vacancy_rate": 0.05,
+    "operating_expenses": 40000,
+    "replacement_reserves": 5000,
+    "annual_income_growth_rate": 0.03,
+    "annual_expense_growth_rate": 0.03
+  },
+  "exit": { "exit_cap_rate": 0.06 }
+}

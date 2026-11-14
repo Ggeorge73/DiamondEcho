@@ -1,0 +1,18 @@
+{
+  "displayName": "API availability, real requests: 99.5% not answered with a 5xx over 28 days",
+  "goal": 0.995,
+  "rollingPeriod": "2419200s",
+  "serviceLevelIndicator": {
+    "requestBased": {
+      "goodTotalRatio": {
+        "badServiceFilter": "metric.type=\"run.googleapis.com/request_count\" resource.type=\"cloud_run_revision\" resource.labels.project_id=\"${PROJECT_ID}\" resource.labels.location=\"us-east1\" resource.labels.service_name=\"diamondecho-api\" metric.labels.response_code_class=\"5xx\"",
+        "totalServiceFilter": "metric.type=\"run.googleapis.com/request_count\" resource.type=\"cloud_run_revision\" resource.labels.project_id=\"${PROJECT_ID}\" resource.labels.location=\"us-east1\" resource.labels.service_name=\"diamondecho-api\""
+      }
+    }
+  },
+  "userLabels": {
+    "sli": "api-availability",
+    "view": "real-requests",
+    "status": "proposed"
+  }
+}

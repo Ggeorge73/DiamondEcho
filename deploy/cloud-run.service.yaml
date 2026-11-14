@@ -1,4 +1,15 @@
-# TEMPLATE ONLY. Replace all CHANGE_ME values after Gbenga approves project/region/IAM.
+# TEMPLATE ONLY. This file is NOT what production runs.
+#
+# Production (`diamondecho-api` in `diamondecho-prod`, us-east1) is deployed by
+# hand with `gcloud run deploy --source backend ...` (docs/de13-production-setup.md),
+# which keeps the service's existing settings and never reads this file. The
+# values below match production's recorded settings (1 CPU, 1 GiB,
+# concurrency 1, timeout 30 s, min 0 / max 3 instances, port 8080), except the
+# CHANGE_ME placeholders and INQUIRY_STAFF_QUEUE_ENABLED, which is 'false' here
+# on purpose: the safe default for a new environment. Production has it on.
+# docs/sre/architecture.md, "The Cloud Run template", says what would make
+# this file the source of truth. Replace the CHANGE_ME values only after
+# Gbenga approves project, region and identity.
 apiVersion: serving.knative.dev/v1
 kind: Service
 metadata:
@@ -35,10 +46,35 @@ spec:
               value: https://staff.diamondecho.com
             - name: CORS_ORIGINS
               value: https://diamondecho.com,https://staff.diamondecho.com
+          # Both probes ask /health. Container probes reach the process
+          # directly, so /healthz would also work here, but from outside
+          # Cloud Run's front end answers /healthz itself with a Google 404
+          # (DE-33). One path everywhere means a person who copies the
+          # probe's path into curl tests the same thing the probe does.
+          # /health proves the process answers; it does not touch Firestore,
+          # so a database problem never restarts healthy instances.
+          #
+          # Startup: up to 20 tries 3 s apart (about 60 s) for a new instance
+          # to answer before Cloud Run gives up on it. A new revision whose
+          # process never starts never becomes ready and never gets traffic.
           startupProbe:
             httpGet:
-              path: /healthz
+              path: /health
               port: 8080
             initialDelaySeconds: 1
+            timeoutSeconds: 3
             periodSeconds: 3
             failureThreshold: 20
+          # Liveness: restart an instance whose process has stopped answering.
+          # Deliberately slow to fire: probes 30 s apart, 5 s each; the
+          # restart comes at the third miss in a row, about 60 to 65 s after
+          # the first. Longer than the 30 s request timeout, so one long
+          # calculation (concurrency 1) cannot get a working instance killed. Not yet
+          # tried on staging; see docs/sre/architecture.md.
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            timeoutSeconds: 5
+            periodSeconds: 30
+            failureThreshold: 3

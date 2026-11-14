@@ -64,6 +64,19 @@ test('the build saves the pages and writes 404.html, so an unknown address gets 
   expect(pkg.devDependencies.esbuild).toMatch(/^\d+\.\d+\.\d+$/);
 });
 
+test('the published folder carries version.json, the build identity, at an address nothing else answers', () => {
+  // scripts/copy-build.mjs writes it into the folder Cloudflare Pages publishes;
+  // the SRE checks read it to tell which commit is live (scripts/sre/README.md).
+  const rootPkg = JSON.parse(read('../../package.json'));
+  expect(rootPkg.scripts.build).toBe('npm run build --workspace frontend && node scripts/copy-build.mjs');
+  expect(read('../../scripts/copy-build.mjs')).toMatch(/writeFileSync\(join\(target, "version\.json"\)/);
+  // Written by the build, never kept in the source, where it would go stale.
+  expect(fs.existsSync(path.resolve(__dirname, '../public/version.json'))).toBe(false);
+  // No redirect line may answer for it, and no page may be called "version".
+  rules.forEach(([from]) => expect('/version.json'.startsWith(from.replace(/\*$/, ''))).toBe(false));
+  expect(pagePaths).not.toContain('/version');
+});
+
 test('the sitemap lists exactly the saved pages, on the public domain', () => {
   const listed = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => match[1]);
   expect(listed).toEqual(PAGES.map((page) => `${SITE_ORIGIN}${page.path}`));

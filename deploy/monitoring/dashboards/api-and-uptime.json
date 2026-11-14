@@ -1,0 +1,315 @@
+{
+  "displayName": "DiamondEcho SRE: API and uptime",
+  "labels": {
+    "sre-observability": ""
+  },
+  "mosaicLayout": {
+    "columns": 48,
+    "tiles": [
+      {
+        "xPos": 0,
+        "yPos": 0,
+        "width": 48,
+        "height": 6,
+        "widget": {
+          "title": "About this dashboard",
+          "text": {
+            "content": "The API (Cloud Run service diamondecho-api) and the Google Cloud uptime checks. Every number here is measured by Google Cloud; nothing is estimated. The site's pages are served by Cloudflare and do not appear here except through the uptime checks. Guide: docs/sre/observability.md. Logs Explorer filters: jsonPayload.event=\"request.error\" (server errors, by route) and jsonPayload.event=\"request.slow\" (slow requests, by route).",
+            "format": "MARKDOWN"
+          }
+        }
+      },
+      {
+        "xPos": 0,
+        "yPos": 6,
+        "width": 24,
+        "height": 16,
+        "widget": {
+          "title": "Requests per second, by answer class",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "prometheusQuery": "sum by (response_code_class) (rate(run_googleapis_com:request_count{monitored_resource=\"cloud_run_revision\",service_name=\"diamondecho-api\"}[5m]))"
+                },
+                "plotType": "STACKED_AREA",
+                "legendTemplate": "{{response_code_class}}",
+                "targetAxis": "Y1"
+              }
+            ],
+            "yAxis": {
+              "label": "requests/s",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "xPos": 24,
+        "yPos": 6,
+        "width": 24,
+        "height": 16,
+        "widget": {
+          "title": "Share of answers that were server errors (5xx)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "prometheusQuery": "sum(rate(run_googleapis_com:request_count{monitored_resource=\"cloud_run_revision\",service_name=\"diamondecho-api\",response_code_class=\"5xx\"}[10m])) / sum(rate(run_googleapis_com:request_count{monitored_resource=\"cloud_run_revision\",service_name=\"diamondecho-api\"}[10m]))"
+                },
+                "plotType": "LINE",
+                "legendTemplate": "5xx share",
+                "targetAxis": "Y1"
+              }
+            ],
+            "yAxis": {
+              "label": "share",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "xPos": 0,
+        "yPos": 22,
+        "width": 24,
+        "height": 16,
+        "widget": {
+          "title": "Latency percentiles (Cloud Run, milliseconds)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "prometheusQuery": "histogram_quantile(0.50, sum by (le) (rate(run_googleapis_com:request_latencies_bucket{monitored_resource=\"cloud_run_revision\",service_name=\"diamondecho-api\"}[10m])))"
+                },
+                "plotType": "LINE",
+                "legendTemplate": "p50",
+                "targetAxis": "Y1"
+              },
+              {
+                "timeSeriesQuery": {
+                  "prometheusQuery": "histogram_quantile(0.95, sum by (le) (rate(run_googleapis_com:request_latencies_bucket{monitored_resource=\"cloud_run_revision\",service_name=\"diamondecho-api\"}[10m])))"
+                },
+                "plotType": "LINE",
+                "legendTemplate": "p95",
+                "targetAxis": "Y1"
+              },
+              {
+                "timeSeriesQuery": {
+                  "prometheusQuery": "histogram_quantile(0.99, sum by (le) (rate(run_googleapis_com:request_latencies_bucket{monitored_resource=\"cloud_run_revision\",service_name=\"diamondecho-api\"}[10m])))"
+                },
+                "plotType": "LINE",
+                "legendTemplate": "p99",
+                "targetAxis": "Y1"
+              }
+            ],
+            "yAxis": {
+              "label": "ms",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "xPos": 24,
+        "yPos": 22,
+        "width": 24,
+        "height": 16,
+        "widget": {
+          "title": "Instances (maximum is 3)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "prometheusQuery": "sum by (state) (run_googleapis_com:container_instance_count{monitored_resource=\"cloud_run_revision\",service_name=\"diamondecho-api\"})"
+                },
+                "plotType": "STACKED_AREA",
+                "legendTemplate": "{{state}}",
+                "targetAxis": "Y1"
+              }
+            ],
+            "yAxis": {
+              "label": "instances",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "xPos": 0,
+        "yPos": 38,
+        "width": 24,
+        "height": 16,
+        "widget": {
+          "title": "Cold starts (new instances started)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "prometheusQuery": "sum(increase(run_googleapis_com:container_startup_latencies_count{monitored_resource=\"cloud_run_revision\",service_name=\"diamondecho-api\"}[10m]))"
+                },
+                "plotType": "STACKED_BAR",
+                "legendTemplate": "starts per 10 min",
+                "targetAxis": "Y1"
+              }
+            ],
+            "yAxis": {
+              "label": "starts",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "xPos": 24,
+        "yPos": 38,
+        "width": 24,
+        "height": 16,
+        "widget": {
+          "title": "Cold start time (milliseconds)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "prometheusQuery": "histogram_quantile(0.95, sum by (le) (rate(run_googleapis_com:container_startup_latencies_bucket{monitored_resource=\"cloud_run_revision\",service_name=\"diamondecho-api\"}[1h])))"
+                },
+                "plotType": "LINE",
+                "legendTemplate": "p95 start time",
+                "targetAxis": "Y1"
+              }
+            ],
+            "yAxis": {
+              "label": "ms",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "xPos": 0,
+        "yPos": 54,
+        "width": 24,
+        "height": 16,
+        "widget": {
+          "title": "Uptime checks: checker locations failing, per check",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "prometheusQuery": "sum by (check_id) (1 - monitoring_googleapis_com:uptime_check_check_passed{monitored_resource=\"uptime_url\"})"
+                },
+                "plotType": "LINE",
+                "legendTemplate": "{{check_id}}",
+                "targetAxis": "Y1"
+              }
+            ],
+            "yAxis": {
+              "label": "locations failing",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "xPos": 24,
+        "yPos": 54,
+        "width": 24,
+        "height": 16,
+        "widget": {
+          "title": "Uptime checks: response time (milliseconds)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "prometheusQuery": "max by (check_id) (monitoring_googleapis_com:uptime_check_request_latency{monitored_resource=\"uptime_url\"})"
+                },
+                "plotType": "LINE",
+                "legendTemplate": "{{check_id}}",
+                "targetAxis": "Y1"
+              }
+            ],
+            "yAxis": {
+              "label": "ms",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "xPos": 0,
+        "yPos": 70,
+        "width": 24,
+        "height": 16,
+        "widget": {
+          "title": "Server errors by route (request telemetry)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "prometheusQuery": "sum by (route, status) (increase(logging_googleapis_com:user_diamondecho_sre_api_server_errors{monitored_resource=\"cloud_run_revision\"}[10m]))"
+                },
+                "plotType": "STACKED_BAR",
+                "legendTemplate": "{{route}} {{status}}",
+                "targetAxis": "Y1"
+              }
+            ],
+            "yAxis": {
+              "label": "errors per 10 min",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "xPos": 24,
+        "yPos": 70,
+        "width": 24,
+        "height": 16,
+        "widget": {
+          "title": "Slow requests by route (request telemetry)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "prometheusQuery": "sum by (route) (increase(logging_googleapis_com:user_diamondecho_sre_api_slow_requests{monitored_resource=\"cloud_run_revision\"}[10m]))"
+                },
+                "plotType": "STACKED_BAR",
+                "legendTemplate": "{{route}}",
+                "targetAxis": "Y1"
+              }
+            ],
+            "yAxis": {
+              "label": "slow per 10 min",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      },
+      {
+        "xPos": 0,
+        "yPos": 86,
+        "width": 48,
+        "height": 16,
+        "widget": {
+          "title": "TLS certificate days left, per host (uptime checks)",
+          "xyChart": {
+            "dataSets": [
+              {
+                "timeSeriesQuery": {
+                  "prometheusQuery": "min by (host) (monitoring_googleapis_com:uptime_check_time_until_ssl_cert_expires{monitored_resource=\"uptime_url\"})"
+                },
+                "plotType": "LINE",
+                "legendTemplate": "{{host}}",
+                "targetAxis": "Y1"
+              }
+            ],
+            "yAxis": {
+              "label": "days",
+              "scale": "LINEAR"
+            }
+          }
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "displayName": "DiamondEcho SRE: Contact page",
+  "monitoredResource": {
+    "type": "uptime_url",
+    "labels": {
+      "project_id": "${PROJECT_ID}",
+      "host": "diamondecho.com"
+    }
+  },
+  "httpCheck": {
+    "requestMethod": "GET",
+    "useSsl": true,
+    "validateSsl": true,
+    "port": 443,
+    "path": "/inquire",
+    "acceptedResponseStatusCodes": [
+      {
+        "statusValue": 200
+      }
+    ]
+  },
+  "contentMatchers": [
+    {
+      "content": "rel=\"canonical\" href=\"https://diamondecho.com/inquire\"",
+      "matcher": "CONTAINS_STRING"
+    }
+  ],
+  "period": "300s",
+  "timeout": "10s",
+  "checkerType": "STATIC_IP_CHECKERS",
+  "selectedRegions": [
+    "USA",
+    "EUROPE",
+    "SOUTH_AMERICA",
+    "ASIA_PACIFIC"
+  ],
+  "userLabels": {
+    "owner": "sre-synthetic",
+    "component": "inquiry",
+    "check": "inquiry-page"
+  }
+}

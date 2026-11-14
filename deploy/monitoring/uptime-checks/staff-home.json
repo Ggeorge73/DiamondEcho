@@ -1,0 +1,42 @@
+{
+  "displayName": "DiamondEcho SRE: Staff site loads",
+  "monitoredResource": {
+    "type": "uptime_url",
+    "labels": {
+      "project_id": "${PROJECT_ID}",
+      "host": "staff.diamondecho.com"
+    }
+  },
+  "httpCheck": {
+    "requestMethod": "GET",
+    "useSsl": true,
+    "validateSsl": true,
+    "port": 443,
+    "path": "/",
+    "acceptedResponseStatusCodes": [
+      {
+        "statusValue": 200
+      }
+    ]
+  },
+  "contentMatchers": [
+    {
+      "content": "<title>DiamondEcho Staff | Inquiry Queue</title>",
+      "matcher": "CONTAINS_STRING"
+    }
+  ],
+  "period": "300s",
+  "timeout": "10s",
+  "checkerType": "STATIC_IP_CHECKERS",
+  "selectedRegions": [
+    "USA",
+    "EUROPE",
+    "SOUTH_AMERICA",
+    "ASIA_PACIFIC"
+  ],
+  "userLabels": {
+    "owner": "sre-synthetic",
+    "component": "staff-site",
+    "check": "staff-home"
+  }
+}

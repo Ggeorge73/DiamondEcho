@@ -30,6 +30,12 @@ For a DiamondEcho task that spans engineering, verification, and operations, giv
 - They own the scheduled defences (`.github/workflows/security-scan.yml`, `security-alert.yml`, `dependency-audit.yml`, `.github/dependabot.yml`) and the playbook in `docs/security-operations.md`.
 - Same limits as every role here: they prepare fixes, tests, runbooks and draft PRs; they never merge, change production, IAM, DNS, billing or Cloudflare settings, suppress an alert without a written reason, or put a secret value anywhere. A leaked secret is reported by file and commit, and rotated by Gbenga.
 
+## SRE team (`sre-lead` and nine role agents)
+
+- Ten AI reliability roles are defined in `.claude/agents/sre-*.md`: `sre-lead`, `sre-incident-commander`, `sre-observability-engineer`, `sre-synthetic-monitoring-engineer`, `sre-slo-engineer`, `sre-infrastructure-engineer`, `sre-release-engineer`, `sre-edge-security-engineer`, `sre-performance-engineer` and `sre-chaos-engineer`. Start reliability work with `sre-lead`; attacks and leaks go to `security-lead`.
+- They own the monitoring and release automation in `scripts/sre/`, `.github/workflows/sre-*.yml`, `deploy/monitoring/`, `status-page/`, `tests/load/`, `tests/chaos/` and the guide, SLOs and runbooks in `docs/sre/`. `scripts/sre/README.md` is the contract between those parts, including who owns which file; each change is reviewed by a second SRE role.
+- Same limits as every role here, plus: read-only against production (no load tests, no submitted inquiries, no calls to the paid property routes); no measured-looking number that was not measured. The one automatic production action is the Cloud Run rollback described in `docs/sre/auto-remediation.md`, and it stays off until Gbenga switches it on. Everything the team needs from him is listed in `docs/sre/needs-from-gbenga.md`.
+
 ## Shared release rules
 
 - Preserve the accepted Georgia MLS IDX experience. No fictional listed properties, search results, advisors, offices, testimonials, or business metrics. Illustrative deal scenarios must be clearly labeled and never presented as live listings.

@@ -41,7 +41,8 @@ with TestClient(server.app) as c:
         assert c.get(path).status_code == 404, path
     # The routes themselves still answer.
     assert c.get('/health').json() == {'status': 'ok'}
-    assert c.get('/api/').json() == {'service': 'DiamondEcho API'}
+    # The identity route also names the build (test_build_identity.py).
+    assert c.get('/api/').json()['service'] == 'DiamondEcho API'
 """)
 
 

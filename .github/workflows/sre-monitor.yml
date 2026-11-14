@@ -1,0 +1,307 @@
+name: SRE monitor
+
+# Watches diamondecho.com from outside, like a visitor would, and keeps the
+# public status page up to date. Every five minutes it runs the fast checks
+# (pages, search, calculators, inquiry route, API); every hour it runs the slow
+# ones (certificates, DNS, domain registration, third parties). Each run files
+# its result on the sre-status branch, opens or closes sre-incident issues, and
+# decides whether the one safe automatic fix applies (docs/sre/auto-remediation.md).
+#
+# It only reads the live site. It never submits a form, never calls the paid
+# property routes, and changes nothing in production unless Gbenga has switched
+# automatic rollback on (repository variable SRE_AUTOREMEDIATE = enabled, plus
+# the Google Cloud sign-in described in docs/sre/auto-remediation.md). Once the
+# read-only sign-in exists (phase 1) the job signs in on every run from main, so
+# the rollback engine's dry runs see the real Cloud Run revisions.
+#
+# This repository is public: run logs and summaries can be read by anyone, so
+# nothing here prints a secret, a token or visitor data.
+#
+# The contract between the steps is scripts/sre/README.md.
+on:
+  schedule:
+    - cron: '*/5 * * * *' # fast checks, every 5 minutes (GitHub may run it late)
+    - cron: '7 * * * *' # slow checks, every hour at :07
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: Which checks to run
+        type: choice
+        options: [fast, slow, post-deploy]
+        default: fast
+  pull_request:
+    paths:
+      - scripts/sre/**
+      - status-page/**
+      - .github/workflows/sre-monitor.yml
+
+permissions:
+  contents: read
+
+jobs:
+  # On a pull request: run the checks once against the live site and show the
+  # result, so a change to a check is seen working before it merges. Nothing
+  # is saved and no issue is opened; a failing site does not fail the PR.
+  preview:
+    name: Run the checks once (not saved)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [fast, slow]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Run the ${{ matrix.suite }} checks
+        env:
+          SUITE: ${{ matrix.suite }}
+        run: node scripts/sre/synthetic-checks.mjs --suite "$SUITE" --out "$RUNNER_TEMP/run.json" | tee "$RUNNER_TEMP/summary.txt"
+      - name: Show the result
+        if: always()
+        env:
+          SUITE: ${{ matrix.suite }}
+        run: |
+          {
+            echo "### $SUITE checks against the live site (preview, not saved)"
+            echo '```'
+            cat "$RUNNER_TEMP/summary.txt" 2>/dev/null || echo "No summary."
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: sre-preview-${{ matrix.suite }}
+          path: ${{ runner.temp }}/run.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+  monitor:
+    name: Check the site and file the result
+    # Scheduled runs start only once Gbenga has set the repository variable
+    # SRE_MONITOR to "enabled", after adding the Cloudflare rule that lets the
+    # monitor through (docs/sre/needs-from-gbenga.md 1.1). Without that rule
+    # Cloudflare refuses every page to the monitor, and the monitor would
+    # report false outages every five minutes. A run started by hand always runs.
+    if: >-
+      github.event_name != 'pull_request' && github.repository == 'Ggeorge73/DiamondEcho' &&
+      (github.event_name == 'workflow_dispatch' || vars.SRE_MONITOR == 'enabled')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # One monitor run at a time: a running one is never cut off. If runs pile
+    # up, GitHub keeps only the newest one waiting and drops the older waiting
+    # one. For the fast checks that is fine: the newest look at the site is
+    # the one wanted. An hourly slow run dropped that way is caught up by a
+    # later five-minute run ("Choose the checks" below).
+    # (Other workflows that write the sre-status branch use their own groups
+    # and rely on state-git.sh's rebase-and-retry.)
+    concurrency:
+      group: sre-monitor
+      cancel-in-progress: false
+    permissions:
+      contents: write # the sre-status branch only (scripts/sre/state-git.sh never touches main)
+      issues: write # sre-incident issues
+      id-token: write # Google Cloud sign-in, used only when automatic rollback is switched on
+    steps:
+      # No stored credentials: only the steps that write the status branch or
+      # open issues are given the repository token (state-git.sh passes it to
+      # git without writing it anywhere).
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      # The runner's temporary folder is not known at job level, so the paths
+      # the later steps share are set here.
+      - name: Working paths
+        run: |
+          echo "STATE_DIR=$RUNNER_TEMP/sre-state" >> "$GITHUB_ENV"
+          echo "RUN_FILE=$RUNNER_TEMP/run.json" >> "$GITHUB_ENV"
+
+      - name: Open the status branch
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: bash scripts/sre/state-git.sh checkout "$STATE_DIR"
+
+      # The hourly run does the slow checks and the five-minute runs the fast
+      # ones. If the hourly run was dropped while waiting (see the concurrency
+      # note above) or never started, the slow checks would go unseen for
+      # hours. So a five-minute run does the slow checks instead when the last
+      # slow run on record is more than 90 minutes old. Only every other run
+      # may do that (even run numbers), so the fast checks can never be
+      # starved, whatever is wrong with the slow ones.
+      - name: Choose the checks
+        id: suite
+        # Even if the status branch could not be opened: the site is still checked.
+        if: ${{ !cancelled() }}
+        env:
+          SCHEDULE: ${{ github.event.schedule }}
+          INPUT_SUITE: ${{ inputs.suite }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then suite="$INPUT_SUITE"
+          elif [ "$SCHEDULE" = '7 * * * *' ]; then suite=slow
+          else
+            suite=fast
+            overdue=$(node -e '
+              try {
+                const status = JSON.parse(require("fs").readFileSync(process.env.STATE_DIR + "/status.json", "utf8"));
+                const fast = Date.parse(status.last_runs?.fast?.at ?? "");
+                const slow = Date.parse(status.last_runs?.slow?.at ?? "");
+                // Only once the monitor has history: the first runs stay as scheduled.
+                const late = Number.isFinite(fast) && !(Date.now() - slow < 90 * 60_000);
+                console.log(late ? "yes" : "no");
+              } catch { console.log("no"); }
+            ')
+            if [ "$overdue" = yes ] && [ $((GITHUB_RUN_NUMBER % 2)) -eq 0 ]; then
+              suite=slow
+              echo "The last slow run is more than 90 minutes old: this run does the slow checks."
+            fi
+          fi
+          echo "suite=$suite" >> "$GITHUB_OUTPUT"
+
+      - name: Run the checks (read-only)
+        if: ${{ !cancelled() }}
+        env:
+          SUITE: ${{ steps.suite.outputs.suite }}
+        run: node scripts/sre/synthetic-checks.mjs --suite "$SUITE" --out "$RUN_FILE"
+
+      - name: File the result
+        run: node scripts/sre/state.mjs record --run "$RUN_FILE" --state-dir "$STATE_DIR"
+
+      - name: Work out the error budgets
+        # Runs even if an earlier step broke, so an outage is still raised.
+        if: ${{ !cancelled() }}
+        run: node scripts/sre/slo-calc.mjs --state-dir "$STATE_DIR" --window-days 28 --out "$STATE_DIR/slo.json"
+
+      - name: Open, update or close incidents
+        # Runs even if an earlier step broke, so an outage is still raised.
+        if: ${{ !cancelled() }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SRE_ALERT_WEBHOOK_URL: ${{ secrets.SRE_ALERT_WEBHOOK_URL }}
+          SRE_OWNER: ${{ vars.SRE_OWNER }}
+        run: node scripts/sre/alert.mjs --run "$RUN_FILE" --state-dir "$STATE_DIR" --slo "$STATE_DIR/slo.json" --out "$RUNNER_TEMP/actions.json" --apply
+
+      # The automatic rollback. Off unless Gbenga has set SRE_AUTOREMEDIATE to
+      # "enabled" and set up the Google Cloud sign-in. While it is off the
+      # engine still runs and logs what it would have done. Once the sign-in
+      # exists (phase 1 in docs/sre/auto-remediation.md: read-only role) the
+      # dry runs read the real Cloud Run revisions too.
+      - name: Sign in to Google Cloud (only once the sign-in is set up)
+        if: vars.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && github.ref == 'refs/heads/main'
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2.1.13
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SRE_SERVICE_ACCOUNT }}
+      - name: Set up gcloud (only once the sign-in is set up)
+        if: vars.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && github.ref == 'refs/heads/main'
+        uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f # v2.2.1
+
+      # Proves on every run that the sign-in can read Cloud Run, so a missing
+      # permission shows up now, not first during a real incident. Read-only.
+      - name: Check the Cloud Run sign-in (read-only)
+        if: vars.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && github.ref == 'refs/heads/main'
+        continue-on-error: true
+        env:
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ vars.GCP_REGION }}
+          CLOUD_RUN_SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
+        run: node scripts/sre/remediate.mjs --check-access --out "$RUNNER_TEMP/access.json"
+
+      - name: Decide on an automatic fix
+        # Only when every step before it worked: the engine must never act on
+        # a state that failed to update.
+        env:
+          SRE_AUTOREMEDIATE: ${{ (vars.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && github.ref == 'refs/heads/main') && vars.SRE_AUTOREMEDIATE || 'disabled' }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ vars.GCP_REGION }}
+          CLOUD_RUN_SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
+        run: |
+          apply=""
+          if [ "$SRE_AUTOREMEDIATE" = enabled ]; then apply=--apply; fi
+          node scripts/sre/remediate.mjs --state-dir "$STATE_DIR" --out "$RUNNER_TEMP/decision.json" $apply
+
+      - name: Publish the status page
+        run: |
+          # Copy exactly the files the manifest names; tests and fixtures stay out.
+          grep -v '^\s*#' status-page/publish-manifest.txt | grep -v '^\s*$' | while read -r file; do
+            install -D -m 0644 "status-page/$file" "$STATE_DIR/$file"
+          done
+
+      - name: Save the state
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SUITE: ${{ steps.suite.outputs.suite }}
+        run: |
+          if [ -d "$STATE_DIR/.git" ]; then
+            bash scripts/sre/state-git.sh commit "$STATE_DIR" "$SUITE checks, run $GITHUB_RUN_ID"
+          fi
+
+      # The public status page. Published from here as a GitHub Pages
+      # deployment, not by GitHub building the sre-status branch on every
+      # push: branch builds are limited to about 10 an hour and this workflow
+      # saves about 13 times an hour. Off until Gbenga has set Pages to
+      # "GitHub Actions" and the variable SRE_STATUS_PAGE to "enabled"
+      # (docs/sre/needs-from-gbenga.md 2.2). Only after every step before it
+      # worked, so a half-updated state is never published. The .git folder
+      # is left out.
+      - name: Pack the status page
+        if: vars.SRE_STATUS_PAGE == 'enabled'
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: ${{ runner.temp }}/sre-state
+          retention-days: 1
+
+      - name: Summary
+        if: always()
+        env:
+          SUITE: ${{ steps.suite.outputs.suite }}
+        run: |
+          {
+            echo "### $SUITE checks"
+            node -e '
+              const fs = require("fs");
+              try {
+                const run = JSON.parse(fs.readFileSync(process.env.RUN_FILE, "utf8"));
+                for (const c of run.checks) console.log(`- ${c.ok ? "✅" : "❌"} ${c.name}${c.ok ? "" : ` (${c.severity}): ${c.detail}`}`);
+              } catch { console.log("No result was written."); }
+              try {
+                const a = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + "/access.json", "utf8"));
+                if (a.summary) console.log(`\nCloud Run sign-in: ${a.summary}`);
+              } catch {}
+              try {
+                const d = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + "/decision.json", "utf8"));
+                if (d.summary) console.log(`\nAutomatic fix: ${d.summary}`);
+              } catch {}
+            '
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  status-page:
+    name: Publish the status page
+    needs: monitor
+    if: needs.monitor.result == 'success' && vars.SRE_STATUS_PAGE == 'enabled'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # The newest state is the one wanted: a deployment still waiting when a
+    # newer one arrives is dropped, and a running one is never cut off.
+    concurrency:
+      group: sre-status-page
+      cancel-in-progress: false
+    permissions:
+      pages: write # publish the Pages deployment
+      id-token: write # GitHub Pages checks that the deployment comes from this workflow
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Publish
+        id: deploy
+        uses: actions/deploy-pages@v4

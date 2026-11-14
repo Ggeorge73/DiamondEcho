@@ -1,0 +1,27 @@
+{
+  "displayName": "DiamondEcho SRE: API server errors above 5 percent",
+  "documentation": {
+    "subject": "DiamondEcho: the API is answering with server errors",
+    "mimeType": "text/markdown",
+    "content": "Over the last 10 minutes more than 5 percent of the API's answers were server errors (5xx), and there were at least 5 of them. The minimum count stops one failed request on a quiet night from paging anyone.\n\nDeal Studio's analysis may fail with an error. The mortgage simulator and the seller net sheet calculate in the browser and keep working. Visitors may not be able to send a request from the contact form while the API fails. Note that the inquiry route's documented 503 (queue switched off, or the hourly cap reached) counts here too.\n\nWhat to do: follow docs/sre/runbooks/api-down.md. If a deploy happened in the last two hours, start with docs/sre/runbooks/bad-deploy.md. Logs Explorer filter for the failing routes: jsonPayload.event=\"request.error\" on service diamondecho-api.\n\nThe 5 percent and 5 errors are proposed starting values, not tuned against measured traffic (none has been measured yet).\n\nThis message carries no visitor data."
+  },
+  "conditions": [
+    {
+      "displayName": "5xx share above 5% and at least 5 errors in 10 minutes",
+      "conditionPrometheusQueryLanguage": {
+        "query": "(sum(increase(run_googleapis_com:request_count{monitored_resource=\"cloud_run_revision\",service_name=\"diamondecho-api\",response_code_class=\"5xx\"}[10m])) / sum(increase(run_googleapis_com:request_count{monitored_resource=\"cloud_run_revision\",service_name=\"diamondecho-api\"}[10m])) > 0.05) and (sum(increase(run_googleapis_com:request_count{monitored_resource=\"cloud_run_revision\",service_name=\"diamondecho-api\",response_code_class=\"5xx\"}[10m])) >= 5)",
+        "duration": "120s",
+        "evaluationInterval": "60s"
+      }
+    }
+  ],
+  "combiner": "OR",
+  "enabled": true,
+  "severity": "ERROR",
+  "alertStrategy": {
+    "notificationRateLimit": { "period": "3600s" },
+    "autoClose": "1800s"
+  },
+  "notificationChannels": ["${NOTIFICATION_CHANNEL}"],
+  "userLabels": { "owner": "sre-observability", "sev": "sev2" }
+}

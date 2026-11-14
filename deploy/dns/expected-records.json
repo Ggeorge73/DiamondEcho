@@ -1,0 +1,153 @@
+{
+  "schema": 1,
+  "zone": "diamondecho.com",
+  "recorded_at": "2026-11-13",
+  "about": "The DNS records that must not change by accident. Read by scripts/sre/checks/dns.mjs and domain.mjs, which compare it with what two public resolvers and the .com registry answer. Sources: the table 'What GoDaddy held' in docs/de13-production-setup.md, and live answers from cloudflare-dns.com and dns.google on 2026-11-13 (identical at both). This file changes nothing at Cloudflare: it is only what the monitor expects. After a DNS change that was meant, update it in the same pull request or the next one, or the monitor will report the change every hour.",
+  "registrar": "GoDaddy.com, LLC",
+  "registrar_why": "The registrar named by the .com registry (RDAP, 2026-11-13). domain.mjs fails if another registrar appears: a transfer nobody started is how a domain is stolen.",
+  "nameservers": [
+    "georgia.ns.cloudflare.com",
+    "jasper.ns.cloudflare.com"
+  ],
+  "records": [
+    {
+      "name": "diamondecho.com",
+      "type": "MX",
+      "match": "exact",
+      "values": [
+        "0 mx1-usg2.ppe-hosted.com",
+        "0 mx2-usg2.ppe-hosted.com",
+        "0 mx3-usg2.ppe-hosted.com"
+      ],
+      "group": "mail-mx",
+      "why": "Where the world delivers mail for realtor@diamondecho.com (Proofpoint, in front of Microsoft 365). If these change or vanish, incoming mail is lost, including the inquiry arrival alert."
+    },
+    {
+      "name": "diamondecho.com",
+      "type": "TXT",
+      "match": "single-spf",
+      "values": [
+        "v=spf1 include:_spf-usg2.ppe-hosted.com include:secureserver.net ~all"
+      ],
+      "group": "mail-spf",
+      "why": "Tells other mail servers who may send as diamondecho.com. There must be exactly one such record: a second one, even a correct one, makes receivers treat both as an error."
+    },
+    {
+      "name": "diamondecho.com",
+      "type": "TXT",
+      "match": "includes",
+      "values": [
+        "NETORGFT9628004.onmicrosoft.com"
+      ],
+      "group": "mail-microsoft-365",
+      "why": "Microsoft 365's proof that the mailbox tenant owns the domain. Other TXT records may be added beside it; this one must stay."
+    },
+    {
+      "name": "autodiscover.diamondecho.com",
+      "type": "CNAME",
+      "match": "exact",
+      "values": [
+        "autodiscover.outlook.com"
+      ],
+      "group": "mail-microsoft-365",
+      "why": "How Outlook and phones find the mailbox settings. Must stay 'DNS only' at Cloudflare: proxied, it breaks Outlook."
+    },
+    {
+      "name": "_dmarc.diamondecho.com",
+      "type": "TXT",
+      "match": "starts-with",
+      "values": [
+        "v=DMARC1; p=none"
+      ],
+      "group": "mail-dmarc",
+      "why": "The DMARC policy. Today it only asks for reports (p=none). There is no DKIM record, so a stricter policy (quarantine or reject) set without one could send real mail to spam. Only the start of the record is compared; the report address after it is not kept here. docs/de13-production-setup.md says no DMARC record existed on 2026-10-06; this one was found live on 2026-11-13 and reports to Cloudflare's DMARC service."
+    },
+    {
+      "name": "email.diamondecho.com",
+      "type": "CNAME",
+      "match": "exact",
+      "values": [
+        "emaildot.godaddy.com"
+      ],
+      "group": "other",
+      "why": "GoDaddy's webmail shortcut."
+    },
+    {
+      "name": "lyncdiscover.diamondecho.com",
+      "type": "CNAME",
+      "match": "exact",
+      "values": [
+        "webdir.online.lync.com"
+      ],
+      "group": "other",
+      "why": "Microsoft Teams and Skype for Business client lookup."
+    },
+    {
+      "name": "sip.diamondecho.com",
+      "type": "CNAME",
+      "match": "exact",
+      "values": [
+        "sipdir.online.lync.com"
+      ],
+      "group": "other",
+      "why": "Microsoft Teams and Skype for Business sign-in. Must stay 'DNS only' at Cloudflare."
+    },
+    {
+      "name": "_sip._tls.diamondecho.com",
+      "type": "SRV",
+      "match": "exact",
+      "values": [
+        "100 1 443 sipdir.online.lync.com"
+      ],
+      "group": "other",
+      "why": "Microsoft Teams and Skype for Business."
+    },
+    {
+      "name": "_sipfederationtls._tcp.diamondecho.com",
+      "type": "SRV",
+      "match": "exact",
+      "values": [
+        "100 1 5061 sipfed.online.lync.com"
+      ],
+      "group": "other",
+      "why": "Microsoft Teams and Skype for Business calls with other organisations."
+    },
+    {
+      "name": "pay.diamondecho.com",
+      "type": "CNAME",
+      "match": "exact",
+      "values": [
+        "paylinks.commerce.godaddy.com"
+      ],
+      "group": "other",
+      "why": "GoDaddy payment links."
+    },
+    {
+      "name": "_domainconnect.diamondecho.com",
+      "type": "CNAME",
+      "match": "exact",
+      "values": [
+        "_domainconnect.gd.domaincontrol.com"
+      ],
+      "group": "other",
+      "why": "GoDaddy's set-up helper for connected services."
+    }
+  ],
+  "not_checked": [
+    {
+      "name": "msoid.diamondecho.com",
+      "type": "CNAME",
+      "note": "docs/de13-production-setup.md lists this record (clientconfig.microsoftonline-p.net) as carried to Cloudflare on 2026-10-06. On 2026-11-13 both resolvers answer that the name does not exist. Who removed it, or whether the import ever held it, is not recorded. It is left out of the checks until Gbenga says whether it should exist. Mail does not depend on it."
+    },
+    {
+      "name": "diamondecho.com, www.diamondecho.com, staff.diamondecho.com",
+      "type": "A / AAAA",
+      "note": "Cloudflare answers with its own addresses, which it may change at any time. The monitor only checks that the apex and staff names resolve, never which addresses they resolve to."
+    },
+    {
+      "name": "selector1._domainkey / selector2._domainkey",
+      "type": "CNAME",
+      "note": "No DKIM record exists (checked 2026-11-13, as on 2026-10-06). When one is added, add it here."
+    }
+  ]
+}

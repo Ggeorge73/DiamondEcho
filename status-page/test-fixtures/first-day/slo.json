@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "generated_at": "2026-11-12T15:00:00.000Z",
+  "window_days": 28,
+  "slos": [
+    {
+      "id": "public-availability",
+      "name": "Website availability",
+      "component": "public-site",
+      "target": 0.999,
+      "accepted": false,
+      "good": 36,
+      "total": 36,
+      "attainment": 1,
+      "budget_remaining": 1,
+      "burn": {},
+      "enough_data": false
+    }
+  ],
+  "burn_alerts": []
+}

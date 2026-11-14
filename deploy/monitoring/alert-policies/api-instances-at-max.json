@@ -1,0 +1,27 @@
+{
+  "displayName": "DiamondEcho SRE: API pinned at its maximum of 3 instances",
+  "documentation": {
+    "subject": "DiamondEcho: the API has no room left to grow",
+    "mimeType": "text/markdown",
+    "content": "For 5 minutes one API revision has had 3 active instances, the maximum it is allowed (deploy/cloud-run.service.yaml). Each instance takes one request at a time (concurrency 1), so a fourth visitor waits and may be refused. That is either real demand or something slow holding instances.\n\nWhat to do: follow docs/sre/runbooks/api-slow-or-saturated.md. If it looks like abuse, docs/sre/runbooks/traffic-spike-or-abuse.md. Raising the maximum costs money and is Gbenga's decision.\n\nThis message carries no visitor data."
+  },
+  "conditions": [
+    {
+      "displayName": "3 active instances on one revision for 5 minutes",
+      "conditionPrometheusQueryLanguage": {
+        "query": "max(sum by (revision_name) (run_googleapis_com:container_instance_count{monitored_resource=\"cloud_run_revision\",service_name=\"diamondecho-api\",state=\"active\"})) >= 3",
+        "duration": "300s",
+        "evaluationInterval": "60s"
+      }
+    }
+  ],
+  "combiner": "OR",
+  "enabled": true,
+  "severity": "WARNING",
+  "alertStrategy": {
+    "notificationRateLimit": { "period": "3600s" },
+    "autoClose": "1800s"
+  },
+  "notificationChannels": ["${NOTIFICATION_CHANNEL}"],
+  "userLabels": { "owner": "sre-observability", "sev": "sev3" }
+}

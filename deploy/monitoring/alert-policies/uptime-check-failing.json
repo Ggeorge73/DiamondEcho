@@ -1,0 +1,37 @@
+{
+  "displayName": "DiamondEcho SRE: uptime check failing from 2 or more places",
+  "documentation": {
+    "subject": "DiamondEcho: a page or the API is failing from more than one place",
+    "mimeType": "text/markdown",
+    "content": "A Cloud Monitoring uptime check (deploy/monitoring/uptime-checks/) has failed from at least two checker locations at once. One location failing is usually that location's network; two or more is the site.\n\nThis is the second, independent watch: it runs in Google Cloud, not on GitHub, so it still rings when the GitHub monitor is blind or stopped.\n\nWhat to do: open the incident's check id in Monitoring > Uptime checks to see which page, then follow the runbook for it in docs/sre/runbooks/ (site-down.md for pages, api-down.md for the API, search-provider-down.md for the search page). The GitHub incident issue, if one is open, is the place to write what you find.\n\nThis message carries no visitor data."
+  },
+  "conditions": [
+    {
+      "displayName": "Uptime check failed from 2 or more checker locations",
+      "conditionThreshold": {
+        "filter": "metric.type=\"monitoring.googleapis.com/uptime_check/check_passed\" AND resource.type=\"uptime_url\"",
+        "aggregations": [
+          {
+            "alignmentPeriod": "1200s",
+            "perSeriesAligner": "ALIGN_NEXT_OLDER",
+            "crossSeriesReducer": "REDUCE_COUNT_FALSE",
+            "groupByFields": ["resource.label.project_id", "resource.label.host", "metric.label.check_id"]
+          }
+        ],
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 1,
+        "duration": "60s",
+        "trigger": { "count": 1 }
+      }
+    }
+  ],
+  "combiner": "OR",
+  "enabled": true,
+  "severity": "CRITICAL",
+  "alertStrategy": {
+    "notificationRateLimit": { "period": "3600s" },
+    "autoClose": "1800s"
+  },
+  "notificationChannels": ["${NOTIFICATION_CHANNEL}"],
+  "userLabels": { "owner": "sre-observability", "sev": "sev1" }
+}
