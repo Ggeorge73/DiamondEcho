@@ -75,7 +75,7 @@ flowchart LR
 
 | Workflow | When | What it does | Changes production? |
 | --- | --- | --- | --- |
-| `sre-monitor.yml` | every 5 min (fast), hourly (slow), once `SRE_MONITOR` = `enabled` | checks, state, alerts, status page | no; the rollback engine only if switched on |
+| `sre-monitor.yml` | every 5 min (fast), hourly (slow), once `SRE_MONITOR` = `enabled`; each run starts the next, the schedule is only the watchdog | checks, state, alerts, status page | no; the rollback engine only if switched on |
 | `sre-post-merge-check.yml` | after every merge to `main`, once `SRE_MONITOR` = `enabled` | waits for Cloudflare Pages to report the new site build, then runs the monitor's own checks | no |
 | `sre-weekly-report.yml` | Mondays | reliability report as an issue | no |
 | `sre-chaos.yml` | weekly and by hand | resilience tests, local chaos experiments, monitoring fire drill | no (runs on the GitHub runner only) |

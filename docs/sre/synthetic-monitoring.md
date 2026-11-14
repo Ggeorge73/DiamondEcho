@@ -39,10 +39,19 @@ Be honest about the GitHub tier's limits:
   answering, no incident opens and the status page still says "Operational"
   (it carries a notice that pages are not loaded). A person learns of it
   from a visitor, or by opening the site.
-- **GitHub's schedule is best effort.** A run "every 5 minutes" can start
-  several minutes late or be skipped when GitHub is busy. A gap in the status
-  history is GitHub, not the site. The Cloud Monitoring tier does not have
-  this problem.
+- **GitHub's schedule cannot be relied on, so the monitor does not rely on
+  it.** Measured on 2026-11-14: GitHub started the five-minute schedule 4
+  times in about 17 hours. GitHub says scheduled workflows can be delayed or
+  dropped when it is busy. A run started through GitHub's API is not
+  scheduled and starts when asked, so each run ends with a "handover" job
+  that waits out the rest of its five minutes and asks GitHub to start the
+  next run (`scripts/sre/handover.mjs`). The schedule stays as the watchdog
+  that starts the chain and restarts it if a link breaks. How well the chain
+  keeps time has not been measured yet: read the run history after a day.
+  The cost is one GitHub runner busy most of the time (free on a public
+  repository). Setting the variable `SRE_MONITOR_CHAIN` to `off` goes back to
+  the schedule alone. A gap in the status history is still GitHub, not the
+  site. The Cloud Monitoring tier does not have this problem.
 - **One place per run.** Each run comes from one Azure region (the run
   records it as `vantage.region`, read from Azure's own metadata service; it
   is `null` when Azure does not say). A fault that only affects visitors in
