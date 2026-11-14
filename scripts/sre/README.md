@@ -83,30 +83,23 @@ own default and reads an override from `ctx` (for example `ctx.tlsConnect`),
 so tests replace everything that touches the network or the clock. A module
 never throws for a failed check: it returns the check with `ok: false`. It
 throws only for a bug. `synthetic-checks.mjs` imports the modules from a fixed
-list: `pages`, `uptime`, `api`, `calculators`, `inquiry`, `search`, `staff`,
-`tls`, `dns`, `domain`, `edge`.
+list: `pages`, `api`, `calculators`, `inquiry`, `search`, `staff`, `tls`,
+`dns`, `domain`, `edge`.
 
-**Who loads the pages.** Cloudflare's Bot Fight Mode answers 403 to GitHub's
-runners, so by default the monitor does not load any page of
-`diamondecho.com` or `staff.diamondecho.com`. An outside uptime service
-(UptimeRobot, which Cloudflare lets through) loads them, and `checks/uptime.mjs`
-reads its verdicts with one POST to `api.uptimerobot.com` (read-only key in
-`UPTIMEROBOT_API_KEY`, never printed or filed). Each verdict is filed under the
-page's own check id, component, severity and SLIs (`public-home`,
-`search-page`, `inquiry-page`, `staff-home` and so on), with `status: null`,
-so everything after `run.json` treats it like a check the monitor made. A
-page the service did not report (paused, not checked yet, no monitor of that
-name, another address) is not filed at all; the check `uptime-service`
-(`public-site`, sev3, no SLI) then fails and names it, as it does when the
-service cannot be read. The runner passes `ctx.pageSource`
-(`"uptime-service"`, the default, or `"direct"` when `SRE_PAGE_SOURCE=direct`);
-a module that would load a Cloudflare page asks `pagesElsewhere(ctx)` from
-`checks/pages.mjs` first. With the uptime service the monitor itself asks only
-the API, the inquiry route, the redirects and the slow suite's certificates,
-DNS and domain; `public-not-found`, `public-asset-js`, `public-asset-css`,
-`edge-hsts`, `edge-no-analytics-beacon` and the home page's `commit` fact are
-not produced. `uptime` runs in the fast suite only: a verdict up to five
-minutes old says nothing about a build that just went live.
+**No page is asked for.** Cloudflare's Bot Fight Mode answers 403 to GitHub's
+runners and stays on, and no outside service loads the pages in the monitor's
+place (Gbenga, 2026-11-14). The runner passes `ctx.pageSource`: `"none"` (the
+default) or `"direct"` when `SRE_PAGE_SOURCE=direct`. A module that would load
+a page Cloudflare serves asks `pagesNotAsked(ctx)` from `checks/pages.mjs`
+first and skips it. With `"none"` the monitor asks only the API, the inquiry
+route, the staff sign-in route, the redirects and the slow suite's
+certificates, DNS and domain. These checks are not produced: every page load
+(`public-home`, `public-page-*`, `search-page`, `calculators-*-page`,
+`inquiry-page`, `staff-home`), `public-not-found`, `public-asset-js`,
+`public-asset-css`, `edge-hsts`, `edge-no-analytics-beacon`, and the home
+page's `commit` fact. The SLIs fed only by pages (`public-availability`,
+`public-latency`, `calculators-availability`) therefore get no data, and the
+status page says that pages are not loaded.
 
 A check may report short facts it read from the live service in `observed`,
 for example `{ "revision": "diamondecho-api-00028-zin", "commit": "59f8d46" }`
@@ -283,10 +276,7 @@ history in seconds. Production runs never set it.
    Never load-test production. One exception: the calculator check sends one
    small, fixed `POST /api/v1/deals/analyze` per fast run, the same request
    the website sends. It stores nothing and touches no rate limiter or paid
-   service; `backend/tests/test_monitor_probe.py` proves both. No other POST
-   to our own site or API. (`checks/uptime.mjs` POSTs its read request to
-   UptimeRobot's API, which is how that API is read; it changes nothing
-   there either, and the key it uses cannot.)
+   service; `backend/tests/test_monitor_probe.py` proves both. No other POST.
 2. **Never submit an inquiry and never use up a visitor's allowance.**
    `POST /api/v1/inquiries` counts every well-formed JSON attempt, valid or
    not, against 5 per 10 minutes per sender and 30 per hour per instance
@@ -321,7 +311,7 @@ history in seconds. Production runs never set it.
 | SRE lead | this file, `lib/schema.mjs`, `targets.mjs`, `.github/workflows/sre-monitor.yml`, `docs/sre/README.md`, `docs/sre/needs-from-gbenga.md`, `AGENTS.md`, `.claude/agents/sre-*.md`, `.github/workflows/ci.yml` |
 | Incident commander | `docs/sre/incident-response.md`, `severity-and-escalation.md`, `postmortem-template.md`, `runbooks/README.md`, `runbooks/_template.md`, `.github/ISSUE_TEMPLATE/`, `status-page/` |
 | Observability | `state.mjs`, `state-git.sh`, `alert.mjs`, `alert-policy.mjs`, `lib/github.mjs`, `backend/observability/`, `deploy/monitoring/alert-policies/`, `dashboards/`, `log-metrics/`, `deploy/monitoring/apply.sh`, `docs/sre/observability.md`, `docs/sre/alerting.md`, `runbooks/monitoring-is-blind.md`, `runbooks/inquiry-not-delivered.md` |
-| Synthetic monitoring | `synthetic-checks.mjs`, `lib/http.mjs`, `checks/pages.mjs`, `checks/api.mjs`, `checks/calculators.mjs`, `checks/inquiry.mjs`, `checks/search.mjs`, `checks/staff.mjs`, `checks/uptime.mjs`, `deploy/monitoring/uptime-checks/`, `docs/sre/synthetic-monitoring.md`, `runbooks/search-provider-down.md` |
+| Synthetic monitoring | `synthetic-checks.mjs`, `lib/http.mjs`, `checks/pages.mjs`, `checks/api.mjs`, `checks/calculators.mjs`, `checks/inquiry.mjs`, `checks/search.mjs`, `checks/staff.mjs`, `deploy/monitoring/uptime-checks/`, `docs/sre/synthetic-monitoring.md`, `runbooks/search-provider-down.md` |
 | SLO and error budget | `slo.config.mjs`, `slo-calc.mjs`, `weekly-report.mjs`, `.github/workflows/sre-weekly-report.yml`, `deploy/monitoring/slos/`, `docs/sre/slo.md`, `docs/sre/error-budget-policy.md` |
 | Infrastructure | `remediate.mjs`, `remediation-policy.mjs`, `deploy/cloud-run.service.yaml`, `docs/sre/architecture.md`, `docs/sre/auto-remediation.md`, `docs/sre/backup-and-restore.md`, `runbooks/site-down.md`, `api-down.md`, `database-unavailable.md`, `dns-problem.md` |
 | Release and change safety | `cloudrun/`, `.github/workflows/sre-post-merge-check.yml`, `.github/workflows/sre-deploy-api.yml`, `post-deploy.mjs`, the build identity in `backend/server.py` and the frontend build, `docs/sre/release-safety.md`, `runbooks/bad-deploy.md` |

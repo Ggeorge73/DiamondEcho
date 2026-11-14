@@ -148,10 +148,12 @@ async function checkAsset(ctx, base, path, types, missing) {
   return toCheck(base, result, firstProblem(result, [expectStatus(200), expectType(...types)]));
 }
 
-// True when an outside uptime service loads the pages and the monitor must
-// not (synthetic-checks.mjs PAGE_SOURCES). A ctx without the setting, as in
+// True when the monitor must not ask for any page Cloudflare serves
+// (synthetic-checks.mjs PAGE_SOURCES): Bot Fight Mode answers 403 to GitHub's
+// runners, and nothing else is allowed to load the pages in the monitor's
+// place (Gbenga, 2026-11-14). A ctx without the setting, as in
 // a module's own tests, loads them itself.
-export const pagesElsewhere = (ctx) => ctx.pageSource === "uptime-service";
+export const pagesNotAsked = (ctx) => ctx.pageSource === "none";
 
 // www must send the visitor to the same page on the bare domain. Cloudflare
 // answers a redirect before its bot check, so the monitor can always ask.
@@ -169,8 +171,8 @@ async function wwwRedirect(ctx) {
 export async function run(ctx) {
   const { publicOrigin } = ctx.targets;
   const checks = [await outsideDnsProbe(ctx)];
-  // The pages themselves are reported by checks/uptime.mjs.
-  if (pagesElsewhere(ctx)) return [...checks, await wwwRedirect(ctx)];
+  // The pages themselves are not asked for.
+  if (pagesNotAsked(ctx)) return [...checks, await wwwRedirect(ctx)];
 
   const [homePage, ...otherPages] = pagesFor("pages");
   const home = await checkPage(ctx, homePage);

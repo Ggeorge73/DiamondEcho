@@ -7,77 +7,14 @@ and where the exact steps are.
 
 Status key: **Open** (waiting on you), **Done** (with the date you did it).
 
-## 1. Do first (the pages are not watched without it)
+## 1. Do first
 
 | # | Item | Why | Where the steps are | Status |
 | --- | --- | --- | --- | --- |
-| 1.1 | **Set up the uptime service that loads the pages (UptimeRobot), and give the monitor its read-only key.** Your decision of 2026-11-14: Bot Fight Mode stays on. It answers `403` to GitHub's runners on every page of `diamondecho.com` and `staff.diamondecho.com` (measured in monitor run 27, 2026-11-14), and on the Free plan no rule can exempt them. UptimeRobot is on Cloudflare's verified-bot list, so it is let through. It loads each page every 5 minutes; the monitor only reads its verdicts and files them as its own checks. **The exact steps are below this table.** | Without it no page is watched: the monitor itself now asks only the API, the inquiry route and the redirects. | Steps below; `docs/sre/synthetic-monitoring.md`, `docs/sre/edge.md` | Open |
+| 1.1 | **Switch the monitor on.** Your decisions of 2026-11-14: Bot Fight Mode stays on, no outside monitoring service is added, and nothing checks the hosting address behind Cloudflare. So the monitor no longer asks for any page of `diamondecho.com` or `staff.diamondecho.com` (Bot Fight Mode answered `403` to GitHub's runners on every one, monitor run 27). It asks only the API, the inquiry route, the staff sign-in route and the redirects, plus the hourly certificate, DNS and domain checks; all of those passed from GitHub's runners on 2026-11-14. Nothing in Cloudflare needs changing. First run it once by hand (Actions, SRE monitor, Run workflow, suite `fast`) and check that every check passes. Then: Settings, Secrets and variables, Actions, Variables, New repository variable `SRE_MONITOR` = `enabled`. Undo: delete the variable. | Until then the scheduled checks and the after-merge check do not run. | `docs/sre/synthetic-monitoring.md` | Open |
 | 1.2 | **If you created the Cloudflare custom rule `Let the DiamondEcho monitor through`** (the earlier plan), delete it: Cloudflare, zone `diamondecho.com`, Security, Security rules, Custom rules. It is no longer used, and it let anyone who copied the monitor's name skip the browser check. If you never created it, there is nothing to do. | Removes an exemption nothing needs. | `docs/sre/edge.md` | Open |
+| 1.2a | **Know what is no longer watched, and accept it or tell me.** No automatic check now loads a web page. If Cloudflare Pages serves a broken or empty page, or Cloudflare itself has an outage, while the API keeps answering, no incident opens and the status page still says "Operational" (it carries a note saying pages are not loaded). The website's and the calculators' page targets (SLOs) get no data. What still tells you: a failed site build after a merge opens an incident (the after-merge check reads Cloudflare Pages' own result from GitHub); certificate, DNS, domain and redirect problems are still caught. Optional, inside Cloudflare and with no outside service: Cloudflare dashboard, Notifications, add the Pages notification for a failed deployment if your account lists it. | So that the gap is a decision, not a surprise. | `docs/sre/synthetic-monitoring.md`, `docs/sre/slo.md` | Open |
 | 1.3 | **Deploy the API once** with the build-identity change, setting the new `APP_COMMIT` setting (`--update-env-vars APP_COMMIT=$(git rev-parse HEAD)`; `deploy.sh` sets it for you, and every later deploy must set it too) (the redeploy in `docs/de13-production-setup.md`, or `scripts/sre/cloudrun/deploy.sh`). | Until `/api/` names its revision and commit, the monitor cannot notice a deploy, so the automatic rollback can never act and the post-merge check cannot tell old from new. | `docs/sre/release-safety.md` | Open |
-
-### Steps for 1.1 (about 20 minutes, no cost on the Free plan)
-
-Nothing here changes Cloudflare or the website. You create an account with an
-outside service, tell it which pages to load, and give the monitor a key that
-can only read the results.
-
-1. **Create the account.** Go to `https://uptimerobot.com`, choose the Free
-   plan and sign up with an address that is not on `diamondecho.com` (if the
-   domain ever fails, its own mail fails with it). Before you finish, read the
-   Free plan's terms for business use: reports from 2025 and 2026 disagree on
-   whether a business website is allowed. If it is not, the paid Solo plan
-   works the same way with these steps, or tell me and I will prepare another
-   verified service.
-2. **Create 12 monitors**, one per row of the table below. For each: **New
-   monitor**, type as given in the table, paste the address, set the **name
-   exactly as written** (the monitor finds each one by its name), leave the
-   interval at **5 minutes**, and save. For the one keyword monitor, enter the
-   keyword from the table and choose "alert when the keyword **does not
-   exist**".
-
-   | Monitor name (exact) | Type | Address |
-   | --- | --- | --- |
-   | `public-home` | HTTP(s) | `https://diamondecho.com/` |
-   | `public-page-agents` | HTTP(s) | `https://diamondecho.com/agents` |
-   | `public-page-about` | HTTP(s) | `https://diamondecho.com/about` |
-   | `public-page-podcast` | HTTP(s) | `https://diamondecho.com/podcast` |
-   | `public-page-privacy` | HTTP(s) | `https://diamondecho.com/privacy` |
-   | `public-page-terms` | HTTP(s) | `https://diamondecho.com/terms` |
-   | `search-page` | HTTP(s) | `https://diamondecho.com/search` |
-   | `calculators-deal-page` | HTTP(s) | `https://diamondecho.com/investment-calculator` |
-   | `calculators-mortgage-page` | HTTP(s) | `https://diamondecho.com/mortgage-calculator` |
-   | `calculators-net-sheet-page` | HTTP(s) | `https://diamondecho.com/seller-net-sheet` |
-   | `inquiry-page` | Keyword, keyword `de-inquiry-submit` | `https://diamondecho.com/inquire` |
-   | `staff-home` | HTTP(s) | `https://staff.diamondecho.com/` |
-
-3. **Wait 10 minutes and look.** Every monitor should show **Up**. If one
-   shows Down while the page opens in your browser, stop and tell me which:
-   Cloudflare may be turning UptimeRobot away too, and the monitor must not be
-   switched on in that state.
-4. **Keep UptimeRobot's own email alert on** (it is on by default, to the
-   address you signed up with). That is a second, independent way of being
-   told, which works even if GitHub is down.
-5. **Create the read-only key.** In UptimeRobot: **Integrations & API**, then
-   **API** (older screens: My Settings, API Settings). Under **Read-only API
-   key** choose Create. Copy that key, and only that one: the "Main API key"
-   can change and delete monitors and must never be given to GitHub.
-6. **Give the key to the monitor.** GitHub, this repository: Settings, Secrets
-   and variables, Actions, **Secrets**, New repository secret. Name
-   `UPTIMEROBOT_API_KEY`, value the read-only key. Never paste the key in an
-   issue, a pull request or a chat.
-7. **Try it once by hand.** Actions, SRE monitor, Run workflow (suite `fast`).
-   In the run's summary, "Uptime service reports every page" and the 12 page
-   checks should pass. If it names a page as "no monitor with this name" or
-   "watches another address", fix that monitor's name or address in
-   UptimeRobot and run it again.
-8. **Switch the monitor on.** Settings, Secrets and variables, Actions,
-   **Variables**, New repository variable `SRE_MONITOR` = `enabled`. Until
-   then the scheduled checks and the after-merge check do not run.
-
-Undo: delete the secret and the variable, then delete the UptimeRobot account.
-What it costs you in privacy: UptimeRobot learns the 12 public addresses and
-when they are up. It never sees visitor data, and the staff monitor loads only
-the sign-in page.
 
 ## 2. Switch on in GitHub (repository settings, no cost)
 
@@ -98,7 +35,7 @@ the sign-in page.
 | --- | --- | --- | --- | --- |
 | 3.1 | **Phase 1, read-only sign-in for GitHub**: Workload Identity Federation (no keys), service account `diamondecho-sre-monitor`, custom role with `run.services.get` and `run.revisions.list` on `diamondecho-api` only, then the repository variables `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_SRE_SERVICE_ACCOUNT`, `GCP_PROJECT_ID`, `GCP_REGION`, `CLOUD_RUN_SERVICE`. | The rollback engine's dry runs read the real revisions; nothing can change. | `docs/sre/auto-remediation.md` | Open |
 | 3.2 | **Phase 2, a separate yes**: add `run.services.update` to that role and set variable `SRE_AUTOREMEDIATE` = `enabled`. | Automatic rollback of a bad API deploy. Note: that permission cannot be limited to traffic only. | `docs/sre/auto-remediation.md` | Open |
-| 3.3 | **Multi-region uptime checks, alert policies, log metrics, dashboard and real-request SLOs**: run `deploy/monitoring/apply.sh` (prints the plan), then `apply.sh --apply`. Re-check Cloud Monitoring prices first. | A second, independent monitor from several continents, which also notices when the GitHub monitor itself stops. | `docs/sre/observability.md`, `docs/sre/synthetic-monitoring.md`, `docs/sre/slo.md` | Open |
+| 3.3 | **Multi-region uptime checks, alert policies, log metrics, dashboard and real-request SLOs**: run `deploy/monitoring/apply.sh` (prints the plan), then `apply.sh --apply`. Re-check Cloud Monitoring prices first. | A second, independent monitor from several continents, which also notices when the GitHub monitor itself stops. Before applying: its page checks come from Google's network and may be refused by Bot Fight Mode like GitHub's were; tell me and I will cut the plan down to the API checks first. | `docs/sre/observability.md`, `docs/sre/synthetic-monitoring.md`, `docs/sre/slo.md` | Open |
 | 3.3a | **Deploying the API from GitHub** (optional; until then deploy by hand from Cloud Shell with `scripts/sre/cloudrun/deploy.sh`): a separate sign-in from the monitor's (its own Workload Identity provider and service account, trusted only for the `production` environment and `sre-deploy-api.yml` on `main`), and the `production` environment limited to `main`. Do this only after the default compute account loses Editor and Cloud Build has its own account (security finding #1). | `docs/sre/release-safety.md` | Open |
 | 3.4 | **Backup restore drill** into a scratch database (DE-28). | Proof that a restore works, and a measured recovery time. | `docs/sre/backup-and-restore.md` | Open |
 

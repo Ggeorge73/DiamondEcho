@@ -22,28 +22,28 @@ import { TARGETS } from "./targets.mjs";
 // The fixed list from the contract. tls, dns, domain and edge belong to the
 // edge security role; they are loaded the same way, and a module that is
 // missing or breaks is reported, never skipped in silence.
-export const MODULES = Object.freeze(["pages", "uptime", "api", "calculators", "inquiry", "search", "staff", "tls", "dns", "domain", "edge"]);
+export const MODULES = Object.freeze(["pages", "api", "calculators", "inquiry", "search", "staff", "tls", "dns", "domain", "edge"]);
 
-// Who loads the pages Cloudflare serves (diamondecho.com, staff.diamondecho.com).
-//   "uptime-service"  an outside uptime service does, and checks/uptime.mjs
-//                     reads its verdicts. The default: Cloudflare's Bot Fight
-//                     Mode answers 403 to GitHub's runners, so the monitor
-//                     itself asks only the API, the inquiry route and the
-//                     redirects (docs/sre/synthetic-monitoring.md).
-//   "direct"          the monitor loads the pages itself, as it did before
-//                     (SRE_PAGE_SOURCE=direct; for a run from a network
-//                     Cloudflare lets through). checks/uptime.mjs then files
-//                     nothing, so no page is reported twice.
+// Whether the monitor asks for the pages Cloudflare serves (diamondecho.com,
+// staff.diamondecho.com).
+//   "none"    it does not. The default: Cloudflare's Bot Fight Mode answers
+//             403 to GitHub's runners and stays on, and no outside service is
+//             used in the monitor's place (Gbenga, 2026-11-14). The monitor
+//             asks only the API, the inquiry route, the redirects and the
+//             slow suite's certificates, DNS and domain. No page of the site
+//             is watched (docs/sre/synthetic-monitoring.md).
+//   "direct"  it loads the pages itself, as it did before
+//             (SRE_PAGE_SOURCE=direct; only useful for a run from a network
+//             Cloudflare lets through).
 // A check module reads ctx.pageSource; without one (a module's own tests) it
 // loads the pages itself.
-export const PAGE_SOURCES = Object.freeze(["uptime-service", "direct"]);
-export const pageSourceFrom = (env = process.env) => (env.SRE_PAGE_SOURCE === "direct" ? "direct" : "uptime-service");
+export const PAGE_SOURCES = Object.freeze(["none", "direct"]);
+export const pageSourceFrom = (env = process.env) => (env.SRE_PAGE_SOURCE === "direct" ? "direct" : "none");
 
 // Where a module's own breakdown is filed, and how it is named, when its
 // checks could not be run at all.
 const MODULE_INFO = Object.freeze({
   pages: { component: "public-site", label: "website page" },
-  uptime: { component: "public-site", label: "uptime service" },
   api: { component: "api", label: "API" },
   calculators: { component: "calculators", label: "calculator" },
   inquiry: { component: "inquiry", label: "inquiry form" },

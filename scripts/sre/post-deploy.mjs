@@ -99,7 +99,8 @@ export async function pagesBuildState(github, commit) {
 // Mode refuses GitHub's runners (403), so when the site answers 403 the
 // second source is asked: the result Cloudflare Pages reported to GitHub for
 // this commit (`pagesBuild`). That proves the build was published; that the
-// pages then load is watched by the uptime service (checks/uptime.mjs).
+// pages then load is not checked by anything here: the monitor does not ask
+// for pages (synthetic-checks.mjs PAGE_SOURCES).
 export async function waitForBuild({ merged, fetcher, sleep, now, timeoutMs, intervalMs, isAncestor, origin, pagesBuild = null }) {
   const deadline = now() + timeoutMs;
   let attempts = 0;

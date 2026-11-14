@@ -26,7 +26,7 @@ const loader = (modules) => async (name) => {
 const quiet = { env, fetch: noFetch, sleep: async () => {}, vantage: { provider: "local", region: null } };
 
 test("the module list is the contract's fixed list, in order", () => {
-  assert.deepEqual(MODULES, ["pages", "uptime", "api", "calculators", "inquiry", "search", "staff", "tls", "dns", "domain", "edge"]);
+  assert.deepEqual(MODULES, ["pages", "api", "calculators", "inquiry", "search", "staff", "tls", "dns", "domain", "edge"]);
 });
 
 test("only the modules of the suite run, in order, into one valid run document", async () => {
@@ -282,7 +282,7 @@ test("command: exits 2 when it is used wrongly or cannot do its job", async () =
   assert.equal((await cli(["--suite", "fast", "--out", dir], pages)).code, 2);
 });
 
-test("the real modules, pages from the uptime service: the monitor sends nothing to a page on Cloudflare", async () => {
+test("the real modules: the monitor sends nothing to a page on Cloudflare, and to no outside monitoring service", async () => {
   const asked = [];
   const unreachable = async (url, init = {}) => {
     asked.push(`${init.method || "GET"} ${url}`);
@@ -290,7 +290,7 @@ test("the real modules, pages from the uptime service: the monitor sends nothing
   };
   for (const suite of ["fast", "slow", "post-deploy"]) {
     asked.length = 0;
-    const run = await runSuite({ env: { ...env, UPTIMEROBOT_API_KEY: "ur-read-only-key" }, fetch: unreachable, sleep: async () => {}, suite, vantage: { provider: "local", region: null } });
+    const run = await runSuite({ env, fetch: unreachable, sleep: async () => {}, suite, vantage: { provider: "local", region: null } });
     assert.deepEqual(runProblems(run), []);
     assert.ok(!run.checks.some((c) => c.id.startsWith("monitor-")), "every real module loaded and ran");
     // To our own names on Cloudflare only the two redirects are asked: the
@@ -303,10 +303,8 @@ test("the real modules, pages from the uptime service: the monitor sends nothing
       assert.ok(!ids.includes(id), `${suite}: ${id} is not asked by the monitor`);
     }
     if (suite === "fast") {
-      assert.ok(asked.includes("POST https://api.uptimerobot.com/v2/getMonitors"));
-      for (const id of ["uptime-service", "public-www-redirect", "api-health", "calculators-api-analyze", "inquiry-route", "staff-api-auth"]) assert.ok(ids.includes(id), id);
-    } else {
-      assert.ok(!ids.includes("uptime-service"), `${suite}: the uptime service is read by the fast runs only`);
+      assert.deepEqual(ids, ["outside-dns-probe", "public-www-redirect", "api-health", "api-identity", "api-cors-allowed", "api-cors-refused",
+        "calculators-api-analyze", "inquiry-preflight", "inquiry-route", "inquiry-queue", "staff-api-auth"]);
     }
   }
 });

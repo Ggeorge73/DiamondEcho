@@ -2,17 +2,17 @@ name: SRE monitor
 
 # Watches diamondecho.com from outside, like a visitor would, and keeps the
 # public status page up to date. Every five minutes it runs the fast checks
-# (the API, the calculation service, the inquiry route, the redirects, and
-# the uptime service's verdict on every page); every hour it runs the slow
+# (the API, the calculation service, the inquiry route and the redirects);
+# every hour it runs the slow
 # ones (certificates, DNS, domain registration, third parties). Each run files
 # its result on the sre-status branch, opens or closes sre-incident issues, and
 # decides whether the one safe automatic fix applies (docs/sre/auto-remediation.md).
 #
-# The pages themselves are loaded by an outside uptime service (UptimeRobot),
-# not from here: Cloudflare's Bot Fight Mode answers 403 to GitHub's runners,
-# and lets a verified uptime service through. This workflow reads that
-# service's verdicts with a read-only key (scripts/sre/checks/uptime.mjs,
-# docs/sre/needs-from-gbenga.md 1.1).
+# It does not load any page of diamondecho.com or staff.diamondecho.com:
+# Cloudflare's Bot Fight Mode answers 403 to GitHub's runners, it stays on,
+# and no outside service is used in the monitor's place (Gbenga, 2026-11-14).
+# So the pages themselves are not watched here
+# (docs/sre/synthetic-monitoring.md).
 #
 # It only reads the live site. It never submits a form, never calls the paid
 # property routes, and changes nothing in production unless Gbenga has switched
@@ -49,8 +49,6 @@ jobs:
   # On a pull request: run the checks once against the live site and show the
   # result, so a change to a check is seen working before it merges. Nothing
   # is saved and no issue is opened; a failing site does not fail the PR.
-  # The uptime service's key is not given to a pull request, so the preview
-  # shows "uptime-service" as not set up and no page results.
   preview:
     name: Run the checks once (not saved)
     if: github.event_name == 'pull_request'
@@ -93,10 +91,8 @@ jobs:
   monitor:
     name: Check the site and file the result
     # Scheduled runs start only once Gbenga has set the repository variable
-    # SRE_MONITOR to "enabled", after setting up the uptime service and its
-    # read-only key (docs/sre/needs-from-gbenga.md 1.1). Without them the
-    # pages are not watched, and the monitor would say so every five minutes.
-    # A run started by hand always runs.
+    # SRE_MONITOR to "enabled" (docs/sre/needs-from-gbenga.md 1.1). A run
+    # started by hand always runs.
     if: >-
       github.event_name != 'pull_request' && github.repository == 'Ggeorge73/DiamondEcho' &&
       (github.event_name == 'workflow_dispatch' || vars.SRE_MONITOR == 'enabled')
@@ -175,13 +171,10 @@ jobs:
           fi
           echo "suite=$suite" >> "$GITHUB_OUTPUT"
 
-      # The uptime service's read-only key is given to this step only. It can
-      # read monitor results and change nothing.
       - name: Run the checks (read-only)
         if: ${{ !cancelled() }}
         env:
           SUITE: ${{ steps.suite.outputs.suite }}
-          UPTIMEROBOT_API_KEY: ${{ secrets.UPTIMEROBOT_API_KEY }}
         run: node scripts/sre/synthetic-checks.mjs --suite "$SUITE" --out "$RUN_FILE"
 
       - name: File the result
