@@ -194,7 +194,9 @@ function neighbourProblem(part, status, incidents, now) {
   const name = partName(part);
   const minutes = part === "dns" ? LIMITS.dnsFreshMinutes : LIMITS.freshMinutes;
   if (status.components[part]?.state === "outage") return `${name} is marked as an outage.`;
-  if ((incidents.open ?? []).some((other) => other?.component === part)) return `There is an open ${name} incident.`;
+  // A sev3 or sev4 incident there is a notice (a missing mail record, a
+  // certificate due in weeks), not a sign that the network is in trouble.
+  if ((incidents.open ?? []).some((other) => other?.component === part && SERIOUS.includes(other.severity))) return `There is an open ${name} incident.`;
   const serious = checksOf(status, part).filter((check) => SERIOUS.includes(check.severity));
   const failing = serious.filter((check) => check.ok === false && isFresh(check.checked_at, now, minutes));
   if (failing.length) return `${name} check "${failing[0].name ?? failing[0].id}" is failing.`;

@@ -276,3 +276,42 @@ test("a component incident takes over the budget incident's issue: relabelled, r
     await w.cleanup();
   }
 });
+
+test("a close that GitHub refuses is retried without posting the closing comment again", async () => {
+  const w = await workspace();
+  const server = fakeServer();
+  let refusals = 2;
+  const fetcher = async (url, init = {}) => {
+    const closing = init.method === "PATCH" && JSON.parse(init.body).state === "closed";
+    if (closing && refusals > 0) {
+      refusals -= 1;
+      server.calls.push({ url, method: "PATCH", refused: true });
+      return new Response("{}", { status: 500 });
+    }
+    return server.fetcher(url, init);
+  };
+  const env = { GITHUB_TOKEN: "t0ken-value", GITHUB_REPOSITORY: "owner/repo" };
+  const options = { env, fetch: fetcher, apply: true };
+  try {
+    await w.run(T0, [home(false)], options);
+    await w.run(T0 + 5 * MIN, [home(false)], options);
+    const number = (await w.incidents()).open[0].issue_number;
+    const commentsOn = () => server.calls.filter((call) => call.method === "POST" && call.url.endsWith(`/issues/${number}/comments`)).length;
+    await w.run(T0 + 10 * MIN, [home(true)], options);
+    await w.run(T0 + 15 * MIN, [home(true)], options);
+    const before = commentsOn();
+    // Third good run: resolved. The comment goes through, the close is refused.
+    await w.run(T0 + 20 * MIN, [home(true)], options);
+    assert.equal(commentsOn(), before + 1, "the closing comment is posted once");
+    assert.deepEqual((await w.incidents()).engine.pending_closes.map((item) => [item.issue_number, item.body]), [[number, null]]);
+    // Refused again, then closed: no further comment either time.
+    await w.run(T0 + 25 * MIN, [home(true)], options);
+    assert.equal((await w.incidents()).engine.pending_closes.length, 1);
+    await w.run(T0 + 30 * MIN, [home(true)], options);
+    assert.equal(commentsOn(), before + 1, "retries do not repeat the comment");
+    assert.equal((await w.incidents()).engine.pending_closes.length, 0);
+    assert.equal(server.state.issues.find((issue) => issue.number === number).state, "closed");
+  } finally {
+    await w.cleanup();
+  }
+});

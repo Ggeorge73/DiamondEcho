@@ -177,6 +177,7 @@ export async function execute({ actions, incidents, client, apply, webhookUrl, f
     const incident = byKey(action.key);
     const number = Number.isInteger(incident?.issue_number) ? incident.issue_number : null;
     const record = { ...action, issue_number: number };
+    let closingCommentPosted = false;
     try {
       if (action.kind === "webhook") {
         const text = incident?.issue_url ? `${action.text} ${incident.issue_url}` : action.text;
@@ -249,6 +250,7 @@ export async function execute({ actions, incidents, client, apply, webhookUrl, f
         record.result = writes ? "done" : "dry-run";
       } else if (action.kind === "close-issue") {
         if (action.body) await client.comment(number, action.body); // none when silenced
+        closingCommentPosted = Boolean(action.body);
         await client.closeIssue(number);
         record.result = writes ? "done" : "dry-run";
       } else {
@@ -258,7 +260,9 @@ export async function execute({ actions, incidents, client, apply, webhookUrl, f
       record.result = `failed: ${error.message}`;
       log(`alert: ${action.kind} for ${action.key} failed: ${error.message}`);
       if (action.kind === "close-issue" && number !== null) {
-        incidents.engine.pending_closes.push({ issue_number: number, body: action.body, since: new Date(now).toISOString() });
+        // The closing comment is posted once: if it went through and only
+        // the close was refused, the retry closes without saying it again.
+        incidents.engine.pending_closes.push({ issue_number: number, body: closingCommentPosted ? null : action.body, since: new Date(now).toISOString() });
       }
     }
     delete record.body; // the body is in the issue; actions.json stays short
@@ -277,7 +281,10 @@ async function retryCloses({ incidents, client, apply, now, log }) {
       continue;
     }
     try {
-      if (item.body) await client.comment(item.issue_number, item.body);
+      if (item.body) {
+        await client.comment(item.issue_number, item.body);
+        item.body = null; // said once; a close refused again is retried without it
+      }
       await client.closeIssue(item.issue_number);
     } catch (error) {
       log(`alert: closing issue #${item.issue_number} failed again: ${error.message}`);

@@ -67,7 +67,7 @@ with a reason; that reason is logged and shown in the run summary.
 | 4 | Did the incident open less than 60 minutes ago? After that a person may be on it | `incident-too-old` |
 | 5 | Is the monitoring data fresh (less than 20 minutes old)? | `status-stale` |
 | 6 | Is a sev1 or sev2 check of that part failing now, twice in a row or more? | `checks-pass-now`, `not-confirmed` |
-| 7 | Are the website and DNS healthy (no open incident, no sev1/sev2 check failing, at least one passing recently)? If not, the cause is likely the network, a provider or the monitor | `site-or-dns-unhealthy` |
+| 7 | Are the website and DNS healthy (no open sev1/sev2 incident, no sev1/sev2 check failing, at least one passing recently; a sev3 or sev4 notice does not count)? If not, the cause is likely the network, a provider or the monitor | `site-or-dns-unhealthy` |
 | 8 | Does the failure look like the API breaking? For the API's own checks: any answer except a refusal (401, 403, 429), or no answer. For the form and calculators: only checks that call the API count, and only a 500, 502 or 504 or no answer (for the calculators also 503; for the form a 503 is its own "queue off or hourly cap" answer and does not count). A page on Cloudflare Pages never counts | `not-api-fault` |
 | 9 | Has there been no automatic attempt in the last 24 hours? | `rollback-limit` |
 | 10 | Can Cloud Run be read, with all traffic on one revision and no `candidate` tag (and does status.sh say which tags exist)? | `cloud-run-unreadable`, `deploy-in-progress`, `serving-unknown` |

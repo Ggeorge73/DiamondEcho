@@ -13,6 +13,7 @@
 const API_VERSION = "2022-11-28";
 const USER_AGENT = "DiamondEcho-SRE-Monitor/1";
 const TIMEOUT_MS = 15_000;
+const COMMENT_PAGES = 20;
 
 export function githubClient({
   token = process.env.GITHUB_TOKEN,
@@ -119,7 +120,15 @@ export function githubClient({
     // read into the engine.
     async listComments(number) {
       if (dryRun) return [];
-      const rows = await call("GET", `${issuePath(number)}/comments?per_page=100`);
+      // Every page (GitHub lists oldest first): an "ack" written after the
+      // hundredth comment of a long incident must still be read. Twenty pages
+      // is a ceiling, not an expectation.
+      const rows = [];
+      for (let page = 1; page <= COMMENT_PAGES; page += 1) {
+        const batch = await call("GET", `${issuePath(number)}/comments?per_page=100&page=${page}`);
+        rows.push(...batch);
+        if (batch.length < 100) break;
+      }
       return rows.map((row) => ({
         login: row.user?.login || "",
         bot: row.user?.type === "Bot" || /\[bot\]$/.test(row.user?.login || ""),

@@ -43,7 +43,8 @@ flowchart LR
   stays fixed. One outage pages once. [alerting.md](alerting.md),
   [severity-and-escalation.md](severity-and-escalation.md)
 - **Status page.** A public page that shows only what the monitor measured,
-  including when its data is stale. Published from the `sre-status` branch.
+  including when its data is stale. Published by the monitor from the data
+  on the `sre-status` branch.
 - **When something breaks.** A one-page checklist, a runbook per failure
   ([runbooks/README.md](runbooks/README.md), by symptom), and a blameless
   postmortem template. [incident-response.md](incident-response.md)

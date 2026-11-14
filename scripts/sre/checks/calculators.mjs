@@ -45,15 +45,18 @@ export async function run(ctx) {
   const checks = [];
   for (const page of pagesFor("calculators")) checks.push((await checkPage(ctx, page)).check());
 
-  // sev3, not sev2: when the service is down or wrong, Deal Studio calculates
-  // in the browser and says so. The visitor still gets figures.
+  // sev2: when the service is down, Deal Studio shows "The analysis service
+  // could not be reached, so nothing was calculated" and the visitor gets no
+  // figures (it calculates in the browser only when the service answers with
+  // an older formula). sev2 is also what lets a bad API deploy that breaks
+  // only this route be rolled back (remediation-policy.mjs).
   const analysis = await request(ctx, `${ctx.targets.apiOrigin}/api/v1/deals/analyze`, {
     method: "POST", retries: 1,
     headers: { "Content-Type": "application/json", Origin: ctx.targets.publicOrigin },
     body: JSON.stringify(ANALYZE_REQUEST),
   });
   checks.push(toCheck(
-    { id: "calculators-api-analyze", name: "Deal analysis service returns the reference figures", component: "calculators", severity: "sev3", slis: ["api-availability"] },
+    { id: "calculators-api-analyze", name: "Deal analysis service returns the reference figures", component: "calculators", severity: "sev2", slis: ["api-availability"] },
     analysis, firstProblem(analysis, [
       expectStatus(200),
       expectType("application/json"),

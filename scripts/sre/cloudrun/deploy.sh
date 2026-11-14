@@ -362,6 +362,10 @@ gate() { # STEP STEP_SINCE
     health_ok "$CANDIDATE_URL" || { GATE_PROBLEM="/health answered $HTTP_STATUS at $1 percent"; return 1; }
     read_identity "$CANDIDATE_URL" && [ "$ID_COMMIT" = "$COMMIT" ] \
       || { GATE_PROBLEM="/api/ did not name $SHORT at $1 percent (status $HTTP_STATUS)"; return 1; }
+    # The tagged address always reaches the new revision, whatever the split.
+    # The service's own address is the door visitors use: it is answered by
+    # the old and the new revision in the step's shares, and must stay healthy.
+    health_ok "$SERVICE_URL" || { GATE_PROBLEM="the service address answered /health $HTTP_STATUS at $1 percent"; return 1; }
   done
   if [ "$LOG_GATE" = on ]; then
     errors="$(server_errors "$NEW" "$2")" || { GATE_PROBLEM="could not read the logs at $1 percent"; return 1; }
