@@ -55,38 +55,41 @@ the figures beside it, not measured).
 
 ## What the visitor sees when the API is full
 
-Read from the code at commit `672aa79`; not tried in a browser.
+Read from the code and its tests on 2026-11-14 (branch
+`claude/practical-mendel-hvp54o`, not yet merged or deployed); not tried in a
+browser. Until that change is deployed, production still shows the older
+texts: "The analysis service could not be reached, so nothing was
+calculated…" or "Request failed with status code …" in Deal Studio, and "We
+could not send your request just now. Nothing was submitted." on the form.
 
 - **Deal Studio** does **not** calculate on the device when the API is busy
-  or down. It does that only when the API answers with an older formula or
-  rejects a new field (`frontend/src/pages/InvestmentCalculator.jsx`). The
-  message comes from `responseErrorMessage`
-  (`frontend/src/lib/dealValidation.js`, lines 236 to 254):
-  - When Google itself refuses or cuts off the request (its 429, 503 or 504),
-    the browser cannot read the answer, because Google's error carries no
-    CORS header (the permission a browser needs to read another site's
-    answer). The visitor sees: "The analysis service could not be reached,
-    so nothing was calculated. Check your connection and try again." The same
-    text appears when there is no answer at all.
-  - When an answer is readable but carries no message of ours, the visitor
-    sees the browser library's own words, for example "Request failed with
-    status code 503".
-  - "The analysis could not be completed. Review the assumptions and try
-    again." appears only when the error has no text at all.
-  The request has no time limit of its own, so the visitor waits as long as
-  Cloud Run takes. The mortgage simulator and seller net sheet do not use the
-  API.
-- **The inquiry form** shares the same three places, and a refused
-  submission is never stored. What the visitor reads depends on who refused:
-  - Our own limiter (readable answer): "Too many requests were sent from this
-    connection. Please wait a few minutes and try again, or call or email
-    us." (429, one sender), or "Online requests are busy right now. Please
-    try again later, or call or email us." (503, the hourly limit). Only
-    these ask the visitor to call or email.
-  - Google refusing because all instances are busy, or no answer at all: "We
-    could not send your request just now. Nothing was submitted."
-    (`frontend/src/components/InquiryForm.jsx`, lines 104 to 107). It does
-    not suggest calling, so a visitor may simply give up.
+  or down (Gbenga's decision of 2026-11-14: two copies of the calculations
+  drift apart). It does that only when the API answers with an older formula
+  or rejects a new field, and in a build with no service address
+  (`frontend/src/pages/InvestmentCalculator.jsx`). The message comes from
+  `responseErrorMessage` (`frontend/src/lib/dealValidation.js`):
+  - When Google refuses or cuts off the request (its 429, 503 or 504), when
+    there is no answer at all, when the page's own 20 second limit passes
+    (`DEAL_ANALYSIS_TIMEOUT_MS`), on any 5xx, and when a 2xx is not an
+    analysis, the visitor sees: "The calculator is temporarily unavailable.
+    Please try again shortly." with a **Try again** button. No figures are
+    shown and every entered value stays.
+  - A 4xx that carries our own reasons (422, 400) is shown as help with the
+    inputs under "Analysis needs attention".
+  The mortgage simulator and seller net sheet do not use the API.
+- **The inquiry form** shares the same places, and a refused submission is
+  never stored. What the visitor reads
+  (`frontend/src/components/InquiryForm.jsx`):
+  - Our own limiter's 429 (one sender): "Too many requests were sent from
+    this connection. Please wait a few minutes and try again, or call or
+    email us."
+  - Everything else that is not a stored request (our 503s including the
+    hourly limit, Google refusing, no answer, the form's own 20 second limit
+    `INQUIRY_REQUEST_TIMEOUT_MS`, a 2xx that is not the receipt): "We
+    couldn't send your request. Please try again, or call or email us."
+  Both are followed by the brokerage office number, the direct number and
+  the email as links, and the form keeps everything typed. A retry sends the
+  same submission key, so a request that did arrive is not stored twice.
 - **The market brief** section stays empty or keeps its last figures; the
   page itself is unaffected.
 - **The assistant** gives an error for that question.

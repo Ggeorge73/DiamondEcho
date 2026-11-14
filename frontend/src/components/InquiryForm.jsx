@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
-import { HOURS } from '../lib/contact';
+import { BROKERAGE, HOURS, OFFICE } from '../lib/contact';
 import { isBusinessHours } from '../lib/hours';
 
 const emptyValues = {
@@ -21,12 +21,64 @@ const createSubmissionKey = () => {
   throw new Error('This browser cannot safely submit the request. Please try an updated browser.');
 };
 
+// How long the form waits for the service before it gives up and says so.
+// The service answers a healthy submission in well under a second and gives
+// up on its own storage within about 10 seconds; without a limit a stalled
+// connection would leave "Sending request…" on screen for ever. A retry
+// after the limit reuses the same submission key, so a request that did
+// arrive is not stored twice.
+export const INQUIRY_REQUEST_TIMEOUT_MS = 20000;
+
+// The words a visitor reads when a request was not confirmed. They are
+// written here: text from the service, the platform or the browser library
+// is never shown.
+export const INQUIRY_NOT_SENT = "We couldn't send your request. Please try again, or call or email us.";
+export const INQUIRY_TOO_MANY = 'Too many requests were sent from this connection. Please wait a few minutes and try again, or call or email us.';
+export const INQUIRY_CHECK_DETAILS = 'Some of your details need another look. Check the fields marked below, then submit again.';
+const failure = (text = INQUIRY_NOT_SENT) => ({ title: 'Your request was not sent', text, contact: true });
+
+// The service's names for the fields, and what to say beside each one it refuses.
+const SERVICE_FIELDS = {
+  full_name: ['fullName', 'Please check your full name.'],
+  email: ['email', 'Enter a valid email address.'],
+  phone: ['phone', 'Please check the phone number, or leave it empty.'],
+  message: ['message', 'Please check your message.'],
+  property_address: ['propertyAddress', 'Please check the property address.'],
+  preferred_tour_time: ['preferredTime', 'Choose a future date and time.'],
+  consent: ['consent', 'Please agree to be contacted about this request.'],
+};
+// Field problems from a 422 answer, as { formField: our sentence }. Empty when
+// the answer names no field of this form.
+const refusedFields = (response, kind) => {
+  const detail = response?.status === 422 ? response.data?.detail : null;
+  const found = {};
+  for (const item of Array.isArray(detail) ? detail : []) {
+    const name = (Array.isArray(item?.loc) ? item.loc : []).find((part) => Object.prototype.hasOwnProperty.call(SERVICE_FIELDS, part));
+    if (!name) continue;
+    const [fieldName, sentence] = SERVICE_FIELDS[name];
+    const shown = (fieldName !== 'propertyAddress' || kind !== 'buyer') && (fieldName !== 'preferredTime' || kind === 'tour');
+    if (shown) found[fieldName] = sentence;
+  }
+  return found;
+};
+
+// The service stores a request and answers 201 with its receipt, or 200 with
+// the same receipt when the same submission key is sent again
+// (backend/inquiries/router.py, models.InquiryReceipt). Anything else is not
+// a stored request, whatever its status.
+const storedReceipt = (response) => {
+  const data = response?.data;
+  return [200, 201].includes(response?.status) && data && typeof data === 'object'
+    && data.status === 'queued' && typeof data.request_id === 'string' && data.request_id.trim() !== ''
+    ? data : null;
+};
+
 // `initialMessage` starts the message box with a sentence the visitor can
 // change, for a link that already says what the request is about.
 const InquiryForm = ({ kind, initialMessage = '' }) => {
   const [values, setValues] = useState(() => ({ ...emptyValues, message: initialMessage }));
   const [validation, setValidation] = useState({});
-  const [error, setError] = useState('');
+  const [error, setError] = useState(null);
   const [pending, setPending] = useState(false);
   const [receipt, setReceipt] = useState(null);
   const sendingRef = useRef(false);
@@ -44,7 +96,7 @@ const InquiryForm = ({ kind, initialMessage = '' }) => {
     const value = event.target.type === 'checkbox' ? event.target.checked : event.target.value;
     setValues((current) => ({ ...current, [name]: value }));
     setValidation((current) => ({ ...current, [name]: '' }));
-    setError('');
+    setError(null);
   };
 
   const validate = () => {
@@ -84,27 +136,44 @@ const InquiryForm = ({ kind, initialMessage = '' }) => {
     };
     const signature = JSON.stringify(payload);
     try {
+      // One key for one request: a retry of the same details sends the same
+      // key, so the service answers with the stored receipt instead of
+      // storing it again. Changed details are a different request and get a
+      // new key (the service refuses a key reused for different details).
       if (!submissionRef.current || submissionRef.current.signature !== signature) {
         submissionRef.current = { signature, key: createSubmissionKey() };
       }
-      sendingRef.current = true;
-      setPending(true);
-      setError('');
+    } catch (keyError) {
+      // Our own sentence from createSubmissionKey: this browser cannot make a key.
+      setError(failure(keyError.message));
+      return;
+    }
+    sendingRef.current = true;
+    setPending(true);
+    setError(null);
+    try {
       const response = await axios.post(backendUrl + '/api/v1/inquiries', payload, {
         headers: { 'X-Idempotency-Key': submissionRef.current.key },
+        timeout: INQUIRY_REQUEST_TIMEOUT_MS,
       });
-      if (![200, 201].includes(response.status) || response.data?.status !== 'queued' || !response.data?.request_id) {
-        throw new Error('We could not confirm your request. Please retry.');
+      const stored = storedReceipt(response);
+      if (!stored) {
+        setError(failure());
+        return;
       }
-      setReceipt(response.data);
+      submissionRef.current = null;
+      setReceipt(stored);
     } catch (requestError) {
-      const detail = requestError.response?.data?.detail;
-      // A transport failure ("Request failed with status code 405", "Network Error")
-      // means nothing to a visitor. Say what happened to their request instead.
-      const plain = requestError.isAxiosError
-        ? 'We could not send your request just now. Nothing was submitted.'
-        : requestError.message;
-      setError(typeof detail === 'string' ? detail : plain || 'We could not confirm your request. Please retry.');
+      const response = requestError?.response;
+      const fields = refusedFields(response, kind);
+      if (Object.keys(fields).length) {
+        setValidation(fields);
+        setError({ title: 'Please check your details', text: INQUIRY_CHECK_DETAILS, contact: false });
+      } else {
+        // The service says this key belongs to other details: start a new one.
+        if (response?.status === 409) submissionRef.current = null;
+        setError(failure(response?.status === 429 ? INQUIRY_TOO_MANY : INQUIRY_NOT_SENT));
+      }
     } finally {
       sendingRef.current = false;
       setPending(false);
@@ -146,7 +215,19 @@ const InquiryForm = ({ kind, initialMessage = '' }) => {
     <section className="de-inquiry-card" aria-labelledby="inquiry-form-title">
       <h2 id="inquiry-form-title">Your request</h2>
       <p className="de-inquiry-required">Fields marked * are required.</p>
-      {error && <div className="de-inquiry-error" role="alert" tabIndex={-1} ref={errorRef}><strong>Request needs attention</strong><p>{error}</p><p>Your request has not been confirmed. You can retry below.</p></div>}
+      {error && (
+        <div className="de-inquiry-error" role="alert" tabIndex={-1} ref={errorRef}>
+          <strong>{error.title}</strong>
+          <p>{error.text}</p>
+          {error.contact && <>
+            <p>Your request has not been confirmed. Everything you typed is still in the form, so you can submit it again.</p>
+            <p className="de-inquiry-error__contact">
+              {BROKERAGE.name}: <a href={BROKERAGE.phoneHref}>Office {BROKERAGE.phone}</a><br />
+              DiamondEcho: <a href={OFFICE.phoneHref}>Direct {OFFICE.phone}</a> or <a href={OFFICE.emailHref}>{OFFICE.email}</a>
+            </p>
+          </>}
+        </div>
+      )}
       <form onSubmit={submit} noValidate>
         {field('fullName', 'Full name *', <input {...attrs('fullName')} value={values.fullName} onChange={change('fullName')} autoComplete="name" required />)}
         {field('email', 'Email address *', <input {...attrs('email')} type="email" value={values.email} onChange={change('email')} autoComplete="email" required />)}
