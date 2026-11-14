@@ -17,6 +17,8 @@ import json
 import os
 import subprocess
 import sys
+import threading
+import time
 import urllib.error
 import uuid
 from pathlib import Path
@@ -543,31 +545,79 @@ class CallRecorder:
         self.calls.append(("create", kwargs))
         return SimpleNamespace(update_time="now")
 
+    def set(self, document, **kwargs):
+        self.calls.append(("set", kwargs))
 
-@pytest.mark.xfail(strict=True, reason=(
-    "Every Firestore call passes only timeout=5 or 10, which bounds one attempt. The client's default retry then "
-    "tries again on UNAVAILABLE (and reads also on DEADLINE_EXCEEDED). Measured with google-cloud-firestore 2.34.1 "
-    "against an unreachable database: a document get(timeout=5) gave up after 293 s ('Timeout of 300.0s exceeded'), "
-    "a query stream(timeout=10) after 259 s, a create(timeout=5) after 57 s ('Timeout of 60.0s exceeded'), and a "
-    "whole inquiry submission answered 503 after 54 s (chaos experiment dependencies-refuse-at-call-time). Calls: "
-    "backend/inquiries/firebase.py:68, :73, :80; backend/market_brief/service.py:99, :105, :110; "
-    "backend/podcast/service.py:76, :79, :83, :86; backend/server.py:82, :90. A visitor gets Cloud Run's 504 after "
-    "30 s instead of the documented 503, and the worker thread keeps waiting. Fix: pass "
-    "retry=google.api_core.retry.Retry(timeout=10) (or retry=None) with each call."))
+    def update(self, changes, **kwargs):
+        self.calls.append(("update", kwargs))
+
+
+def assert_retries_end_in_time(calls):
+    for name, kwargs in calls:
+        assert "retry" in kwargs, f"{name} keeps the client's default retry (60 s for writes, 300 s for reads)"
+        retry = kwargs["retry"]
+        assert retry is None or (retry.timeout is not None and retry.timeout <= 10), f"{name}: {retry}"
+
+
+# W1 (docs/sre/chaos-and-game-days.md): each call passed only timeout=, which
+# bounds one attempt, and kept the client's default retry. Against an
+# unreachable database a read took 293 s, a write 57 s and an inquiry
+# submission 54 s. Every call now also passes retry= with a total deadline.
 def test_firestore_calls_give_up_in_total_not_only_per_attempt():
     database = CallRecorder()
     store = FirestoreInquiryStore(database)
     store.create_once("request", {"a": 1})
     store.list_newest(50)
     brief = brief_service.FirestoreBriefStore(database)
-    brief.get("key"), brief.put("key", {})
+    brief.get("key"), brief.put("key", {}), brief.set("key", {})
     episodes = podcast_service.FirestoreEpisodes(database)
-    episodes.get("id"), episodes.all()
-    assert [name for name, _ in database.calls] == ["create", "stream", "get", "create", "get", "stream"]
-    for name, kwargs in database.calls:
-        assert "retry" in kwargs, f"{name} keeps the client's default retry (60 s for writes, 300 s for reads)"
-        retry = kwargs["retry"]
-        assert retry is None or (retry.timeout is not None and retry.timeout <= 10), f"{name}: {retry}"
+    episodes.create("id", {}), episodes.get("id"), episodes.update("id", {}), episodes.all()
+    assert [name for name, _ in database.calls] == [
+        "create", "stream", "get", "create", "set", "create", "get", "update", "stream"]
+    assert_retries_end_in_time(database.calls)
+
+
+def test_the_inquiry_replay_read_gives_up_in_total_too():
+    class AlreadyThere(CallRecorder):
+        def create(self, document, **kwargs):
+            self.calls.append(("create", kwargs))
+            raise identity.AlreadyExists("stored by an earlier attempt")
+
+        def get(self, **kwargs):
+            self.calls.append(("get", kwargs))
+            return SimpleNamespace(exists=True, to_dict=lambda: {"a": 1})
+    database = AlreadyThere()
+    assert FirestoreInquiryStore(database).create_once("request", {"a": 1}) == ({"a": 1}, True)
+    assert [name for name, _ in database.calls] == ["create", "get"]
+    assert_retries_end_in_time(database.calls)
+
+
+def test_the_status_routes_give_up_in_total_too():
+    from test_api_docs import run
+    run("""
+import sys
+sys.path.insert(0, sys.argv[1])
+from types import SimpleNamespace
+from fastapi.testclient import TestClient
+import server
+
+calls = []
+class Database:
+    def collection(self, name): return self
+    def document(self, name): return self
+    def limit(self, count): return self
+    def create(self, document, **kwargs): calls.append(kwargs)
+    def stream(self, **kwargs):
+        calls.append(kwargs)
+        return iter(())
+server.app.dependency_overrides[server.require_staff] = lambda: "staff-1"
+server.app.dependency_overrides[server.require_store] = lambda: SimpleNamespace(db=Database())
+client = TestClient(server.app)
+assert client.post("/api/status", json={"client_name": "resilience"}).status_code == 200
+assert client.get("/api/status").status_code == 200
+assert len(calls) == 2, calls
+assert all(c["retry"] is not None and c["retry"].timeout <= 10 and c["timeout"] <= 10 for c in calls), calls
+""")
 
 
 @pytest.mark.parametrize("error", [TimeoutError("deadline exceeded " + INTERNAL), ConnectionError(INTERNAL),
@@ -601,11 +651,9 @@ def test_an_acknowledgement_the_database_did_not_apply_is_not_reported_as_done()
         acknowledge_inquiry(Unchanged(), uuid.uuid4(), "staff-1")
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "backend/inquiries/firebase.py:40 starts the Firebase app with only a project id, so the staff token check "
-    "(verify_id_token with check_revoked=True, line 48) uses the SDK's default HTTP timeout of 120 seconds: a slow "
-    "identity service holds a staff request, and the instance's one worker, past Cloud Run's 30 second limit. "
-    "Fix: pass options={'projectId': project, 'httpTimeout': 10}."))
+# W2: the staff sign-in check used the Firebase SDK's default HTTP timeout of
+# 120 s. The SDK retries a timed-out request once and may first fetch Google's
+# public keys, so three of these must fit inside the request timeout.
 def test_the_staff_sign_in_check_has_a_deadline_inside_the_request_timeout(monkeypatch):
     seen = {}
 
@@ -622,13 +670,30 @@ def test_the_staff_sign_in_check_has_a_deadline_inside_the_request_timeout(monke
         identity.firebase_app("demo-diamondecho")
     finally:
         identity.firebase_app.cache_clear()
-    assert seen.get("httpTimeout") is not None and seen["httpTimeout"] < REQUEST_TIMEOUT_SECONDS
+    assert seen.get("httpTimeout") is not None and 3 * seen["httpTimeout"] < REQUEST_TIMEOUT_SECONDS
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "backend/podcast/service.py:64 (create_resumable_upload_session) and :67 (get_blob) pass no timeout, so the "
-    "storage SDK's default applies: 60 seconds a try, with retries up to 120 seconds on get_blob. A slow bucket "
-    "holds a staff upload or publish past Cloud Run's 30 second limit. Fix: pass timeout=10 to both calls."))
+def test_a_staff_acknowledgement_that_hangs_is_not_confirmed_within_its_deadline(monkeypatch):
+    # The transaction's begin and commit calls take no retry= (60 s each by
+    # default), so acknowledge() waits ACKNOWLEDGE_SECONDS for the whole of it.
+    assert identity.ACKNOWLEDGE_SECONDS <= 10
+    monkeypatch.setattr(identity, "ACKNOWLEDGE_SECONDS", 0.2)
+    release = threading.Event()
+    monkeypatch.setattr(identity.firestore, "transactional", lambda update: lambda transaction: release.wait(5))
+    database = RecordingDatabase()
+    database.transaction = lambda max_attempts: object()
+    started = time.monotonic()
+    try:
+        with pytest.raises(QueueUnavailable, match="not confirmed"):
+            acknowledge_inquiry(FirestoreInquiryStore(database), uuid.uuid4(), "staff-1")
+        assert time.monotonic() - started < 2
+    finally:
+        release.set()
+
+
+# W8: the podcast storage calls had no deadline (the SDK's 60 s a try,
+# retried for up to 120 s). One try and all tries together now fit inside the
+# request timeout.
 def test_podcast_storage_calls_have_a_deadline_inside_the_request_timeout():
     calls = []
 
@@ -636,7 +701,7 @@ def test_podcast_storage_calls_have_a_deadline_inside_the_request_timeout():
         cache_control = None
 
         def create_resumable_upload_session(self, **kwargs):
-            calls.append(kwargs.get("timeout"))
+            calls.append(kwargs)
             return "https://storage.googleapis.com/upload/session"
 
     class Bucket:
@@ -644,13 +709,17 @@ def test_podcast_storage_calls_have_a_deadline_inside_the_request_timeout():
             return Blob()
 
         def get_blob(self, name, **kwargs):
-            calls.append(kwargs.get("timeout"))
+            calls.append(kwargs)
             return None
 
     storage = podcast_service.GcsStorage("demo-bucket", client=SimpleNamespace(bucket=lambda name: Bucket()))
     storage.start_upload("episodes/a.mp3", "audio/mpeg", 10, "https://staff.example.com")
     storage.size_of("episodes/a.mp3")
-    assert all(timeout is not None and timeout < REQUEST_TIMEOUT_SECONDS for timeout in calls), calls
+    assert len(calls) == 2
+    for kwargs in calls:
+        timeout, retry = kwargs.get("timeout"), kwargs.get("retry")
+        assert timeout is not None and retry is not None and retry.timeout is not None, kwargs
+        assert timeout + retry.timeout < REQUEST_TIMEOUT_SECONDS, kwargs
 
 
 # ---------------------------------------------------------------------------
@@ -926,27 +995,18 @@ def test_a_damaged_brief_record_is_a_clean_503(monkeypatch):
     assert answer.status_code == 503 and answer.json() == {"detail": "The market brief is unavailable right now."}
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "backend/market_brief/service.py:183-184 (_keep) writes a finished brief to Firestore before noting it in "
-    "memory. If the write fails (quota, permission, a write outage while reads work) the request answers 503 "
-    "although figures and audio were ready, nothing is remembered, and every later visit calls the paid "
-    "Text-to-Speech voice again and fails again. Fix: catch the store error in _keep, keep the brief in memory "
-    "for RETRY_SECONDS and serve it."))
+# W5: a finished brief whose write failed answered 503, and every later visit
+# paid for the voice again. It is now served from memory.
 def test_a_brief_that_cannot_be_saved_is_still_served_and_the_voice_is_not_paid_for_twice(monkeypatch):
     service, calls = make_brief(store=BrokenStore(writes=False))
     client = brief_client(monkeypatch, service)
     answers = [client.get("/api/v1/market-brief") for _ in range(3)]
     assert [answer.status_code for answer in answers] == [200, 200, 200]
     assert calls["speak"] <= 2  # the tour and the day's brief, once each
-
-
-def test_a_brief_that_cannot_be_saved_fails_cleanly_today(monkeypatch):
-    # The other half of the xfail above: until it is fixed, the failure is a
-    # plain 503 with no internal detail.
-    service, _ = make_brief(store=BrokenStore(writes=False))
-    answer = brief_client(monkeypatch, service).get("/api/v1/market-brief")
-    assert answer.status_code == 503
-    assert_no_leak(answer.text)
+    for answer in answers:
+        assert_no_leak(answer.text)
+    audio = client.get(answers[0].json()["market"]["audio_url"])
+    assert audio.status_code == 200 and audio.content.startswith(b"ID3")
 
 
 def test_each_source_and_voice_call_has_its_own_deadline():
@@ -956,21 +1016,63 @@ def test_each_source_and_voice_call_has_its_own_deadline():
     assert 0 < sources.TIMEOUT_SECONDS <= 10
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "The first build of a day's brief runs inside one visitor's request (backend/market_brief/router.py:14) and "
-    "its calls run one after another: the tour voice (tts.py:72, 20 s), the mortgage sources (sources.py:153-162, "
-    "FRED twice then Freddie Mac, 8 s each) and the market voice (20 s). Slow providers can therefore hold the "
-    "request for about 64 seconds, past Cloud Run's 30 second limit: the visitor gets the platform's 504, the "
-    "instance's one worker is held, and nothing is kept so the next visit starts again. Fix: build the brief "
-    "outside the request (a scheduled call), or give the whole build one deadline of about 20 seconds and serve "
-    "the figures without audio when it is passed."))
-def test_the_slowest_possible_brief_still_fits_inside_the_request_timeout():
-    session = VoiceSession({"audioContent": base64.b64encode(b"ID3").decode()})
-    tts.synthesize("A short sentence.", session=session)
-    voice = session.timeouts[0]
-    mortgage_chain = 3 * sources.TIMEOUT_SECONDS  # two FRED series, then the fallback file
-    worst = voice + mortgage_chain + voice
-    assert worst < REQUEST_TIMEOUT_SECONDS, f"worst case {worst} s"
+# W4: the first build of a day's brief ran its slow calls one after another
+# inside a visitor's request (the tour voice, up to three mortgage reads, the
+# market voice): about 64 s with slow providers. The sources now have
+# COLLECT_SECONDS in all and the voice is waited for until BUILD_SECONDS; a
+# voice still speaking then finishes in the background. Here both deadlines
+# are shrunk so the test runs in about a second.
+def test_the_slowest_possible_brief_still_fits_inside_the_request_timeout(monkeypatch):
+    from test_market_brief import fake_fetch
+    assert sources.COLLECT_SECONDS < brief_service.BUILD_SECONDS <= REQUEST_TIMEOUT_SECONDS - 10
+    monkeypatch.setattr(brief_service, "BUILD_SECONDS", 0.3)
+    voice = threading.Event()
+
+    def slow_voice(text):
+        voice.wait(10)  # speaks only when let go
+        return b"ID3" + text[:8].encode()
+    service, calls = make_brief(fetch=fake_fetch, speak=slow_voice)
+    monkeypatch.setattr(service, "today", lambda: __import__("datetime").date(2026, 10, 9))
+    client = brief_client(monkeypatch, service)
+    try:
+        started = time.monotonic()
+        answer = client.get("/api/v1/market-brief")
+        assert time.monotonic() - started < 2, "the visitor waited for the voice past the build deadline"
+        assert answer.status_code == 200, answer.text
+        body = answer.json()
+        assert body["market"]["items"], "the figures were held back while the voice was speaking"
+        assert body["market"]["audio_url"] is None and body["tour"]["audio_url"] is None
+    finally:
+        voice.set()
+    # Once the voice has finished, a later visit gets its audio without paying for it again.
+    for _ in range(100):
+        body = client.get("/api/v1/market-brief").json()
+        if body["market"]["audio_url"] and body["tour"]["audio_url"]:
+            break
+        time.sleep(0.02)
+    assert body["market"]["audio_url"] and body["tour"]["audio_url"]
+    assert calls["speak"] == 2
+
+
+def test_a_source_that_hangs_is_left_out_when_the_time_for_the_sources_is_up():
+    from test_market_brief import fake_fetch
+    unhurried_figures, unhurried_problems = sources.collect(fake_fetch)
+    hung = threading.Event()
+
+    def fetch(url):
+        if "MORTGAGE" in url or "freddiemac" in url:
+            hung.wait(10)
+            raise OSError("hung " + INTERNAL)
+        return fake_fetch(url)
+    started = time.monotonic()
+    try:
+        figures, problems = sources.collect(fetch, within=0.3)
+    finally:
+        hung.set()
+    assert time.monotonic() - started < 2
+    assert problems == [{"source": "Freddie Mac mortgage rates", "reason": "TimeoutError"}] + unhurried_problems
+    assert figures == [figure for figure in unhurried_figures if not figure.id.startswith("mortgage_")]
+    assert_no_leak(json.dumps(problems))
 
 
 # ---------------------------------------------------------------------------

@@ -11,6 +11,9 @@
 
 - A visitor sends the form and sees an error; the API answers 503 with
   "Inquiry storage was not confirmed. Retry with the same submission key."
+  It comes within about 15 seconds (5 to 9 s in the chaos experiments). Each
+  database call gives up on its own deadline (`backend/deadlines.py`); a 504
+  after 30 s on these routes means something else is holding them.
 - Staff open the queue, sign in, and get "Inquiry queue is temporarily
   unavailable."
 - No arrival email although someone says they sent a request.
