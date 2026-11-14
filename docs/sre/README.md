@@ -20,7 +20,7 @@ flowchart LR
     A --> I["sre-incident issue<br/>(email) + optional chat"]
     S --> P["Public status page"]
     A --> R["Rollback engine<br/>(off until switched on)"]
-    G["Google Cloud uptime checks<br/>(several continents, when applied)"] --> E["Email to realtor@"]
+    G["Google Cloud uptime check of the API<br/>(several continents, when applied)"] --> E["Email to realtor@"]
     D["After every merge: post-merge check"] --> A
     W["Weekly reliability report"] --> I
 ```
@@ -88,9 +88,9 @@ flowchart LR
 - It does not load-test, submit inquiries to, or change the live site.
 - It does not replace a person: it tells Gbenga, and prepares the fix.
 - Probes every five minutes cannot see an outage shorter than five minutes or
-  a problem only some visitors have. The Google Cloud uptime checks (once
-  applied) add a second view from several continents, and the real-request
-  SLOs a third.
+  a problem only some visitors have. The Google Cloud uptime check of the
+  API (once applied) adds a second view from several continents, and the
+  real-request SLOs a third.
 - **It does not load any web page** (Gbenga's decisions of 2026-11-14; a
   known gap, not a defect). If a page is broken or empty, or Cloudflare has
   an outage, while the API keeps answering, no incident opens and the status

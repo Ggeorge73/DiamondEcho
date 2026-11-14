@@ -27,8 +27,8 @@ Privacy page does not allow for ([DE-13](../de13-production-setup.md)), so
 the only view of the pages would be from outside. Since 2026-11-14 there is
 none: the monitor loads no web page (Cloudflare's Bot Fight Mode refuses it
 and stays on, and no outside monitoring service is used: Gbenga's
-decisions), and the Google Cloud uptime checks are not applied and may be
-refused the same way ([synthetic-monitoring.md](synthetic-monitoring.md)).
+decisions), and the Google Cloud plan checks the API only
+([synthetic-monitoring.md](synthetic-monitoring.md)).
 
 ## What the SRE work adds
 

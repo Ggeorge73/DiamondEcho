@@ -26,7 +26,7 @@ loaded" below.
 
 | | GitHub tier (on once switched on) | Cloud Monitoring tier (prepared, off) |
 | --- | --- | --- |
-| What | Every check below. None of them loads a web page | Six uptime checks: home, search, Deal Studio, contact page, API health, staff site. Five of the six load a page and may be refused by Bot Fight Mode (see below) |
+| What | Every check below. None of them loads a web page | One uptime check: API health. No web page is checked from Google Cloud (Gbenga, 2026-11-14: no outside page monitoring) |
 | How often | Fast checks every 5 minutes, slow checks hourly, everything after a merge to `main` | Every 5 minutes |
 | From where | One GitHub runner per run, in one Azure region (usually in the USA) | Six Google locations each time: three in the USA, one each in Europe, South America and Asia Pacific |
 | Where results go | The `sre-status` branch, the status page, `sre-incident` issues | Cloud Monitoring; alerting on it is the observability role's alert policies |
@@ -217,30 +217,25 @@ prove is that Cloudflare Pages reported the build as published
 
 ## The Cloud Monitoring tier (prepared, off)
 
-`deploy/monitoring/uptime-checks/` holds six request bodies for Cloud
-Monitoring's uptime checks (the `UptimeCheckConfig` resource): home page,
-`/search`, `/investment-calculator`, `/inquire`, API `/health` and the staff
-site. Each is an HTTPS GET every 5 minutes from the USA, Europe, South America
-and Asia Pacific, with a 10-second limit, and passes only on a 200 that
-contains the page's own canonical address (`"status":"ok"` for the API, the
-page title for the staff site). `${PROJECT_ID}` is filled in when applied.
+`deploy/monitoring/uptime-checks/` holds one request body for Cloud
+Monitoring's uptime checks (the `UptimeCheckConfig` resource): API `/health`.
+It is an HTTPS GET every 5 minutes from the USA, Europe, South America and
+Asia Pacific, with a 10-second limit, and passes only on a 200 that contains
+`"status":"ok"`. `${PROJECT_ID}` is filled in when applied.
 
-**Not applied, and five of the six may be refused.** These checks run from
-Google's network. Bot Fight Mode answered 403 to GitHub's runners on every
-page, and may do the same to Google's checkers; nobody has tested it,
-because the checks do not exist yet. Only the API check is outside
-Cloudflare. Gbenga also decided on 2026-11-14 against any outside monitoring
-service, so whether these page checks are wanted at all is his to say
-before anything is applied (item 3.3 of
-[needs-from-gbenga.md](needs-from-gbenga.md): the plan can be cut down to
-the API check first).
+**Only the API is checked.** The plan first held five page checks as well
+(home, `/search`, `/investment-calculator`, `/inquire` and the staff site).
+Gbenga removed them on 2026-11-14: no outside page monitoring, and they
+would have run from Google's network, which Bot Fight Mode may refuse as it
+refused GitHub's runners. The API is not behind Cloudflare, so its check is
+not affected. The test beside the file fails if a page check comes back.
 
 They cost executions, so the count is worked out in advance (the test beside
 the files repeats this sum):
 
 - 6 Google locations per check (USA counts three) and 8,928 runs a location
   in a 31-day month at one every 5 minutes;
-- 6 checks x 6 locations x 8,928 = 321,408 executions a month.
+- 1 check x 6 locations x 8,928 = 53,568 executions a month.
 
 When this was written Google's published allowance was 1 million free uptime
 check executions a month, with a charge per thousand after that. **Re-check
@@ -252,9 +247,8 @@ day to the API.
 To apply (Gbenga, once the observability role's `apply.sh` is merged): sign
 in to Cloud Shell on project `diamondecho-prod` and run
 `bash deploy/monitoring/apply.sh` as that script describes. Nothing is
-created until then. After applying, look at each check in the console
-(Monitoring > Uptime checks) and see which pass: a 403 in every region on a
-page check is Bot Fight Mode ([edge.md](edge.md), item 9).
+created until then. After applying, look at the check in the console
+(Monitoring > Uptime checks): healthy is a pass from every region.
 
 ## Bot Fight Mode refuses the monitor, so no page is loaded
 

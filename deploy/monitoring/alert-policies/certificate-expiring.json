@@ -3,7 +3,7 @@
   "documentation": {
     "subject": "DiamondEcho: a certificate is close to expiry and has not been renewed",
     "mimeType": "text/markdown",
-    "content": "An uptime check reports that the certificate it was served expires in less than 14 days. Cloudflare (diamondecho.com, staff.diamondecho.com) and Google (the run.app address) renew these on their own; one this close to expiry means renewal has stopped. When it expires, browsers show visitors a security warning instead of the site.\n\nThe GitHub monitor warns earlier (21 days, scripts/sre/checks/tls.mjs); this is the independent backstop.\n\nWhat to do: follow docs/sre/runbooks/tls-certificate.md.\n\nThis message carries no visitor data."
+    "content": "The uptime check of the API reports that the certificate it was served expires in less than 14 days. Google renews the run.app certificate on its own; one this close to expiry means renewal has stopped. When it expires, the calculators and the contact form stop working in visitors' browsers. (Only the API is checked from here. The certificates of diamondecho.com and staff.diamondecho.com are watched by the GitHub monitor alone.)\n\nThe GitHub monitor warns earlier (21 days, scripts/sre/checks/tls.mjs); this is the independent backstop.\n\nWhat to do: follow docs/sre/runbooks/tls-certificate.md.\n\nThis message carries no visitor data."
   },
   "conditions": [
     {
