@@ -1,0 +1,44 @@
+{
+  "dns": {
+    "2026-11-14": {
+      "runs": 1,
+      "failed": 0
+    }
+  },
+  "public-site": {
+    "2026-11-14": {
+      "runs": 1,
+      "failed": 1
+    }
+  },
+  "api": {
+    "2026-11-14": {
+      "runs": 1,
+      "failed": 0
+    }
+  },
+  "calculators": {
+    "2026-11-14": {
+      "runs": 1,
+      "failed": 1
+    }
+  },
+  "inquiry": {
+    "2026-11-14": {
+      "runs": 1,
+      "failed": 1
+    }
+  },
+  "search": {
+    "2026-11-14": {
+      "runs": 1,
+      "failed": 1
+    }
+  },
+  "staff-site": {
+    "2026-11-14": {
+      "runs": 1,
+      "failed": 1
+    }
+  }
+}

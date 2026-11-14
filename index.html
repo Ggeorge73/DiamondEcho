@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!--
+    The public status page for diamondecho.com. It is copied, with the files
+    listed in publish-manifest.txt, to the root of the sre-status branch and
+    served by GitHub Pages. It reads status.json, uptime/daily.json,
+    incidents.json and slo.json from its own folder and shows only what they
+    say. GitHub Pages cannot send security headers, so the policy is set here:
+    nothing loads from anywhere but this folder, and no inline script or
+    style runs.
+  -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex">
+  <meta name="color-scheme" content="dark light">
+  <title>DiamondEcho service status</title>
+  <meta name="description" content="Whether diamondecho.com and its services are working right now, from automatic checks.">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="status.css">
+  <script type="module" src="status.js"></script>
+</head>
+<body>
+  <header class="top">
+    <div class="wrap top__inner">
+      <a class="wordmark" href="https://diamondecho.com/">
+        <svg class="wordmark__mark" viewBox="0 0 64 64" width="30" height="30" aria-hidden="true" focusable="false">
+          <rect x="17" y="17" width="30" height="30" fill="none" stroke="currentColor" stroke-width="3" transform="rotate(45 32 32)"/>
+          <rect x="26" y="26" width="12" height="12" fill="currentColor" transform="rotate(45 32 32)"/>
+        </svg>
+        <span class="wordmark__text"><strong>DiamondEcho</strong><small>Service status</small></span>
+      </a>
+      <a class="top__link" href="https://diamondecho.com/">Go to diamondecho.com</a>
+    </div>
+  </header>
+
+  <main id="main" class="wrap" data-ready="false">
+    <h1>Service status</h1>
+
+    <div id="banner" role="status">
+      <div class="banner banner--loading"><div><p class="banner__title">Loading the current status…</p></div></div>
+    </div>
+    <p id="updated" class="updated"></p>
+
+    <noscript>
+      <p class="notice">This page needs JavaScript to show the current status. Without it, nothing can be shown here; that says nothing about whether the website itself is working.</p>
+    </noscript>
+
+    <section class="section" aria-labelledby="incidents-heading">
+      <h2 id="incidents-heading">Open incidents</h2>
+      <div id="incidents"></div>
+    </section>
+
+    <section class="section" aria-labelledby="components-heading">
+      <h2 id="components-heading">Services</h2>
+      <div id="components"></div>
+    </section>
+
+    <section class="section" aria-labelledby="reliability-heading">
+      <h2 id="reliability-heading">Measured reliability</h2>
+      <div id="reliability"></div>
+    </section>
+
+    <section class="section" aria-labelledby="history-heading">
+      <h2 id="history-heading">Resolved incidents</h2>
+      <div id="history"></div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <div class="wrap">
+      <p>This page is written by automatic checks that look at diamondecho.com from outside every few minutes. It shows what those checks measured and nothing else. It holds no visitor information.</p>
+      <p>Property search is provided by Georgia MLS; a problem there is shown under “Property search”.</p>
+    </div>
+  </footer>
+</body>
+</html>

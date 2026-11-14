@@ -1,0 +1,468 @@
+{
+  "schema": 1,
+  "engine": {
+    "checks": {
+      "outside-dns-probe": {
+        "name": "Monitor can reach the internet",
+        "component": "dns",
+        "severity": "sev4",
+        "fail_severity": "sev4",
+        "ok": true,
+        "status": 200,
+        "detail": "",
+        "at": "2026-11-14T02:36:24.049Z",
+        "suites": [
+          "fast"
+        ],
+        "fails": 0,
+        "oks": 1,
+        "failing_since": null,
+        "recent": "1"
+      },
+      "public-home": {
+        "name": "Home page",
+        "component": "public-site",
+        "severity": "sev1",
+        "fail_severity": "sev1",
+        "ok": false,
+        "status": 403,
+        "detail": "Answered 403, expected 200.",
+        "at": "2026-11-14T02:36:24.049Z",
+        "suites": [
+          "fast"
+        ],
+        "fails": 1,
+        "oks": 0,
+        "failing_since": "2026-11-14T02:36:24.049Z",
+        "recent": "0"
+      },
+      "public-page-agents": {
+        "name": "Advisory page",
+        "component": "public-site",
+        "severity": "sev2",
+        "fail_severity": "sev2",
+        "ok": false,
+        "status": 403,
+        "detail": "Cloudflare refused the request (403, error 1010: the browser signature check): a Cloudflare security setting is blocking the monitor, and perhaps visitors too. See docs/sre/runbooks/cloudflare-outage.md.",
+        "at": "2026-11-14T02:36:24.049Z",
+        "suites": [
+          "fast"
+        ],
+        "fails": 1,
+        "oks": 0,
+        "failing_since": "2026-11-14T02:36:24.049Z",
+        "recent": "0"
+      },
+      "public-page-about": {
+        "name": "About page",
+        "component": "public-site",
+        "severity": "sev2",
+        "fail_severity": "sev2",
+        "ok": false,
+        "status": 403,
+        "detail": "Cloudflare refused the request (403, error 1010: the browser signature check): a Cloudflare security setting is blocking the monitor, and perhaps visitors too. See docs/sre/runbooks/cloudflare-outage.md.",
+        "at": "2026-11-14T02:36:24.049Z",
+        "suites": [
+          "fast"
+        ],
+        "fails": 1,
+        "oks": 0,
+        "failing_since": "2026-11-14T02:36:24.049Z",
+        "recent": "0"
+      },
+      "public-page-podcast": {
+        "name": "Podcast page",
+        "component": "public-site",
+        "severity": "sev3",
+        "fail_severity": "sev3",
+        "ok": false,
+        "status": 403,
+        "detail": "Cloudflare refused the request (403, error 1010: the browser signature check): a Cloudflare security setting is blocking the monitor, and perhaps visitors too. See docs/sre/runbooks/cloudflare-outage.md.",
+        "at": "2026-11-14T02:36:24.049Z",
+        "suites": [
+          "fast"
+        ],
+        "fails": 1,
+        "oks": 0,
+        "failing_since": "2026-11-14T02:36:24.049Z",
+        "recent": "0"
+      },
+      "public-page-privacy": {
+        "name": "Privacy page",
+        "component": "public-site",
+        "severity": "sev3",
+        "fail_severity": "sev3",
+        "ok": false,
+        "status": 403,
+        "detail": "Cloudflare refused the request (403, error 1010: the browser signature check): a Cloudflare security setting is blocking the monitor, and perhaps visitors too. See docs/sre/runbooks/cloudflare-outage.md.",
+        "at": "2026-11-14T02:36:24.049Z",
+        "suites": [
+          "fast"
+        ],
+        "fails": 1,
+        "oks": 0,
+        "failing_since": "2026-11-14T02:36:24.049Z",
+        "recent": "0"
+      },
+      "public-page-terms": {
+        "name": "Terms of use page",
+        "component": "public-site",
+        "severity": "sev3",
+        "fail_severity": "sev3",
+        "ok": false,
+        "status": 403,
+        "detail": "Cloudflare refused the request (403, error 1010: the browser signature check): a Cloudflare security setting is blocking the monitor, and perhaps visitors too. See docs/sre/runbooks/cloudflare-outage.md.",
+        "at": "2026-11-14T02:36:24.049Z",
+        "suites": [
+          "fast"
+        ],
+        "fails": 1,
+        "oks": 0,
+        "failing_since": "2026-11-14T02:36:24.049Z",
+        "recent": "0"
+      },
+      "public-not-found": {
+        "name": "Unknown address answers Page not found",
+        "component": "public-site",
+        "severity": "sev3",
+        "fail_severity": "sev3",
+        "ok": false,
+        "status": 403,
+        "detail": "Cloudflare refused the request (403, error 1010: the browser signature check): a Cloudflare security setting is blocking the monitor, and perhaps visitors too. See docs/sre/runbooks/cloudflare-outage.md.",
+        "at": "2026-11-14T02:36:24.049Z",
+        "suites": [
+          "fast"
+        ],
+        "fails": 1,
+        "oks": 0,
+        "failing_since": "2026-11-14T02:36:24.049Z",
+        "recent": "0"
+      },
+      "public-www-redirect": {
+        "name": "www address redirects to the site",
+        "component": "public-site",
+        "severity": "sev2",
+        "fail_severity": "sev2",
+        "ok": true,
+        "status": 301,
+        "detail": "",
+        "at": "2026-11-14T02:36:24.049Z",
+        "suites": [
+          "fast"
+        ],
+        "fails": 0,
+        "oks": 1,
+        "failing_since": null,
+        "recent": "1"
+      },
+      "public-asset-js": {
+        "name": "Site script loads",
+        "component": "public-site",
+        "severity": "sev1",
+        "fail_severity": "sev1",
+        "ok": false,
+        "status": null,
+        "detail": "The home page did not load, so the file it asks for is not known.",
+        "at": "2026-11-14T02:36:24.049Z",
+        "suites": [
+          "fast"
+        ],
+        "fails": 1,
+        "oks": 0,
+        "failing_since": "2026-11-14T02:36:24.049Z",
+        "recent": "0"
+      },
+      "public-asset-css": {
+        "name": "Site stylesheet loads",
+        "component": "public-site",
+        "severity": "sev2",
+        "fail_severity": "sev2",
+        "ok": false,
+        "status": null,
+        "detail": "The home page did not load, so the file it asks for is not known.",
+        "at": "2026-11-14T02:36:24.049Z",
+        "suites": [
+          "fast"
+        ],
+        "fails": 1,
+        "oks": 0,
+        "failing_since": "2026-11-14T02:36:24.049Z",
+        "recent": "0"
+      },
+      "api-health": {
+        "name": "API is up",
+        "component": "api",
+        "severity": "sev2",
+        "fail_severity": "sev2",
+        "ok": true,
+        "status": 200,
+        "detail": "",
+        "at": "2026-11-14T02:36:24.049Z",
+        "suites": [
+          "fast"
+        ],
+        "fails": 0,
+        "oks": 1,
+        "failing_since": null,
+        "recent": "1"
+      },
+      "api-identity": {
+        "name": "API identity",
+        "component": "api",
+        "severity": "sev2",
+        "fail_severity": "sev2",
+        "ok": true,
+        "status": 200,
+        "detail": "",
+        "at": "2026-11-14T02:36:24.049Z",
+        "suites": [
+          "fast"
+        ],
+        "fails": 0,
+        "oks": 1,
+        "failing_since": null,
+        "recent": "1"
+      },
+      "api-cors-allowed": {
+        "name": "API accepts calls from the website",
+        "component": "api",
+        "severity": "sev2",
+        "fail_severity": "sev2",
+        "ok": true,
+        "status": 200,
+        "detail": "",
+        "at": "2026-11-14T02:36:24.049Z",
+        "suites": [
+          "fast"
+        ],
+        "fails": 0,
+        "oks": 1,
+        "failing_since": null,
+        "recent": "1"
+      },
+      "api-cors-refused": {
+        "name": "API refuses calls from other sites",
+        "component": "api",
+        "severity": "sev3",
+        "fail_severity": "sev3",
+        "ok": true,
+        "status": 200,
+        "detail": "",
+        "at": "2026-11-14T02:36:24.049Z",
+        "suites": [
+          "fast"
+        ],
+        "fails": 0,
+        "oks": 1,
+        "failing_since": null,
+        "recent": "1"
+      },
+      "calculators-deal-page": {
+        "name": "Deal Studio page",
+        "component": "calculators",
+        "severity": "sev2",
+        "fail_severity": "sev2",
+        "ok": false,
+        "status": 403,
+        "detail": "Answered 403, expected 200.",
+        "at": "2026-11-14T02:36:24.049Z",
+        "suites": [
+          "fast"
+        ],
+        "fails": 1,
+        "oks": 0,
+        "failing_since": "2026-11-14T02:36:24.049Z",
+        "recent": "0"
+      },
+      "calculators-mortgage-page": {
+        "name": "Mortgage simulator page",
+        "component": "calculators",
+        "severity": "sev2",
+        "fail_severity": "sev2",
+        "ok": false,
+        "status": 403,
+        "detail": "Cloudflare refused the request (403, error 1010: the browser signature check): a Cloudflare security setting is blocking the monitor, and perhaps visitors too. See docs/sre/runbooks/cloudflare-outage.md.",
+        "at": "2026-11-14T02:36:24.049Z",
+        "suites": [
+          "fast"
+        ],
+        "fails": 1,
+        "oks": 0,
+        "failing_since": "2026-11-14T02:36:24.049Z",
+        "recent": "0"
+      },
+      "calculators-net-sheet-page": {
+        "name": "Seller net sheet page",
+        "component": "calculators",
+        "severity": "sev2",
+        "fail_severity": "sev2",
+        "ok": false,
+        "status": 403,
+        "detail": "Cloudflare refused the request (403, error 1010: the browser signature check): a Cloudflare security setting is blocking the monitor, and perhaps visitors too. See docs/sre/runbooks/cloudflare-outage.md.",
+        "at": "2026-11-14T02:36:24.049Z",
+        "suites": [
+          "fast"
+        ],
+        "fails": 1,
+        "oks": 0,
+        "failing_since": "2026-11-14T02:36:24.049Z",
+        "recent": "0"
+      },
+      "calculators-api-analyze": {
+        "name": "Deal analysis service returns the reference figures",
+        "component": "calculators",
+        "severity": "sev2",
+        "fail_severity": "sev2",
+        "ok": true,
+        "status": 200,
+        "detail": "",
+        "at": "2026-11-14T02:36:24.049Z",
+        "suites": [
+          "fast"
+        ],
+        "fails": 0,
+        "oks": 1,
+        "failing_since": null,
+        "recent": "1"
+      },
+      "inquiry-page": {
+        "name": "Contact page",
+        "component": "inquiry",
+        "severity": "sev2",
+        "fail_severity": "sev2",
+        "ok": false,
+        "status": 403,
+        "detail": "Cloudflare refused the request (403, error 1010: the browser signature check): a Cloudflare security setting is blocking the monitor, and perhaps visitors too. See docs/sre/runbooks/cloudflare-outage.md.",
+        "at": "2026-11-14T02:36:24.049Z",
+        "suites": [
+          "fast"
+        ],
+        "fails": 1,
+        "oks": 0,
+        "failing_since": "2026-11-14T02:36:24.049Z",
+        "recent": "0"
+      },
+      "inquiry-preflight": {
+        "name": "Inquiry form is allowed to send from the website",
+        "component": "inquiry",
+        "severity": "sev2",
+        "fail_severity": "sev2",
+        "ok": true,
+        "status": 200,
+        "detail": "",
+        "at": "2026-11-14T02:36:24.049Z",
+        "suites": [
+          "fast"
+        ],
+        "fails": 0,
+        "oks": 1,
+        "failing_since": null,
+        "recent": "1"
+      },
+      "inquiry-route": {
+        "name": "Inquiry route exists",
+        "component": "inquiry",
+        "severity": "sev2",
+        "fail_severity": "sev2",
+        "ok": true,
+        "status": 405,
+        "detail": "",
+        "at": "2026-11-14T02:36:24.049Z",
+        "suites": [
+          "fast"
+        ],
+        "fails": 0,
+        "oks": 1,
+        "failing_since": null,
+        "recent": "1"
+      },
+      "inquiry-queue": {
+        "name": "Inquiry queue is switched on",
+        "component": "inquiry",
+        "severity": "sev2",
+        "fail_severity": "sev2",
+        "ok": true,
+        "status": 401,
+        "detail": "",
+        "at": "2026-11-14T02:36:24.049Z",
+        "suites": [
+          "fast"
+        ],
+        "fails": 0,
+        "oks": 1,
+        "failing_since": null,
+        "recent": "1"
+      },
+      "search-page": {
+        "name": "Property search page",
+        "component": "search",
+        "severity": "sev2",
+        "fail_severity": "sev2",
+        "ok": false,
+        "status": 403,
+        "detail": "Cloudflare refused the request (403, error 1010: the browser signature check): a Cloudflare security setting is blocking the monitor, and perhaps visitors too. See docs/sre/runbooks/cloudflare-outage.md.",
+        "at": "2026-11-14T02:36:24.049Z",
+        "suites": [
+          "fast"
+        ],
+        "fails": 1,
+        "oks": 0,
+        "failing_since": "2026-11-14T02:36:24.049Z",
+        "recent": "0"
+      },
+      "staff-home": {
+        "name": "Staff site loads with its protections",
+        "component": "staff-site",
+        "severity": "sev2",
+        "fail_severity": "sev2",
+        "ok": false,
+        "status": 403,
+        "detail": "Answered 403, expected 200.",
+        "at": "2026-11-14T02:36:24.049Z",
+        "suites": [
+          "fast"
+        ],
+        "fails": 1,
+        "oks": 0,
+        "failing_since": "2026-11-14T02:36:24.049Z",
+        "recent": "0"
+      },
+      "staff-api-auth": {
+        "name": "Staff API asks for sign-in",
+        "component": "staff-site",
+        "severity": "sev2",
+        "fail_severity": "sev2",
+        "ok": true,
+        "status": 401,
+        "detail": "",
+        "at": "2026-11-14T02:36:24.049Z",
+        "suites": [
+          "fast"
+        ],
+        "fails": 0,
+        "oks": 1,
+        "failing_since": null,
+        "recent": "1"
+      }
+    },
+    "runs": {
+      "fast": "2026-11-14T02:36:13.632Z"
+    },
+    "blind": {
+      "streak": 0,
+      "since": null
+    },
+    "cloudflare": {
+      "streak": 0,
+      "since": null,
+      "active": false
+    },
+    "incidents": {},
+    "pending_closes": [],
+    "closed": {},
+    "status_seen": {},
+    "comment_reads": {}
+  },
+  "open": [],
+  "recent": []
+}
