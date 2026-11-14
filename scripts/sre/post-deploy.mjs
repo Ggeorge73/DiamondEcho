@@ -75,16 +75,45 @@ async function readCommit(fetcher, url) {
   }
 }
 
+// The name of the check Cloudflare Pages puts on a commit for the production
+// project (seen on every pull request and merge of this repository).
+export const PAGES_CHECK_NAME = "Cloudflare Pages: diamondecho";
+
+// What Cloudflare Pages itself reported to GitHub about building a commit:
+// "success", "failure", "pending" (not finished, or not reported yet) or
+// "unknown" (GitHub could not be read). Read-only.
+export async function pagesBuildState(github, commit) {
+  try {
+    const runs = (await github.listCheckRuns(commit)).filter((run) => run.name === PAGES_CHECK_NAME);
+    if (runs.length === 0) return "pending";
+    if (runs.some((run) => run.status !== "completed")) return "pending";
+    return runs.every((run) => run.conclusion === "success") ? "success" : "failure";
+  } catch {
+    return "unknown";
+  }
+}
+
 // Wait until the site serves the merged commit, or a later one that contains it.
-export async function waitForBuild({ merged, fetcher, sleep, now, timeoutMs, intervalMs, isAncestor, origin }) {
+//
+// The first source is the site itself (/version.json). Cloudflare's Bot Fight
+// Mode refuses GitHub's runners (403), so when the site answers 403 the
+// second source is asked: the result Cloudflare Pages reported to GitHub for
+// this commit (`pagesBuild`). That proves the build was published; that the
+// pages then load is watched by the uptime service (checks/uptime.mjs).
+export async function waitForBuild({ merged, fetcher, sleep, now, timeoutMs, intervalMs, isAncestor, origin, pagesBuild = null }) {
   const deadline = now() + timeoutMs;
   let attempts = 0;
   let last = { status: 0, commit: null };
   for (;;) {
     attempts += 1;
     last = await readCommit(fetcher, `${origin}/version.json`);
-    if (last.commit && sameCommit(last.commit, merged)) return { live: true, commit: last.commit, attempts, later: false };
-    if (last.commit && isAncestor(merged, last.commit)) return { live: true, commit: last.commit, attempts, later: true };
+    if (last.commit && sameCommit(last.commit, merged)) return { live: true, commit: last.commit, attempts, later: false, via: "version.json" };
+    if (last.commit && isAncestor(merged, last.commit)) return { live: true, commit: last.commit, attempts, later: true, via: "version.json" };
+    if (last.status === 403 && pagesBuild) {
+      const state = await pagesBuild(merged);
+      if (state === "success") return { live: true, commit: merged, attempts, later: false, via: "cloudflare-pages-check" };
+      if (state === "failure") return { live: false, commit: null, status: last.status, attempts, build_failed: true };
+    }
     if (now() + intervalMs > deadline) return { live: false, commit: last.commit, status: last.status, attempts };
     await sleep(intervalMs);
   }
@@ -127,7 +156,10 @@ export function issueText(result) {
   lines.push(`- Merge: ${result.commit_url || `\`${result.commit}\``}`);
   if (result.run_url) lines.push(`- Workflow run: ${result.run_url}`);
   lines.push("");
-  if (result.outcome === "build-not-live") {
+  if (result.outcome === "build-not-live" && result.build.build_failed) {
+    lines.push("**What failed:** Cloudflare Pages reported to GitHub that its build of this commit failed (the check \"Cloudflare Pages: diamondecho\" on the commit).");
+    lines.push("The previous build is still serving, so visitors see the old site. Open that check on the commit, or Cloudflare Pages > `diamondecho` > Deployments, for the build log. Nothing was rolled back.");
+  } else if (result.outcome === "build-not-live") {
     lines.push(`**What failed:** diamondecho.com did not show this commit within ${result.timeout_minutes} minutes (${result.build.attempts} looks at /version.json). The last answer named ${result.build.commit ? `\`${short(result.build.commit)}\`` : `no commit (status ${result.build.status || "none"})`}.`);
     lines.push("The previous build is most likely still serving, so visitors see the old site. Look at Cloudflare Pages > `diamondecho` > Deployments for a failed or stuck build. Nothing was rolled back.");
   } else if (result.outcome === "checks-broke") {
@@ -172,7 +204,8 @@ export async function postDeploy(options, deps) {
 
   log(`Waiting for diamondecho.com to serve ${short(commit)} (up to ${timeoutMinutes} minutes).`);
   result.build = await waitForBuild({ merged: commit, fetcher, sleep, now, isAncestor, origin: targets.publicOrigin,
-    timeoutMs: timeoutMinutes * 60_000, intervalMs: intervalSeconds * 1000 });
+    timeoutMs: timeoutMinutes * 60_000, intervalMs: intervalSeconds * 1000,
+    pagesBuild: github && !github.dryRun ? (sha) => pagesBuildState(github, sha) : null });
 
   if (!result.build.live) {
     result.outcome = "build-not-live";

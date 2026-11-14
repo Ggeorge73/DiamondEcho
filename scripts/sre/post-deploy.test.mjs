@@ -18,7 +18,7 @@ const check = (id, component, severity, ok, detail = "") => ({ id, name: id, com
 // A small world: what the site and the API answer, and a fake clock that the
 // fake sleep moves forward.
 function world({ site = [MERGED], api = { status: 200, commit: OLD }, checks = { code: 0, run: { checks: [check("public-home", "public-site", "sev1", true)] } },
-  backendChanged = true, ancestors = {}, rollback = null, openIssues = [], env = {} } = {}) {
+  backendChanged = true, ancestors = {}, rollback = null, openIssues = [], env = {}, pagesChecks = null } = {}) {
   let clock = Date.parse("2026-11-13T10:00:00Z");
   const siteAnswers = [...site];
   const calls = { fetch: [], github: [], rollback: [], checks: [], sleeps: 0, slept: [] };
@@ -27,6 +27,8 @@ function world({ site = [MERGED], api = { status: 200, commit: OLD }, checks = {
     calls.fetch.push(url);
     if (url === "https://diamondecho.com/version.json") {
       const next = live ?? (siteAnswers.length > 1 ? siteAnswers.shift() : siteAnswers[0]);
+      // 403: Cloudflare's Bot Fight Mode turning the runner away.
+      if (next === 403) return new Response("<html>blocked</html>", { status: 403 });
       return next === 404 ? new Response("<html>not found</html>", { status: 404 }) : new Response(JSON.stringify({ commit: next, built_at: "x" }), { status: 200 });
     }
     if (url === "https://diamondecho-api-180189726732.us-east1.run.app/api/") {
@@ -40,6 +42,14 @@ function world({ site = [MERGED], api = { status: 200, commit: OLD }, checks = {
     createIssue: async (issue) => { calls.github.push(["create", issue]); return { number: 7, html_url: "https://github.com/o/r/issues/7" }; },
     comment: async (number, body) => { calls.github.push(["comment", number, body]); },
     closeIssue: async (number) => { calls.github.push(["close", number]); },
+    // What Cloudflare Pages reported to GitHub for the commit: one answer per
+    // look, the last one repeating. Absent: this GitHub cannot be asked.
+    ...(pagesChecks ? { listCheckRuns: async (sha) => {
+      calls.github.push(["check-runs", sha]);
+      const answer = pagesChecks.length > 1 ? pagesChecks.shift() : pagesChecks[0];
+      if (answer instanceof Error) throw answer;
+      return answer;
+    } } : {}),
   };
   const deps = {
     fetcher, github,
@@ -266,4 +276,45 @@ test("no automatic rollback when a later merge is the live build", async () => {
   assert.equal(result.outcome, "checks-failed");
   assert.deepEqual(w.calls.rollback, []);
   assert.match(result.rollback.text, /a later merge \(`2222222`\) is live, and its own post-merge check decides/);
+});
+
+// ---- Cloudflare's Bot Fight Mode refuses the runner on /version.json ------
+
+const pagesCheck = (status, conclusion = null) => [{ name: "Cloudflare Pages: diamondecho", status, conclusion }, { name: "Backend tests", status: "completed", conclusion: "failure" }];
+const apiOnly = { code: 0, run: { checks: [check("api-health", "api", "sev2", true), check("public-www-redirect", "public-site", "sev2", true)] } };
+
+test("refused by Cloudflare on /version.json: the build counts as live once Cloudflare Pages reports its build of this commit succeeded", async () => {
+  const w = world({ site: [403], checks: apiOnly, pagesChecks: [[], pagesCheck("in_progress"), pagesCheck("completed", "success")] });
+  const result = await w.run();
+  assert.equal(result.outcome, "ok");
+  assert.deepEqual([result.build.live, result.build.commit, result.build.via, result.build.attempts], [true, MERGED, "cloudflare-pages-check", 3]);
+  assert.deepEqual(w.calls.github.filter(([kind]) => kind === "check-runs").map(([, sha]) => sha), [MERGED, MERGED, MERGED]);
+  assert.deepEqual(w.calls.checks, ["first"], "the post-deploy checks still run");
+  assert.equal(w.calls.github.some(([kind]) => kind === "create"), false);
+});
+
+test("refused by Cloudflare, and Cloudflare Pages reports the build failed: an issue at once, nothing rolled back", async () => {
+  const w = world({ site: [403], pagesChecks: [pagesCheck("completed", "failure")], env: configured });
+  const result = await w.run();
+  assert.equal(result.outcome, "build-not-live");
+  assert.deepEqual([result.build.build_failed, result.build.attempts], [true, 1]);
+  assert.deepEqual(w.calls.rollback, []);
+  const created = w.calls.github.find(([kind]) => kind === "create")[1];
+  assert.match(created.body, /Cloudflare Pages reported to GitHub that its build of this commit failed/);
+});
+
+test("refused by Cloudflare and GitHub cannot say: it waits its time out and says the site answered 403, never 'live'", async () => {
+  for (const pagesChecks of [[new Error("GitHub GET /commits/x/check-runs refused (HTTP 403)")], null, [pagesCheck("queued")]]) {
+    const w = world({ site: [403], pagesChecks });
+    const result = await w.run();
+    assert.equal(result.outcome, "build-not-live");
+    assert.equal(result.build.attempts, 31);
+    assert.match(w.calls.github.find(([kind]) => kind === "create")[1].body, /no commit \(status 403\)/);
+  }
+});
+
+test("when the site can be read, Cloudflare Pages' check is not asked", async () => {
+  const w = world({ pagesChecks: [pagesCheck("completed", "failure")] });
+  assert.equal((await w.run()).build.via, "version.json");
+  assert.equal(w.calls.github.some(([kind]) => kind === "check-runs"), false);
 });

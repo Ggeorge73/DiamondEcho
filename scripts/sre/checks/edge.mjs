@@ -10,6 +10,7 @@
 import { makeCheck } from "../lib/schema.mjs";
 import { request } from "../lib/http.mjs";
 import { createAsker } from "./dns.mjs";
+import { pagesElsewhere } from "./pages.mjs";
 
 // A merge can change the headers file and the page, so these also run after
 // a deploy.
@@ -147,13 +148,17 @@ export async function run(ctx) {
     absent: "No CAA record: any certificate authority may issue for the domain. Information only; see docs/sre/edge.md.",
   });
   const plain = await get(ctx, `http://${domain}/`);
-  const home = await get(ctx, `${publicOrigin}/`);
+  // The home page is on Cloudflare. When an uptime service loads the pages
+  // (Bot Fight Mode refuses the monitor), the two checks that read the home
+  // page are not made: the redirects are answered before the bot check and
+  // still are.
+  const home = pagesElsewhere(ctx) ? null : await get(ctx, `${publicOrigin}/`);
   const www = await get(ctx, `${wwwOrigin}${WWW_PROBE_PATH}`);
   return [
     redirectCheck({ id: "edge-http-redirect", name: "Plain http is sent to https", result: plain, from: `http://${domain}/`, to: `${publicOrigin}/` }),
-    hstsCheck(home, publicOrigin),
+    ...(home ? [hstsCheck(home, publicOrigin)] : []),
     redirectCheck({ id: "edge-www-redirect", name: "www is sent to the bare name", result: www, from: `${wwwOrigin}${WWW_PROBE_PATH}`, to: `${publicOrigin}${WWW_PROBE_PATH}` }),
-    analyticsCheck(home, publicOrigin),
+    ...(home ? [analyticsCheck(home, publicOrigin)] : []),
     await dnssec,
     await caa,
   ];

@@ -7,7 +7,7 @@
 //   gets one plain GET an hour with at most one retry, and a failure is sev3:
 //   nothing here can fix it (docs/sre/runbooks/search-provider-down.md).
 import { request, toCheck, firstProblem, expectStatus, expectType, expectBody } from "../lib/http.mjs";
-import { pagesFor, checkPage } from "./pages.mjs";
+import { pagesFor, checkPage, pagesElsewhere } from "./pages.mjs";
 
 export const suites = ["fast", "slow", "post-deploy"];
 
@@ -55,5 +55,7 @@ async function provider(ctx) {
 }
 
 export async function run(ctx) {
-  return (ctx.suite || "fast") === "slow" ? provider(ctx) : ourPage(ctx);
+  if ((ctx.suite || "fast") === "slow") return provider(ctx);
+  // Our own /search page is on Cloudflare: reported by checks/uptime.mjs.
+  return pagesElsewhere(ctx) ? [] : ourPage(ctx);
 }

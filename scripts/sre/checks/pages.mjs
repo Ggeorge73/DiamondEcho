@@ -148,9 +148,29 @@ async function checkAsset(ctx, base, path, types, missing) {
   return toCheck(base, result, firstProblem(result, [expectStatus(200), expectType(...types)]));
 }
 
-export async function run(ctx) {
+// True when an outside uptime service loads the pages and the monitor must
+// not (synthetic-checks.mjs PAGE_SOURCES). A ctx without the setting, as in
+// a module's own tests, loads them itself.
+export const pagesElsewhere = (ctx) => ctx.pageSource === "uptime-service";
+
+// www must send the visitor to the same page on the bare domain. Cloudflare
+// answers a redirect before its bot check, so the monitor can always ask.
+async function wwwRedirect(ctx) {
   const { publicOrigin, wwwOrigin } = ctx.targets;
+  const www = await request(ctx, `${wwwOrigin}/about`, { read: "none" });
+  return toCheck(
+    { id: "public-www-redirect", name: "www address redirects to the site", component: "public-site", severity: "sev2", slis: [] },
+    www, firstProblem(www, [
+      expectStatus(301),
+      (result) => result.headers.get("location") === `${publicOrigin}/about` ? "" : "The redirect does not point at the same page on the bare domain.",
+    ]));
+}
+
+export async function run(ctx) {
+  const { publicOrigin } = ctx.targets;
   const checks = [await outsideDnsProbe(ctx)];
+  // The pages themselves are reported by checks/uptime.mjs.
+  if (pagesElsewhere(ctx)) return [...checks, await wwwRedirect(ctx)];
 
   const [homePage, ...otherPages] = pagesFor("pages");
   const home = await checkPage(ctx, homePage);
@@ -166,14 +186,7 @@ export async function run(ctx) {
     { id: "public-not-found", name: "Unknown address answers Page not found", component: "public-site", severity: "sev3", slis: [] },
     unknown, firstProblem(unknown, [expectStatus(404), expectType("text/html")])));
 
-  // www must send the visitor to the same page on the bare domain.
-  const www = await request(ctx, `${wwwOrigin}/about`, { read: "none" });
-  checks.push(toCheck(
-    { id: "public-www-redirect", name: "www address redirects to the site", component: "public-site", severity: "sev2", slis: [] },
-    www, firstProblem(www, [
-      expectStatus(301),
-      (result) => result.headers.get("location") === `${publicOrigin}/about` ? "" : "The redirect does not point at the same page on the bare domain.",
-    ])));
+  checks.push(await wwwRedirect(ctx));
 
   // Why the script and stylesheet could not be checked, when the home page
   // gave nothing to read them from.

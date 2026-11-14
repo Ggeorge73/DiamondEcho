@@ -7,13 +7,77 @@ and where the exact steps are.
 
 Status key: **Open** (waiting on you), **Done** (with the date you did it).
 
-## 1. Do first (the monitor cannot see the site without it)
+## 1. Do first (the pages are not watched without it)
 
 | # | Item | Why | Where the steps are | Status |
 | --- | --- | --- | --- | --- |
-| 1.1 | **Let the monitor past Cloudflare's browser check** (your choice, 2026-11-13: a Cloudflare rule, so the monitor keeps its plain name). Cloudflare answers `403` (error 1010) to the monitor on `diamondecho.com` and `staff.diamondecho.com`, measured 2026-11-13. In the Cloudflare dashboard, zone `diamondecho.com`: **Security, Security rules (older dashboards: WAF), Custom rules, Create rule**. Name: `Let the DiamondEcho monitor through`. Use "Edit expression" and paste: `(http.user_agent contains "DiamondEcho-SRE-Monitor" and http.request.method in {"GET" "HEAD"} and http.host in {"diamondecho.com" "www.diamondecho.com" "staff.diamondecho.com"})`. Action: **Skip**; under "More components to skip" tick **Browser Integrity Check** and nothing else. Place it first; Deploy. (The monitor sends only GET and HEAD to these addresses; narrowing by path or by address would cause false alarms.) Then run the "SRE monitor" workflow by hand (Actions, SRE monitor, Run workflow) and check that the website checks pass; **then switch the monitor on**: Settings, Secrets and variables, Actions, Variables, New repository variable `SRE_MONITOR` = `enabled`. (Until then the scheduled checks do not run, so they cannot raise false alarms.) Measured from GitHub's own runners on 2026-11-13: every page on `diamondecho.com` and `staff.diamondecho.com` answered 403, while every API check passed in 25 to 65 ms. Undo: delete the rule. Trade-off: anyone who copies that name also skips the browser check (and only that check: the WAF, rate limits and Bot Fight Mode still apply). | Without it every website check reports a false outage. | `docs/sre/edge.md`, `docs/sre/synthetic-monitoring.md` | Open |
-| 1.2 | **Look at Cloudflare, Security, Events** and note which setting gives error 1010 (likely Browser Integrity Check) and whether Bot Fight Mode is on. Read-only. | GitHub's runners may also be challenged by Bot Fight Mode, which a rule cannot exempt on the Free plan. | `docs/sre/edge.md` | Open |
+| 1.1 | **Set up the uptime service that loads the pages (UptimeRobot), and give the monitor its read-only key.** Your decision of 2026-11-14: Bot Fight Mode stays on. It answers `403` to GitHub's runners on every page of `diamondecho.com` and `staff.diamondecho.com` (measured in monitor run 27, 2026-11-14), and on the Free plan no rule can exempt them. UptimeRobot is on Cloudflare's verified-bot list, so it is let through. It loads each page every 5 minutes; the monitor only reads its verdicts and files them as its own checks. **The exact steps are below this table.** | Without it no page is watched: the monitor itself now asks only the API, the inquiry route and the redirects. | Steps below; `docs/sre/synthetic-monitoring.md`, `docs/sre/edge.md` | Open |
+| 1.2 | **If you created the Cloudflare custom rule `Let the DiamondEcho monitor through`** (the earlier plan), delete it: Cloudflare, zone `diamondecho.com`, Security, Security rules, Custom rules. It is no longer used, and it let anyone who copied the monitor's name skip the browser check. If you never created it, there is nothing to do. | Removes an exemption nothing needs. | `docs/sre/edge.md` | Open |
 | 1.3 | **Deploy the API once** with the build-identity change, setting the new `APP_COMMIT` setting (`--update-env-vars APP_COMMIT=$(git rev-parse HEAD)`; `deploy.sh` sets it for you, and every later deploy must set it too) (the redeploy in `docs/de13-production-setup.md`, or `scripts/sre/cloudrun/deploy.sh`). | Until `/api/` names its revision and commit, the monitor cannot notice a deploy, so the automatic rollback can never act and the post-merge check cannot tell old from new. | `docs/sre/release-safety.md` | Open |
+
+### Steps for 1.1 (about 20 minutes, no cost on the Free plan)
+
+Nothing here changes Cloudflare or the website. You create an account with an
+outside service, tell it which pages to load, and give the monitor a key that
+can only read the results.
+
+1. **Create the account.** Go to `https://uptimerobot.com`, choose the Free
+   plan and sign up with an address that is not on `diamondecho.com` (if the
+   domain ever fails, its own mail fails with it). Before you finish, read the
+   Free plan's terms for business use: reports from 2025 and 2026 disagree on
+   whether a business website is allowed. If it is not, the paid Solo plan
+   works the same way with these steps, or tell me and I will prepare another
+   verified service.
+2. **Create 12 monitors**, one per row of the table below. For each: **New
+   monitor**, type as given in the table, paste the address, set the **name
+   exactly as written** (the monitor finds each one by its name), leave the
+   interval at **5 minutes**, and save. For the one keyword monitor, enter the
+   keyword from the table and choose "alert when the keyword **does not
+   exist**".
+
+   | Monitor name (exact) | Type | Address |
+   | --- | --- | --- |
+   | `public-home` | HTTP(s) | `https://diamondecho.com/` |
+   | `public-page-agents` | HTTP(s) | `https://diamondecho.com/agents` |
+   | `public-page-about` | HTTP(s) | `https://diamondecho.com/about` |
+   | `public-page-podcast` | HTTP(s) | `https://diamondecho.com/podcast` |
+   | `public-page-privacy` | HTTP(s) | `https://diamondecho.com/privacy` |
+   | `public-page-terms` | HTTP(s) | `https://diamondecho.com/terms` |
+   | `search-page` | HTTP(s) | `https://diamondecho.com/search` |
+   | `calculators-deal-page` | HTTP(s) | `https://diamondecho.com/investment-calculator` |
+   | `calculators-mortgage-page` | HTTP(s) | `https://diamondecho.com/mortgage-calculator` |
+   | `calculators-net-sheet-page` | HTTP(s) | `https://diamondecho.com/seller-net-sheet` |
+   | `inquiry-page` | Keyword, keyword `de-inquiry-submit` | `https://diamondecho.com/inquire` |
+   | `staff-home` | HTTP(s) | `https://staff.diamondecho.com/` |
+
+3. **Wait 10 minutes and look.** Every monitor should show **Up**. If one
+   shows Down while the page opens in your browser, stop and tell me which:
+   Cloudflare may be turning UptimeRobot away too, and the monitor must not be
+   switched on in that state.
+4. **Keep UptimeRobot's own email alert on** (it is on by default, to the
+   address you signed up with). That is a second, independent way of being
+   told, which works even if GitHub is down.
+5. **Create the read-only key.** In UptimeRobot: **Integrations & API**, then
+   **API** (older screens: My Settings, API Settings). Under **Read-only API
+   key** choose Create. Copy that key, and only that one: the "Main API key"
+   can change and delete monitors and must never be given to GitHub.
+6. **Give the key to the monitor.** GitHub, this repository: Settings, Secrets
+   and variables, Actions, **Secrets**, New repository secret. Name
+   `UPTIMEROBOT_API_KEY`, value the read-only key. Never paste the key in an
+   issue, a pull request or a chat.
+7. **Try it once by hand.** Actions, SRE monitor, Run workflow (suite `fast`).
+   In the run's summary, "Uptime service reports every page" and the 12 page
+   checks should pass. If it names a page as "no monitor with this name" or
+   "watches another address", fix that monitor's name or address in
+   UptimeRobot and run it again.
+8. **Switch the monitor on.** Settings, Secrets and variables, Actions,
+   **Variables**, New repository variable `SRE_MONITOR` = `enabled`. Until
+   then the scheduled checks and the after-merge check do not run.
+
+Undo: delete the secret and the variable, then delete the UptimeRobot account.
+What it costs you in privacy: UptimeRobot learns the 12 public addresses and
+when they are up. It never sees visitor data, and the staff monitor loads only
+the sign-in page.
 
 ## 2. Switch on in GitHub (repository settings, no cost)
 

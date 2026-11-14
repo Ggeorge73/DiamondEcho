@@ -2,6 +2,7 @@
 // part of the API. Nothing here signs in: the checks prove the page loads
 // with its protections on, and that the API turns away a caller with no
 // sign-in. GET only.
+import { pagesElsewhere } from "./pages.mjs";
 import { request, toCheck, firstProblem, expectStatus, expectType, expectHeader, expectBody } from "../lib/http.mjs";
 
 export const suites = ["fast", "post-deploy"];
@@ -15,8 +16,12 @@ export async function run(ctx) {
   // The same three protections scripts/staging-smoke.mjs asks of staging: the
   // page is never stored, loads nothing from elsewhere by default, and cannot
   // be shown inside another site.
-  const home = await request(ctx, `${staffOrigin}/`);
-  checks.push(toCheck(
+  // (The page is on Cloudflare: when an uptime service loads the pages,
+  // checks/uptime.mjs reports that it loads. Its three headers are then not
+  // checked by the monitor; scripts/staging-smoke.mjs and the security
+  // scan's header check still do.)
+  const home = pagesElsewhere(ctx) ? null : await request(ctx, `${staffOrigin}/`);
+  if (home) checks.push(toCheck(
     { id: "staff-home", name: "Staff site loads with its protections", component: "staff-site", severity: "sev2", slis: SLIS },
     home, firstProblem(home, [
       expectStatus(200),

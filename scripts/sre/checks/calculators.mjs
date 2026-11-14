@@ -8,7 +8,7 @@
 // heavy routes beside it (/scenarios, /sensitivity, /monte-carlo) are limited
 // per sender and are never called from here.
 import { request, toCheck, firstProblem, expectStatus, expectType, jsonOrNull } from "../lib/http.mjs";
-import { pagesFor, checkPage } from "./pages.mjs";
+import { pagesFor, checkPage, pagesElsewhere } from "./pages.mjs";
 
 export const suites = ["fast", "post-deploy"];
 
@@ -43,7 +43,9 @@ export function analysisProblem(body) {
 
 export async function run(ctx) {
   const checks = [];
-  for (const page of pagesFor("calculators")) checks.push((await checkPage(ctx, page)).check());
+  // The three pages are on Cloudflare: reported by checks/uptime.mjs when an
+  // uptime service loads them.
+  if (!pagesElsewhere(ctx)) for (const page of pagesFor("calculators")) checks.push((await checkPage(ctx, page)).check());
 
   // sev2: when the service is down, Deal Studio shows "The analysis service
   // could not be reached, so nothing was calculated" and the visitor gets no

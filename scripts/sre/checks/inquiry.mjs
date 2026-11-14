@@ -25,7 +25,7 @@
 // only by a real submission, which the arrival alert covers
 // (docs/sre/runbooks/inquiry-not-delivered.md).
 import { request, toCheck, firstProblem, expectStatus, expectBody } from "../lib/http.mjs";
-import { pagesFor, checkPage } from "./pages.mjs";
+import { pagesFor, checkPage, pagesElsewhere } from "./pages.mjs";
 
 export const suites = ["fast", "post-deploy"];
 
@@ -47,8 +47,10 @@ export async function run(ctx) {
   const checks = [];
 
   // 1. The page, with the form in it.
+  // (The page is on Cloudflare: when an uptime service loads the pages, its
+  // keyword monitor looks for FORM_MARKER and checks/uptime.mjs reports it.)
   const [page] = pagesFor("inquiry");
-  checks.push((await checkPage(ctx, page, [
+  if (!pagesElsewhere(ctx)) checks.push((await checkPage(ctx, page, [
     expectBody((body) => !body.includes(CLOSED_MARKER), "The page shows the \"call or email us\" card instead of the form: the site was built without the API's address."),
     expectBody(FORM_MARKER, "The page came back without the request form."),
   ])).check());

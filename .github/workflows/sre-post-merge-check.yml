@@ -63,10 +63,10 @@ jobs:
     name: Merged build is live and healthy
     # After a merge this runs only once Gbenga has set the repository variable
     # SRE_MONITOR to "enabled", the same switch as the scheduled monitor
-    # (docs/sre/needs-from-gbenga.md 1.1). Until the Cloudflare rule lets the
-    # monitor through, Cloudflare answers 403 to /version.json, and every
-    # merge would wait out its time and open a false incident. A run started
-    # by hand always runs.
+    # (docs/sre/needs-from-gbenga.md 1.1). A run started by hand always runs.
+    # Cloudflare's Bot Fight Mode answers 403 to the runner on /version.json,
+    # so the check learns that the build was published from the result
+    # Cloudflare Pages reports to GitHub for the commit (post-deploy.mjs).
     if: >-
       github.repository == 'Ggeorge73/DiamondEcho' && github.event_name != 'pull_request' &&
       github.ref == 'refs/heads/main' &&
@@ -81,6 +81,7 @@ jobs:
     permissions:
       contents: read
       issues: write
+      checks: read # Cloudflare Pages' own build result for the merged commit
     steps:
       - uses: actions/checkout@v7
         with:
