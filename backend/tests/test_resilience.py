@@ -11,6 +11,8 @@ test that is broken. The reason names the file and line, and
 docs/sre/chaos-and-game-days.md lists them. `strict=True` means the test
 fails the day the weakness is fixed, so the mark is removed then and the
 behaviour stays protected. Application code is not changed from this file.
+None is marked at present: the comment above a test that was one names the
+weakness (W1 to W13) it now protects against.
 """
 import base64
 import json
@@ -308,10 +310,10 @@ def test_identity_provider_down_is_503_for_staff_not_a_sign_in_failure(nothing_r
     assert json.loads(answer["text"])["detail"] == "Staff identity verification is temporarily unavailable."
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "backend/server.py, protect_staff_surface: its last lines add no-store only for /api/v1/inquiries and /api/status. A staff podcast answer that "
-    "fails in a dependency (401, 403 or 503 from require_staff or podcast/router.py:23 service()) carries no "
-    "Cache-Control. Fix: include /api/v1/podcast/staff in that condition."))
+# W11 (docs/sre/chaos-and-game-days.md): protect_staff_surface in
+# backend/server.py added no-store only for /api/v1/inquiries and /api/status,
+# so a staff podcast answer that failed in a dependency (401, 403 or 503)
+# carried no Cache-Control. /api/v1/podcast/staff is now in that condition.
 def test_failed_staff_podcast_answers_are_never_stored_by_a_browser(database_refusing_calls, nothing_reachable):
     for outage in (database_refusing_calls, nothing_reachable):
         assert outage["podcast staff episodes"]["headers"].get("cache-control") == "no-store"
@@ -393,7 +395,9 @@ def test_a_malformed_body_is_refused_with_a_4xx_and_never_a_500(broken_requests,
 
 
 def test_other_content_types_and_an_absurd_submission_key_are_refused(broken_requests):
-    assert broken_requests["form encoded"]["status"] == 422
+    # A body that is not JSON was a 422 from the field checks; it is now
+    # refused before it is parsed, with 415 (backend/request_guard.py).
+    assert broken_requests["form encoded"]["status"] == 415
     assert broken_requests["huge key"]["status"] == 422
     assert broken_requests["health after all that"]["status"] == 200
 
@@ -402,41 +406,35 @@ def test_no_malformed_or_oversized_request_put_anything_in_the_queue(broken_requ
     assert broken_requests["stored inquiries"] == 0
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "A body holding the bare word NaN or Infinity (Python's JSON reader accepts both) makes FastAPI's own 422 "
-    "answer fail to serialise the echoed input, so every public POST route answers 500 'Internal Server Error' "
-    "and logs a stack trace. Seen on /api/v1/inquiries, /api/v1/deals/analyze and /api/v1/deals/monte-carlo. "
-    "No handler is registered where backend/server.py creates the app (app = FastAPI(...)). Fix: add a RequestValidationError handler there that "
-    "answers 422 from exc.errors(include_input=False, include_context=False)."))
+# W3: a body holding the bare word NaN or Infinity (Python's JSON reader
+# accepts both) made FastAPI's own 422 answer fail to serialise the input it
+# echoes, so every public POST route answered 500 and logged a stack trace.
+# The 422 no longer carries the input (backend/request_guard.py).
 def test_a_body_with_nan_or_infinity_is_refused_with_a_422(broken_requests):
     for name in ("nan inquiry", "nan deal", "infinity simulation"):
         assert broken_requests[name]["status"] == 422, (name, broken_requests[name]["text"])
 
 
 def test_a_body_with_nan_or_infinity_shows_no_internal_detail_and_leaves_the_service_up(broken_requests):
-    # Today these are 500s (see the xfail above). Until that is fixed, at
-    # least the body must say nothing and the next request must work.
     for name in ("nan inquiry", "nan deal", "infinity simulation"):
-        assert broken_requests[name]["status"] in (422, 500)
+        assert broken_requests[name]["status"] == 422
         assert_no_leak(broken_requests[name]["text"])
     assert broken_requests["health after all that"]["status"] == 200
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "No route limits the size of a request body, and FastAPI's 422 answer echoes the rejected input back: a "
-    "3 MB message to /api/v1/inquiries is read, parsed and returned in a 3 MB 422 (the same on "
-    "/api/v1/deals/analyze). Cloud Run's own ceiling is 32 MiB on a 1 GiB instance. Fix: in backend/server.py, "
-    "refuse a Content-Length above about 64 KiB with 413 in protect_staff_surface, and drop the echoed "
-    "input with the same RequestValidationError handler as the NaN finding."))
+# W6: no route limited the size of a request body, and the 422 echoed the
+# rejected input: a 3 MB message came back as a 3 MB 422. A body over the
+# route's limit (64 KiB; 320 KiB for the assistant chat) is now refused with
+# 413 before it is parsed, and no 422 carries the input.
 def test_an_oversized_body_is_refused_with_a_short_answer(broken_requests):
     for name in ("three megabyte message", "three megabyte deal"):
-        assert broken_requests[name]["status"] in (413, 422)
+        assert broken_requests[name]["status"] == 413
         assert broken_requests[name]["bytes"] < 10_000, f"{name}: answered with {broken_requests[name]['bytes']} bytes"
 
 
 def test_an_oversized_body_is_refused_and_never_a_500(broken_requests):
     for name in ("three megabyte message", "three megabyte deal"):
-        assert broken_requests[name]["status"] in (413, 422)
+        assert broken_requests[name]["status"] == 413
 
 
 # ---------------------------------------------------------------------------
@@ -824,11 +822,9 @@ def test_mapbox_entries_without_an_id_are_a_502_not_a_half_filled_list(propertie
     assert properties.suggest().status_code == 502
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "backend/property_data/service.py:83 reads payload[0] without checking that RentCast answered with a list. A "
-    "JSON object (an error document, or a changed answer shape) raises KeyError(0); KeyError is a LookupError, so "
-    "backend/property_data/router.py:40 answers 404 with the detail '0' instead of 502. Fix: raise a provider "
-    "error unless the payload is a list of objects."))
+# W12: lookup() read payload[0] without checking that RentCast answered with
+# a list. A JSON object raised KeyError(0), which is a LookupError, so the
+# route answered 404 with the detail '0'. It is now a provider error (502).
 def test_rentcast_answering_an_object_instead_of_a_list_is_a_502(properties):
     properties.provider({"error": "maintenance", "status": 200})
     answer = properties.lookup()
@@ -836,11 +832,9 @@ def test_rentcast_answering_an_object_instead_of_a_list_is_a_502(properties):
     assert answer.json() == {"detail": "Property-data provider is temporarily unavailable."}
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "backend/property_data/service.py:83-99: a RentCast record with no fields at all ([{}]) is returned as a 200 "
-    "'rentcast' property whose id and address are the words the visitor typed and whose facts are all empty. "
-    "Nothing is invented, but an empty answer is presented as a found record. Fix: treat a record with no id and "
-    "no formattedAddress as 'No property record was found' (404)."))
+# W13: a RentCast record with no fields at all ([{}]) was returned as a 200
+# 'rentcast' property whose id and address were the words the visitor typed.
+# A record with neither an id nor an address is now "not found" (404).
 def test_an_empty_rentcast_record_is_not_presented_as_a_found_property(properties):
     properties.provider([{}])
     assert properties.lookup().status_code in (404, 502)

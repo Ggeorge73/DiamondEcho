@@ -3,7 +3,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from inquiries.firebase import queue_settings
 from inquiries.router import require_staff
@@ -14,8 +14,11 @@ NO_STORE = {"Cache-Control": "no-store"}
 
 
 class EpisodeCreate(BaseModel):
-    title: str = Field(min_length=1, max_length=120)
-    description: str = Field(default="", max_length=600)
+    model_config = ConfigDict(extra="forbid")
+    # Text the public page shows: no control characters; a description may
+    # have line breaks.
+    title: str = Field(min_length=1, max_length=120, pattern=r"^[^\x00-\x1f\x7f-\x9f]*$")
+    description: str = Field(default="", max_length=600, pattern=r"^[^\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]*$")
     content_type: Literal["audio/mpeg", "audio/mp4", "audio/x-m4a"]
     size_bytes: int = Field(gt=0, le=MAX_BYTES)
 

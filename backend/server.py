@@ -6,7 +6,7 @@ from uuid import uuid4
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 from fastapi import FastAPI, APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from starlette.middleware.cors import CORSMiddleware
 from deal_intelligence.router import router as deal_router
 from routes.assistant import router as assistant_router
@@ -16,6 +16,8 @@ from podcast.router import router as podcast_router
 from inquiries.router import router as inquiries_router, require_staff, require_store
 from inquiries.firebase import queue_settings
 from deadlines import FIRESTORE_RETRY
+from ai.calculators import INPUT_NAMES as CALCULATOR_INPUT_NAMES
+from request_guard import RequestLimits, install as install_request_guard, reject_unknown_query
 
 load_dotenv(Path(__file__).parent / ".env")
 
@@ -32,7 +34,8 @@ def docs_settings(environ=os.environ):
         "openapi_url": "/openapi.json" if enabled else None,
     }
 
-app = FastAPI(**docs_settings())
+# Every route refuses a query parameter it does not declare (request_guard.py).
+app = FastAPI(**docs_settings(), dependencies=[Depends(reject_unknown_query)])
 api = APIRouter(prefix="/api")
 
 # Build identity: which deploy is answering. A monitor with no cloud sign-in
@@ -74,7 +77,9 @@ class StatusCheck(BaseModel):
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class StatusCheckCreate(BaseModel):
-    client_name: str = Field(min_length=1, max_length=120)
+    model_config = ConfigDict(extra="forbid")
+    # A label a staff member types; no control characters.
+    client_name: str = Field(min_length=1, max_length=120, pattern=r"^[^\x00-\x1f\x7f]+$")
 
 @api.post("/status", response_model=StatusCheck)
 def create_status_check(value: StatusCheckCreate, account=Depends(require_staff), store=Depends(require_store)):
@@ -98,11 +103,19 @@ for router in (deal_router, assistant_router, property_router, inquiries_router,
     api.include_router(router)
 app.include_router(api)
 
+# One error shape for every refusal, and no echo of what was sent
+# (request_guard.py). Registered once every route exists.
+install_request_guard(app, field_names=CALCULATOR_INPUT_NAMES)
+
 origins = [value.strip() for value in os.getenv(
     "CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000"
 ).split(",") if value.strip()]
 if "*" in origins:
     raise RuntimeError("Wildcard API CORS is forbidden.")
+# Added first, so it is the innermost layer: a body that is too large or not
+# JSON is refused before it is parsed, and that refusal still passes out
+# through CORS (so the page can read it) and the headers set below.
+app.add_middleware(RequestLimits)
 app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=False,
                    allow_methods=["GET", "POST", "PATCH"], allow_headers=["Authorization", "Content-Type", "X-Idempotency-Key"])
 
@@ -125,7 +138,10 @@ async def protect_staff_surface(request, call_next):
     # from a body, and must not pass the API's address on to other sites.
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("Referrer-Policy", "no-referrer")
-    if path.startswith("/api/v1/inquiries") or path == "/api/status":
+    # Staff podcast answers too: a failed one (401, 403, 503) set no header of
+    # its own (W11 in docs/sre/chaos-and-game-days.md).
+    if (path.startswith("/api/v1/inquiries") or path.startswith("/api/v1/podcast/staff")
+            or path == "/api/status"):
         response.headers["Cache-Control"] = "no-store"
     return response
 

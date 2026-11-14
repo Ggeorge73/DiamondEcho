@@ -1,6 +1,7 @@
 """FastAPI routes for deal intelligence; persistence is intentionally separate."""
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import ValidationError
 
 from inquiries.limits import SubmissionLimiter, throttle
 
@@ -21,6 +22,22 @@ from .scenarios import analyze_scenarios, analyze_sensitivity
 
 router = APIRouter(prefix="/v1/deals", tags=["Deal intelligence"])
 
+OUT_OF_RANGE = "These assumptions give figures outside the supported range."
+
+
+def refused(exc: Exception) -> HTTPException:
+    """The 422 for a deal the engine cannot calculate.
+
+    The engine's own sentences are fixed text and are passed on. A model
+    validation error raised while the engine rebuilds a deal is a ValueError
+    too, but its text quotes the values sent and names the validation
+    library, and an arithmetic error's text is no better: both get one plain
+    sentence instead.
+    """
+    if isinstance(exc, (ValidationError, ArithmeticError)):
+        return HTTPException(status_code=422, detail=OUT_OF_RANGE)
+    return HTTPException(status_code=422, detail=str(exc)[:300])
+
 # The scenario, sensitivity and Monte Carlo routes can each hold a Cloud Run
 # instance for seconds, and the service runs one request per instance on a few
 # instances. Without a limit a handful of scripted requests could take the
@@ -38,8 +55,8 @@ limit_heavy = throttle(heavy_limiter, HEAVY_PER_ADDRESS, HEAVY_PER_HOUR,
 async def analyze(request: DealAnalysisRequest) -> DealAnalysisResponse:
     try:
         return analyze_deal(request)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (ValueError, ArithmeticError) as exc:
+        raise refused(exc) from exc
 
 
 # Plain functions, not coroutines, so the calculation runs in a worker thread
@@ -48,16 +65,16 @@ async def analyze(request: DealAnalysisRequest) -> DealAnalysisResponse:
 def scenarios(request: ScenarioAnalysisRequest) -> ScenarioAnalysisResponse:
     try:
         return analyze_scenarios(request)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (ValueError, ArithmeticError) as exc:
+        raise refused(exc) from exc
 
 
 @router.post("/sensitivity", response_model=SensitivityAnalysisResponse, dependencies=[Depends(limit_heavy)])
 def sensitivity(request: SensitivityAnalysisRequest) -> SensitivityAnalysisResponse:
     try:
         return analyze_sensitivity(request)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (ValueError, ArithmeticError) as exc:
+        raise refused(exc) from exc
 
 
 # A plain function, not a coroutine: FastAPI runs it in a worker thread, so a
@@ -66,8 +83,8 @@ def sensitivity(request: SensitivityAnalysisRequest) -> SensitivityAnalysisRespo
 def monte_carlo(request: MonteCarloRequest) -> MonteCarloResponse:
     try:
         return run_monte_carlo(request, time_budget=time_budget_seconds())
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (ValueError, ArithmeticError) as exc:
+        raise refused(exc) from exc
 
 
 @router.get("/assumption-profiles")

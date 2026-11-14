@@ -70,7 +70,11 @@ def apply_scenario(deal: DealAnalysisRequest, shock: ScenarioShock) -> DealAnaly
     try:
         return _validated_copy(changed)
     except ValidationError as exc:
-        raise ValueError(f"scenario '{shock.name}' creates invalid assumptions: {exc}") from exc
+        # Neither the scenario's name nor the validation error's text is
+        # repeated: the name is whatever the caller sent, and the text quotes
+        # the changed figures and names the validation library. This sentence
+        # is also what a sensitivity cell shows as its warning.
+        raise ValueError("a scenario creates assumptions outside the supported range") from exc
 
 
 def analyze_scenarios(request: ScenarioAnalysisRequest) -> ScenarioAnalysisResponse:
@@ -164,12 +168,17 @@ def analyze_sensitivity(request: SensitivityAnalysisRequest) -> SensitivityAnaly
                         )
                     )
             except ValueError as exc:
+                # Two changes to the same field add up, and their sum can leave
+                # the range a shock allows. That is a validation error, whose
+                # text quotes the figures and names the validation library.
+                reason = ("these changes together are outside the supported range"
+                          if isinstance(exc, ValidationError) else str(exc))
                 cells.append(
                     SensitivityCell(
                         x_change=x_change,
                         y_change=y_change,
                         value=None,
-                        warning=str(exc),
+                        warning=reason,
                     )
                 )
 

@@ -22,9 +22,56 @@ def _d(inputs: Dict[str, Any], key: str, default: Any = None, *, minimum: Decima
         raise CalculationError(f"{key} must be a number") from exc
     if not value.is_finite() or value < minimum:
         raise CalculationError(f"{key} must be at least {minimum}")
-    if value > Decimal("1000000000000000"):
+    if value > _maximum(key):
         raise CalculationError(f"{key} is outside the supported range")
     return value
+
+
+# The largest value each input may take. Amounts keep the ceiling they always
+# had. Periods and percentages get one of their own: holding_years is a loop
+# count and term_years an exponent, so an absurd figure there held the worker
+# (the route is a coroutine, so the whole service) instead of being refused.
+MAX_AMOUNT = Decimal("1000000000000000")
+MAX_PERCENT = Decimal("1000")
+MAXIMUMS = {
+    "term_years": Decimal("100"),
+    "holding_years": Decimal("100"),
+    "holding_months": Decimal("1200"),
+    "annual_interest_rate": MAX_PERCENT,
+}
+
+
+def _maximum(key: str) -> Decimal:
+    if key in MAXIMUMS:
+        return MAXIMUMS[key]
+    return MAX_PERCENT if key.endswith("_percent") else MAX_AMOUNT
+
+
+# The inputs each model reads. A name outside its model's list is refused by
+# the request model (ai/models.py) rather than silently ignored.
+INPUTS = {
+    "mortgage": frozenset({
+        "purchase_price", "down_payment", "annual_interest_rate", "term_years", "annual_property_tax",
+        "annual_insurance", "monthly_hoa", "monthly_pmi",
+    }),
+    "rental": frozenset({
+        "purchase_price", "down_payment", "annual_interest_rate", "term_years", "monthly_rent",
+        "other_monthly_income", "vacancy_percent", "monthly_operating_expenses", "annual_property_tax",
+        "annual_insurance", "annual_capex_reserve", "closing_costs", "rehab_cost",
+    }),
+    "fix_flip": frozenset({
+        "purchase_price", "rehab_cost", "after_repair_value", "down_payment", "annual_interest_rate",
+        "holding_months", "loan_points_percent", "acquisition_closing_costs", "monthly_holding_costs",
+        "selling_cost_percent", "rehab_contingency_percent",
+    }),
+    "commercial": frozenset({
+        "purchase_price", "equity_invested", "annual_gross_potential_rent", "annual_other_income",
+        "vacancy_percent", "annual_operating_expenses", "annual_debt_service", "holding_years",
+        "annual_noi_growth_percent", "exit_cap_rate_percent", "selling_cost_percent",
+        "estimated_loan_balance_at_sale",
+    }),
+}
+INPUT_NAMES = frozenset().union(*INPUTS.values())
 
 
 def _pct(value: Decimal) -> Decimal:

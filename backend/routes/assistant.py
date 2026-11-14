@@ -25,6 +25,11 @@ async def analyze_deal(request: DealAnalysisRequest) -> DealAnalysisResponse:
         metrics = analyze(request.model, request.inputs)
     except CalculationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ArithmeticError as exc:
+        # Figures that are each in range but together overflow the arithmetic
+        # (a rate so small the payment formula divides by zero, a value too
+        # long to round to cents). Refused, not a 500.
+        raise HTTPException(status_code=422, detail="These inputs give a result outside the supported range.") from exc
 
     warnings = []
     if not request.jurisdiction.state:

@@ -37,6 +37,10 @@ async def property_lookup(address: str = Query(min_length=5, max_length=240)) ->
     try:
         details = await asyncio.to_thread(lookup, address)
         return PropertyLookupResponse(property=details)
+    except (KeyError, IndexError) as exc:
+        # Both are LookupErrors, but they come from reading a provider answer
+        # of an unexpected shape, and their text is a key or an index.
+        raise HTTPException(status_code=502, detail="Property-data provider is temporarily unavailable.") from exc
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except Exception as exc:
