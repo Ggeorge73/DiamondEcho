@@ -181,6 +181,22 @@ export function recordRun({ status: before, uptime: uptimeBefore, run, now }) {
     }
   }
 
+  // A check that this suite used to make and no longer makes was removed
+  // from the monitor (the page checks, when the monitor stopped asking for
+  // pages). It is dropped at once: left behind, its last result goes stale,
+  // its part reads "unknown", and the headline says "state not known" while
+  // everything that is checked is up. Only when the run is whole: a module
+  // that broke hands in a "monitor-..." check instead of its own, and those
+  // checks must stay so their part shows as not watched.
+  const whole = !blind && refused === 0 && !run.checks.some((check) => String(check.id).startsWith("monitor-"));
+  if (whole) {
+    const made = new Set(run.checks.map((check) => check.id));
+    for (const [id, check] of Object.entries(status.checks)) {
+      const suites = Array.isArray(check?.suites) && check.suites.length ? check.suites : [check?.suite];
+      if (!made.has(id) && suites.every((suite) => suite === run.suite)) delete status.checks[id];
+    }
+  }
+
   // A check that has not been seen for a week was removed from the monitor.
   for (const [id, check] of Object.entries(status.checks)) {
     if (!isObject(check) || !(now - time(check.checked_at) <= FORGET_CHECK_DAYS * DAY)) delete status.checks[id];
