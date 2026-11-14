@@ -71,7 +71,14 @@ the same public text: what visitors notice, the failing checks, the runbook.
 - **Cloudflare refusing the monitor is one problem, not six.** On the first
   run from GitHub's runners every page Cloudflare serves answered 403 to the
   monitor ("Cloudflare refused the request …") while browsers got the pages
-  and the API passed. When, in a run, every failing check on the parts
+  and the API passed. Since 2026-11-14 the monitor no longer loads those
+  pages: Bot Fight Mode stays on, an outside uptime service (UptimeRobot)
+  loads them, and the monitor reads its verdicts
+  ([synthetic-monitoring.md](synthetic-monitoring.md)). The monitor's only
+  requests to Cloudflare are now the redirects, so this rule can apply only
+  to them, and is not expected to. If Cloudflare refuses UptimeRobot
+  instead, the monitor cannot tell: the pages are reported down like any
+  outage. The rule itself is unchanged: when, in a run, every failing check on the parts
   Cloudflare serves (website, search page, calculator pages, contact page,
   staff site) failed with that refusal, or was not made because its page was
   refused, those checks measured the monitor's access, not the site. They

@@ -24,9 +24,9 @@ dormant until Gbenga supplies the setting it needs; the list is in
 
 | Part | Today, before this work | With this work |
 | --- | --- | --- |
-| Public site | Merging to `main` makes Cloudflare Pages build and publish the site within minutes. Nothing checks it afterwards. | The same, then the **post-merge check** waits for the new build to be live and runs every synthetic check against it. A failure opens an `sre-incident` issue with the rollback steps. Automatic site rollback is possible but off. |
+| Public site | Merging to `main` makes Cloudflare Pages build and publish the site within minutes. Nothing checks it afterwards. | The same, then the **post-merge check** waits until Cloudflare Pages reports the new build as published and runs the monitor's own checks (API, inquiry route, redirects). A failed build or check opens an `sre-incident` issue with the rollback steps. The pages themselves are checked by the outside uptime service within about five minutes. Site rollback is by hand: no page check is left to trigger the automatic one. |
 | API | Gbenga deploys by hand from Cloud Shell: new revision with no traffic, a few checks at its temporary address, then all traffic at once (`docs/de13-production-setup.md`). | The same steps as one script, `deploy.sh`, with every check written down, traffic moved in steps with a gate after each, and an automatic return to the old revision on any failure. Run from Cloud Shell as today, or later from a GitHub workflow that asks Gbenga to approve each run. |
-| Staff site | Cloudflare Pages, built from `main`. | Unchanged. The synthetic checks look at it. |
+| Staff site | Cloudflare Pages, built from `main`. | Unchanged. The uptime service loads its home page and the monitor checks the staff API. |
 
 A merge never changes the API. The API changes only when someone deploys it.
 
@@ -58,16 +58,34 @@ curl -s https://diamondecho-api-180189726732.us-east1.run.app/api/
   the automatic rollback would reason from it. Deploy with the script, or add
   `--update-env-vars APP_COMMIT=$(git rev-parse HEAD)` to the hand command.
 - Nothing else is published on either address.
+- `version.json` answers a browser or a plain `curl` from a home or office
+  connection. It answers 403 to GitHub's runners (Cloudflare's Bot Fight
+  Mode), so the monitor and the post-merge check cannot read it; see the
+  next section.
 
 ## The post-merge check (public site)
 
 `.github/workflows/sre-post-merge-check.yml` runs after every merge to `main`:
 
-1. It asks `https://diamondecho.com/version.json` every 30 seconds, for up to
-   15 minutes, until it names the merged commit (or a later merge that
-   includes it).
-2. It runs `node scripts/sre/synthetic-checks.mjs --suite post-deploy` against
-   the live site. All checks are read-only; no inquiry is sent.
+1. It waits, looking every 30 seconds for up to 15 minutes, until the new
+   build is published. It asks `https://diamondecho.com/version.json`
+   first. Cloudflare's Bot Fight Mode (on by Gbenga's decision of
+   2026-11-14) answers 403 to GitHub's runners there, so on a 403 it asks
+   GitHub instead for the check run named "Cloudflare Pages: diamondecho",
+   which Cloudflare Pages itself reports for the merged commit
+   (`pagesBuildState` in `scripts/sre/post-deploy.mjs`; the job has the
+   read-only permission `checks: read` for this). "Success" there means the
+   build was published. "Failure" opens the incident at once, without
+   waiting out the 15 minutes: the previous build is still serving.
+2. It runs `node scripts/sre/synthetic-checks.mjs --suite post-deploy`. All
+   checks are read-only; no inquiry is sent. This suite now holds only what
+   the monitor asks itself: the API, the reference calculation, the inquiry
+   route, the staff API, the redirects, and two DNS questions. **It contains
+   no page check.** That the pages of the new build load is seen by
+   UptimeRobot within about five minutes (its own interval) and reaches the
+   normal 5-minute monitor, which opens an incident after two failing reads
+   ([synthetic-monitoring.md](synthetic-monitoring.md)). So "published" is
+   proven here; "the pages load" is proven a few minutes later, elsewhere.
 3. It notes whether the live API is behind `main` for backend changes. That
    is expected after a backend merge (the API is deployed by hand) and does
    not fail the run.
@@ -75,7 +93,11 @@ curl -s https://diamondecho-api-180189726732.us-east1.run.app/api/
    issue titled "Post-merge check failed for …" (or adds to the open one),
    naming the merge, what failed and the rollback steps. When a later merge
    passes, it closes that issue.
-5. **Automatic site rollback** happens only when all of these hold:
+5. **Automatic site rollback can no longer be triggered.** It needs a
+   failing page check, and the post-deploy suite no longer contains one. The
+   code and its switch are kept, and rolling back by hand is unchanged
+   ("Rolling back the website" below). For the record, it would act only
+   when all of these hold:
    - the merged build itself is the live one (not a later merge that
      includes it: that merge's own check decides);
    - a website check of severity 1 or 2 failed that a rollback could fix: not
@@ -87,7 +109,10 @@ curl -s https://diamondecho-api-180189726732.us-east1.run.app/api/
      `SRE_PAGES_AUTOROLLBACK` is `enabled`.
 
    Otherwise the issue says why nothing was rolled back, or what it would
-   have put back.
+   have put back. Today that is always "no failed website check that a
+   rollback could fix". The conditions could be met again only if the
+   post-merge check ran with `SRE_PAGE_SOURCE=direct` from a network
+   Cloudflare lets through, which GitHub's runners are not.
 
 If the build never appears it never rolls back: the old build is still
 serving, and rolling back would go one build further back than wanted.
@@ -99,14 +124,27 @@ branches" and add `main` only; no required reviewer (the check must not wait
 for a person); then add the two secrets there. A workflow run from any other
 branch cannot read them.
 
-Known problem, 2026-11-13: from the agents' sandbox, Cloudflare answered
-`403` ("error code: 1010", a refusal based on the client's signature) to the
-monitor's user agent on every diamondecho.com address, while a plain `curl`
-got `200`. If GitHub's runners are refused the same way, every post-merge
-check will report that the site named "no commit (status 403)". Whether to
-allow the monitor in Cloudflare or change its user agent is Gbenga's decision
-(`needs-from-gbenga.md`); the user agent is set in one place,
-`scripts/sre/targets.mjs`.
+Why it works this way: Cloudflare answers `403` to GitHub's runners on every
+page of diamondecho.com, `/version.json` included (measured in monitor run
+27, 2026-11-14). Gbenga decided the same day that Bot Fight Mode stays on,
+and on the Free plan no rule can exempt the runners. So the post-merge check
+does not depend on reading the site. It runs only once the repository
+variable `SRE_MONITOR` is `enabled` (item 1.1 of
+[needs-from-gbenga.md](needs-from-gbenga.md)); a run started by hand always
+runs.
+
+Known limits of this:
+
+- The check run's name, "Cloudflare Pages: diamondecho", is the one seen on
+  this repository's pull requests and merges. If Cloudflare renames it, or
+  the Pages project is renamed, the check finds no result, waits its 15
+  minutes and reports that the build did not appear. The name is in one
+  place, `PAGES_CHECK_NAME`.
+- A build that publishes but serves a broken page passes the post-merge
+  check. It is caught by UptimeRobot and the 5-minute monitor: up to about 5
+  minutes for UptimeRobot to load the page, up to 5 more for the monitor to
+  read it, and two failing reads before the incident. Nothing rolls it back
+  automatically.
 
 ## Deploying the API
 
@@ -223,13 +261,16 @@ Covered:
 
 - An API deploy made with `deploy.sh` that fails a check or a gate within its
   steps: the traffic goes back to the revision that served before.
-- A website build that is live and fails a severity 1 or 2 website check in
-  the post-merge check, once Gbenga switches it on.
 - A bad API revision noticed later by the monitor, once Gbenga switches on
   [auto-remediation.md](auto-remediation.md). That is a separate switch.
 
 Not covered:
 
+- **A website build whose pages fail.** The post-merge check no longer loads
+  a page (Cloudflare refuses GitHub's runners), so it has nothing to trigger
+  the website rollback with, switched on or not. A broken page is reported
+  by the 5-minute monitor from UptimeRobot's results, and the rollback is by
+  hand ("Rolling back the website" below).
 - **Low traffic.** At this site's traffic a 10 percent step may see no
   visitor at all in two minutes. The gates mostly prove that the new revision
   keeps answering while it is in the rotation; they are not a statistical
@@ -291,7 +332,9 @@ gcloud run services update-traffic diamondecho-api --to-revisions=<revision>=100
    it would put back), then the same with `--apply`. It refuses unless the
    build it replaces is the live one, reads the result back, and never prints
    the token.
-3. Check `https://diamondecho.com/version.json` names the commit you expect.
+3. Check `https://diamondecho.com/version.json` names the commit you expect
+   (in a browser, or `curl` from your own computer; it answers 403 from a
+   cloud server).
 4. Revert the merge on GitHub (the **Revert** button on the pull request);
    the next merge to `main` would otherwise publish the bad change again.
    Merging the revert is Gbenga's.
@@ -342,7 +385,7 @@ published as usual.
 
 | Part | Needs | Without it |
 | --- | --- | --- |
-| Automatic website rollback | Secrets `CLOUDFLARE_API_TOKEN` (Cloudflare Pages: Edit, this account only) and `CLOUDFLARE_ACCOUNT_ID` in the environment `pages-rollback` (main only); variable `SRE_PAGES_AUTOROLLBACK` = `enabled` | The post-merge check still runs and opens issues; rollback is by hand |
+| Automatic website rollback | Secrets `CLOUDFLARE_API_TOKEN` (Cloudflare Pages: Edit, this account only) and `CLOUDFLARE_ACCOUNT_ID` in the environment `pages-rollback` (main only); variable `SRE_PAGES_AUTOROLLBACK` = `enabled`. **Even with these it cannot act at present:** no page check is left in the post-merge check to trigger it. There is no reason to set it up now | The post-merge check still runs and opens issues; rollback is by hand |
 | `pages-rollback.sh` | The same two secrets (or the same values in a shell) | Dashboard rollback |
 | API deploy from GitHub | Cloud Build on its own service account first; then a deploy identity of its own (Workload Identity Federation, condition and roles in "Deploying from GitHub"); variables `GCP_DEPLOY_WORKLOAD_IDENTITY_PROVIDER`, `GCP_DEPLOY_SERVICE_ACCOUNT`, `GCP_PROJECT_ID`, `GCP_REGION`, `CLOUD_RUN_SERVICE`; a `production` environment, main only, with Gbenga as required reviewer | `deploy.sh` from Cloud Shell, as today |
 | The log gate in `deploy.sh` | The signed-in account can read logs (Gbenga's owner account can) | `DEPLOY_LOG_GATE=off`; the probes still gate |

@@ -3,9 +3,9 @@
 | | |
 | --- | --- |
 | Component | `public-site` (also `staff-site` and `dns`, which Cloudflare also serves) |
-| Usual severity | sev1 when the site does not load for visitors; sev3 when only the monitor is stopped. See [severity-and-escalation.md](../severity-and-escalation.md) |
-| Alerts that lead here | any page or edge check whose text begins "Cloudflare refused the request" or "Cloudflare answered the monitor with a … page"; page checks failing with a Cloudflare error page; `dns-*` failing at both resolvers at once |
-| Last reviewed | 2026-11-13, not yet tested |
+| Usual severity | sev1 when the site does not load for visitors; lower when only the monitor or the uptime service is stopped. See [severity-and-escalation.md](../severity-and-escalation.md) |
+| Alerts that lead here | a redirect check (`public-www-redirect`, `edge-http-redirect`, `edge-www-redirect`) whose text begins "Cloudflare refused the request" or "Cloudflare answered the monitor with a … page"; the incident "Cloudflare is refusing the monitor"; page checks that say "UptimeRobot reports this page down" while the page opens in a browser; `dns-*` failing at both resolvers at once |
+| Last reviewed | 2026-11-14, not yet tested |
 
 ## Symptoms
 
@@ -17,13 +17,29 @@
     or security-level setting is challenging them;
   - "Error 5xx" with "Cloudflare" in the middle of a diagram, or nothing at
     all: Cloudflare itself, or the path behind it, is failing.
-- The incident issue says "Cloudflare refused the request (403, error 1010:
-  the browser signature check, usually Browser Integrity Check): a Cloudflare
-  security setting is blocking the monitor, and perhaps visitors too." That is
-  a block of the monitor; real visitors may or may not be affected. Error 1010
-  for the monitor usually means the rule `Let the DiamondEcho monitor through`
-  (item 1.1 of [needs-from-gbenga.md](../needs-from-gbenga.md)) is missing,
-  switched off or changed.
+- **Background.** Bot Fight Mode is on (Gbenga's decision, 2026-11-14) and
+  refuses GitHub's servers on every page. That is expected, and it is why
+  the monitor no longer loads a page: an outside uptime service, UptimeRobot,
+  loads the pages and the monitor reads its verdicts. So "Cloudflare is
+  refusing the monitor" should no longer open because of the pages. Two
+  kinds of refusal can still happen:
+  - **Cloudflare refuses one of the monitor's remaining requests.** Those
+    are the redirects only (`public-www-redirect` every 5 minutes;
+    `edge-http-redirect` and `edge-www-redirect` hourly and after a merge).
+    Cloudflare normally answers a redirect before its bot check. The check
+    then says "Cloudflare refused the request (403 …): a Cloudflare security
+    setting is blocking the monitor, and perhaps visitors too", and two such
+    runs in a row open "Cloudflare is refusing the monitor". It means a
+    Cloudflare setting or the redirect rule changed. Real visitors may or
+    may not be affected.
+  - **Cloudflare refuses UptimeRobot.** The monitor cannot see why
+    UptimeRobot calls a page down. The page checks then fail with
+    "UptimeRobot reports this page down" (or "seems down"), usually all 12
+    at once, and the incident reads like a site outage ("Website is down")
+    while the site opens in a browser. UptimeRobot's own email arrives too.
+    Check first, step 3, tells this apart from a real outage. This has not
+    been seen; it would mean Cloudflare stopped treating UptimeRobot as a
+    verified bot, or a setting now stops verified bots.
 - Several unrelated checks fail at once (pages, staff, DNS): Cloudflare
   serves all three, so a Cloudflare-wide problem looks like this.
 - Not for a page that loads but is wrong or old: use [site-down.md](site-down.md)
@@ -55,8 +71,11 @@ miss.
    settings** (firewall, bot, redirect rules) is the cause: go to step 4.
 3. **Anyone.** Does a normal browser get through? Open https://diamondecho.com
    in a private window, then on a phone using mobile data. If both load and
-   only the monitor is refused, real visitors are not (or not all)
-   affected: go to Fix step 3.
+   only the monitor or UptimeRobot is refused, real visitors are not (or not
+   all) affected: go to Fix step 3. To see what UptimeRobot met: **Gbenga**
+   signs in at https://uptimerobot.com and opens one of the monitors shown
+   as Down. Its incident shows the reason; a 403 there, with the page open
+   in your browser, is Cloudflare refusing UptimeRobot.
 4. **Gbenga.** Cloudflare > diamondecho.com > Security > Events. Filter the
    last hour by action "Block" or "Challenge". Healthy: few events, none for
    ordinary pages. Note which **service** produced the blocks (for example
@@ -77,22 +96,32 @@ miss.
    started then: put that setting back as it was (the audit log shows the old
    value). Worked when: the private-window and phone loads work and the
    Security Events for ordinary pages stop within minutes.
-3. **Gbenga. Needs Gbenga's yes:** a feature is blocking real visitors or the
-   monitor (step 4 named it). Choose the narrowest change and follow its
-   undo in [edge.md](../edge.md), "Recommended baseline", item 9:
-   - only the monitor is blocked with error 1010: Security > Security rules
-     (older dashboards: WAF) > Custom rules. Check that `Let the DiamondEcho
-     monitor through` exists, is enabled and is first in the list. If it is
-     missing or changed, re-create it exactly as item 1.1 of
-     [needs-from-gbenga.md](../needs-from-gbenga.md) says (Skip, Browser
-     Integrity Check only). Undo: delete the rule. If only Google's uptime
-     checks are blocked, see [edge.md](../edge.md) item 9, "Google's uptime
-     checks";
+3. **Gbenga. Needs Gbenga's yes:** a feature is blocking real visitors, the
+   monitor's redirect checks or UptimeRobot (step 4 named it). Choose the
+   narrowest change and follow its undo in [edge.md](../edge.md),
+   "Recommended baseline", item 9:
+   - only the monitor's redirect checks are refused: the redirect is no
+     longer answered before the bot check. Look in step 5's audit log for a
+     change to the redirect rules (Rules > Redirect Rules: `www` to the bare
+     name) or to "Always Use HTTPS", and put it back. Do not add an
+     exemption for the monitor: on the Free plan no rule can skip Bot Fight
+     Mode, and the earlier plan for one is withdrawn;
+   - only UptimeRobot is refused: put back any security or bot setting that
+     changed (step 5). If nothing changed on our side, there is no setting
+     on the Free plan that exempts it: tell the synthetic monitoring role,
+     who prepares another verified uptime service or another option from
+     [edge.md](../edge.md) item 9 for Gbenga to decide. Meanwhile the page
+     checks are wrong, not the site: say so in the incident issue, and watch
+     the site by hand (step 3) until it is settled;
+   - only Google's uptime checks are blocked: see [edge.md](../edge.md) item
+     9, "Google's uptime checks";
    - visitors are blocked by Browser Integrity Check or a custom rule: switch
      that one feature or rule off;
    - visitors are challenged by Bot Fight Mode: switch Bot Fight Mode off.
-   Worked when: the edge checks pass on the next hourly run, or the next
-   page check, and step 3 works on a phone.
+     That reverses the decision of 2026-11-14, so record it in
+     [edge.md](../edge.md).
+   Worked when: the redirect checks pass on the next run, UptimeRobot shows
+   the pages Up and the next page checks pass, and step 3 works on a phone.
 4. **Gbenga. Needs Gbenga's yes:** "I'm Under Attack" was left on after an
    attack: set Security Level back to its previous value.
 5. **AI role agent.** Record what changed and why in the incident issue, and
@@ -108,8 +137,9 @@ miss.
 
 ## Afterwards
 
-- [ ] Confirm the edge and page checks pass and the components are
-      operational on the status page; the incident issue has closed.
+- [ ] Confirm the edge and page checks pass, UptimeRobot shows all 12
+      monitors Up, and the components are operational on the status page;
+      the incident issue has closed.
 - [ ] Post the "resolved" update (wording in
       [incident-response.md](../incident-response.md)).
 - [ ] If a bot or security setting changed, re-check the property search on

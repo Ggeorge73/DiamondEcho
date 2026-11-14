@@ -26,7 +26,9 @@
 //                           measured), and "uptime-service" fails, naming it
 // "uptime-service" (sev3, feeds no SLO) says whether the service could be
 // read and reported every page. When it fails, the pages are not being
-// watched; their last results go stale and the status page says "unknown".
+// watched: their last results go stale after 20 minutes and are then left
+// out, so each part shows only what the monitor's own checks say (the
+// website shows "degraded" for this check; docs/sre/synthetic-monitoring.md).
 //
 // Settings (environment): UPTIMEROBOT_API_KEY, the account's READ-ONLY API
 // key (a GitHub secret). It is sent only in the body of the one request

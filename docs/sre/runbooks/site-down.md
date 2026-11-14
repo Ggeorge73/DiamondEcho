@@ -4,8 +4,8 @@
 | --- | --- |
 | Component | `public-site` (also `staff-site`) |
 | Usual severity | sev1 for the public site, sev2 for the staff site, see [severity-and-escalation.md](../severity-and-escalation.md) |
-| Alerts that lead here | `public-home`, `public-asset-js`, `public-asset-css`, `public-page-*`, `staff-home` |
-| Last reviewed | 2026-11-13, not yet tested |
+| Alerts that lead here | `public-home`, `public-page-*`, `staff-home` (each is UptimeRobot's verdict on that page, read by the monitor: "UptimeRobot reports this page down") |
+| Last reviewed | 2026-11-14, not yet tested |
 
 ## Symptoms
 
@@ -16,7 +16,10 @@
 - This runbook is NOT for: the address not being found at all (that is DNS:
   [dns-problem.md](dns-problem.md)); the form or calculators erroring while
   pages load (that is the API: [api-down.md](api-down.md)); a certificate
-  warning (`tls-certificate.md`).
+  warning (`tls-certificate.md`); a website incident whose only failing
+  check is "Uptime service reports every page" (the pages are not being
+  watched, which is not the same as down:
+  [monitoring-is-blind.md](monitoring-is-blind.md)).
 
 ## Impact on visitors
 
@@ -30,11 +33,12 @@ are unaffected but nobody can read the queue.
 
 1. **Anyone.** Open https://diamondecho.com in a private window, on a phone
    with Wi-Fi off. Healthy: the home page loads with its pictures and menu.
-   If it loads for you but the monitor says it fails with **403**, the
-   monitor is being blocked by Cloudflare's bot protection, not the site
-   being down: hand it to the edge security role
-   ([traffic-spike-or-abuse.md](traffic-spike-or-abuse.md)) and the
-   synthetic monitoring role.
+   The monitor does not load the pages itself: an outside uptime service,
+   UptimeRobot, does, and the monitor reads its verdict. If the page loads
+   for you but the incident says "UptimeRobot reports this page down",
+   either the outage is somewhere you are not, or Cloudflare is turning
+   UptimeRobot away: follow [cloudflare-outage.md](cloudflare-outage.md)
+   and tell the edge security role and the synthetic monitoring role.
 2. **Anyone.** Paste:
    ```bash
    curl -sS -o /dev/null -w '%{http_code}\n' https://diamondecho.com/
@@ -61,8 +65,9 @@ are unaffected but nobody can read the queue.
    Cloudflare Pages): in the Deployments list of step 5, on the last
    production deployment that worked, open the "…" menu and choose
    "Rollback to this deployment". It takes effect in about a minute.
-   Worked when: the home page loads in a private window and the next monitor
-   run passes `public-home`.
+   Worked when: the home page loads in a private window and a monitor run
+   passes `public-home`. That can take up to about ten minutes: UptimeRobot
+   loads the page every 5 minutes and the monitor reads it every 5.
 2. **AI role agent.** Prepare a pull request that reverts the bad merge, so
    the next build does not bring the fault back. It changes nothing until
    Gbenga merges it.

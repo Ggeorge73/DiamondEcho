@@ -295,7 +295,8 @@ test("the real modules, pages from the uptime service: the monitor sends nothing
     assert.ok(!run.checks.some((c) => c.id.startsWith("monitor-")), "every real module loaded and ran");
     // To our own names on Cloudflare only the two redirects are asked: the
     // plain-http address and www. Never a page of the site or the staff site.
-    const ours = asked.filter((line) => new URL(line.split(" ")[1]).hostname.endsWith("diamondecho.com"));
+    const OUR_HOSTS = new Set(["diamondecho.com", "www.diamondecho.com", "staff.diamondecho.com"]);
+    const ours = asked.filter((line) => OUR_HOSTS.has(new URL(line.split(" ")[1]).hostname));
     for (const line of ours) assert.match(line, /^GET (http:\/\/diamondecho\.com\/|https:\/\/www\.diamondecho\.com\/)/, `${suite}: ${line}`);
     const ids = run.checks.map((c) => c.id);
     for (const id of ["public-home", "search-page", "calculators-deal-page", "inquiry-page", "staff-home", "public-asset-js", "public-not-found", "edge-hsts"]) {
