@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated_at": "2026-11-14T20:06:29.218Z",
+  "updated_at": "2026-11-14T20:37:15.536Z",
   "overall": "unknown",
   "components": {
     "public-site": {
@@ -8,6 +8,7 @@
       "state": "operational",
       "since": "2026-11-14T02:36:24.108Z",
       "checks": [
+        "edge-www-redirect",
         "public-asset-css",
         "public-asset-js",
         "public-home",
@@ -22,16 +23,17 @@
     },
     "search": {
       "name": "Property search",
-      "state": "unknown",
-      "since": "2026-11-14T18:57:25.118Z",
+      "state": "operational",
+      "since": "2026-11-14T20:37:15.536Z",
       "checks": [
+        "search-idx-provider",
         "search-page"
       ]
     },
     "calculators": {
       "name": "Intelligence calculators",
-      "state": "operational",
-      "since": "2026-11-14T02:36:24.108Z",
+      "state": "unknown",
+      "since": "2026-11-14T20:37:15.536Z",
       "checks": [
         "calculators-api-analyze",
         "calculators-deal-page",
@@ -41,8 +43,8 @@
     },
     "inquiry": {
       "name": "Inquiry form",
-      "state": "operational",
-      "since": "2026-11-14T02:36:24.108Z",
+      "state": "unknown",
+      "since": "2026-11-14T20:37:15.536Z",
       "checks": [
         "inquiry-page",
         "inquiry-preflight",
@@ -57,14 +59,15 @@
       "checks": [
         "api-cors-allowed",
         "api-cors-refused",
+        "api-docs-off",
         "api-health",
         "api-identity"
       ]
     },
     "staff-site": {
       "name": "Staff site",
-      "state": "operational",
-      "since": "2026-11-14T02:36:24.108Z",
+      "state": "unknown",
+      "since": "2026-11-14T20:37:15.536Z",
       "checks": [
         "staff-api-auth",
         "staff-home"
@@ -75,7 +78,38 @@
       "state": "operational",
       "since": "2026-11-14T02:36:24.108Z",
       "checks": [
+        "dns-apex-resolves",
+        "dns-mail-dmarc",
+        "dns-mail-microsoft-365",
+        "dns-mail-mx",
+        "dns-mail-spf",
+        "dns-nameservers",
+        "dns-other-records",
+        "dns-staff-resolves",
+        "edge-caa",
+        "edge-dnssec",
         "outside-dns-probe"
+      ]
+    },
+    "tls": {
+      "name": "TLS certificates",
+      "state": "operational",
+      "since": "2026-11-14T20:37:15.536Z",
+      "checks": [
+        "tls-api",
+        "tls-public",
+        "tls-staff",
+        "tls-www"
+      ]
+    },
+    "domain": {
+      "name": "Domain registration",
+      "state": "operational",
+      "since": "2026-11-14T20:37:15.536Z",
+      "checks": [
+        "domain-delegation",
+        "domain-expiry",
+        "domain-registrar-lock"
       ]
     }
   },
@@ -599,12 +633,446 @@
         "fast"
       ],
       "observed": {}
+    },
+    "api-docs-off": {
+      "name": "API route list is not published",
+      "component": "api",
+      "severity": "sev3",
+      "suite": "slow",
+      "ok": true,
+      "status": 404,
+      "latency_ms": 28,
+      "detail": "",
+      "checked_at": "2026-11-14T20:37:15.475Z",
+      "consecutive_failures": 0,
+      "consecutive_successes": 1,
+      "last_ok_at": "2026-11-14T20:37:15.475Z",
+      "last_failure_at": null,
+      "failing_since": null,
+      "suites": [
+        "slow"
+      ],
+      "observed": {}
+    },
+    "search-idx-provider": {
+      "name": "Georgia MLS search (outside provider)",
+      "component": "search",
+      "severity": "sev3",
+      "suite": "slow",
+      "ok": true,
+      "status": 200,
+      "latency_ms": 190,
+      "detail": "",
+      "checked_at": "2026-11-14T20:37:15.475Z",
+      "consecutive_failures": 0,
+      "consecutive_successes": 1,
+      "last_ok_at": "2026-11-14T20:37:15.475Z",
+      "last_failure_at": null,
+      "failing_since": null,
+      "suites": [
+        "slow"
+      ],
+      "observed": {}
+    },
+    "tls-public": {
+      "name": "Certificate for diamondecho.com",
+      "component": "tls",
+      "severity": "sev3",
+      "suite": "slow",
+      "ok": true,
+      "status": null,
+      "latency_ms": 60,
+      "detail": "Valid until 2027-01-04 (50 days left), TLSv1.3, issued by Google Trust Services.",
+      "checked_at": "2026-11-14T20:37:15.475Z",
+      "consecutive_failures": 0,
+      "consecutive_successes": 1,
+      "last_ok_at": "2026-11-14T20:37:15.475Z",
+      "last_failure_at": null,
+      "failing_since": null,
+      "suites": [
+        "slow"
+      ],
+      "observed": {
+        "expires": "2027-01-04",
+        "issuer": "Google Trust Services",
+        "protocol": "TLSv1.3"
+      }
+    },
+    "tls-www": {
+      "name": "Certificate for www.diamondecho.com",
+      "component": "tls",
+      "severity": "sev3",
+      "suite": "slow",
+      "ok": true,
+      "status": null,
+      "latency_ms": 85,
+      "detail": "Valid until 2027-01-04 (50 days left), TLSv1.3, issued by Let's Encrypt.",
+      "checked_at": "2026-11-14T20:37:15.475Z",
+      "consecutive_failures": 0,
+      "consecutive_successes": 1,
+      "last_ok_at": "2026-11-14T20:37:15.475Z",
+      "last_failure_at": null,
+      "failing_since": null,
+      "suites": [
+        "slow"
+      ],
+      "observed": {
+        "expires": "2027-01-04",
+        "issuer": "Let's Encrypt",
+        "protocol": "TLSv1.3"
+      }
+    },
+    "tls-staff": {
+      "name": "Certificate for staff.diamondecho.com",
+      "component": "tls",
+      "severity": "sev3",
+      "suite": "slow",
+      "ok": true,
+      "status": null,
+      "latency_ms": 112,
+      "detail": "Valid until 2027-01-04 (50 days left), TLSv1.3, issued by Google Trust Services.",
+      "checked_at": "2026-11-14T20:37:15.475Z",
+      "consecutive_failures": 0,
+      "consecutive_successes": 1,
+      "last_ok_at": "2026-11-14T20:37:15.475Z",
+      "last_failure_at": null,
+      "failing_since": null,
+      "suites": [
+        "slow"
+      ],
+      "observed": {
+        "expires": "2027-01-04",
+        "issuer": "Google Trust Services",
+        "protocol": "TLSv1.3"
+      }
+    },
+    "tls-api": {
+      "name": "Certificate for diamondecho-api-180189726732.us-east1.run.app",
+      "component": "tls",
+      "severity": "sev3",
+      "suite": "slow",
+      "ok": true,
+      "status": null,
+      "latency_ms": 47,
+      "detail": "Valid until 2027-01-26 (72 days left), TLSv1.3, issued by Google Trust Services.",
+      "checked_at": "2026-11-14T20:37:15.475Z",
+      "consecutive_failures": 0,
+      "consecutive_successes": 1,
+      "last_ok_at": "2026-11-14T20:37:15.475Z",
+      "last_failure_at": null,
+      "failing_since": null,
+      "suites": [
+        "slow"
+      ],
+      "observed": {
+        "expires": "2027-01-26",
+        "issuer": "Google Trust Services",
+        "protocol": "TLSv1.3"
+      }
+    },
+    "dns-apex-resolves": {
+      "name": "Website address resolves",
+      "component": "dns",
+      "severity": "sev1",
+      "suite": "slow",
+      "ok": true,
+      "status": null,
+      "latency_ms": 95,
+      "detail": "",
+      "checked_at": "2026-11-14T20:37:15.475Z",
+      "consecutive_failures": 0,
+      "consecutive_successes": 1,
+      "last_ok_at": "2026-11-14T20:37:15.475Z",
+      "last_failure_at": null,
+      "failing_since": null,
+      "suites": [
+        "slow"
+      ],
+      "observed": {}
+    },
+    "dns-staff-resolves": {
+      "name": "Staff site address resolves",
+      "component": "dns",
+      "severity": "sev2",
+      "suite": "slow",
+      "ok": true,
+      "status": null,
+      "latency_ms": 49,
+      "detail": "",
+      "checked_at": "2026-11-14T20:37:15.475Z",
+      "consecutive_failures": 0,
+      "consecutive_successes": 1,
+      "last_ok_at": "2026-11-14T20:37:15.475Z",
+      "last_failure_at": null,
+      "failing_since": null,
+      "suites": [
+        "slow"
+      ],
+      "observed": {}
+    },
+    "dns-nameservers": {
+      "name": "Nameservers are the two on record",
+      "component": "dns",
+      "severity": "sev2",
+      "suite": "slow",
+      "ok": true,
+      "status": null,
+      "latency_ms": 0,
+      "detail": "",
+      "checked_at": "2026-11-14T20:37:15.475Z",
+      "consecutive_failures": 0,
+      "consecutive_successes": 1,
+      "last_ok_at": "2026-11-14T20:37:15.475Z",
+      "last_failure_at": null,
+      "failing_since": null,
+      "suites": [
+        "slow"
+      ],
+      "observed": {
+        "nameservers": "georgia.ns.cloudflare.com, jasper.ns.cloudflare.com"
+      }
+    },
+    "dns-mail-mx": {
+      "name": "Mail delivery records (MX)",
+      "component": "dns",
+      "severity": "sev2",
+      "suite": "slow",
+      "ok": true,
+      "status": null,
+      "latency_ms": 0,
+      "detail": "",
+      "checked_at": "2026-11-14T20:37:15.475Z",
+      "consecutive_failures": 0,
+      "consecutive_successes": 1,
+      "last_ok_at": "2026-11-14T20:37:15.475Z",
+      "last_failure_at": null,
+      "failing_since": null,
+      "suites": [
+        "slow"
+      ],
+      "observed": {}
+    },
+    "dns-mail-spf": {
+      "name": "Mail sender record (SPF)",
+      "component": "dns",
+      "severity": "sev2",
+      "suite": "slow",
+      "ok": true,
+      "status": null,
+      "latency_ms": 0,
+      "detail": "",
+      "checked_at": "2026-11-14T20:37:15.475Z",
+      "consecutive_failures": 0,
+      "consecutive_successes": 1,
+      "last_ok_at": "2026-11-14T20:37:15.475Z",
+      "last_failure_at": null,
+      "failing_since": null,
+      "suites": [
+        "slow"
+      ],
+      "observed": {}
+    },
+    "dns-mail-microsoft-365": {
+      "name": "Microsoft 365 mail records",
+      "component": "dns",
+      "severity": "sev3",
+      "suite": "slow",
+      "ok": true,
+      "status": null,
+      "latency_ms": 1,
+      "detail": "",
+      "checked_at": "2026-11-14T20:37:15.475Z",
+      "consecutive_failures": 0,
+      "consecutive_successes": 1,
+      "last_ok_at": "2026-11-14T20:37:15.475Z",
+      "last_failure_at": null,
+      "failing_since": null,
+      "suites": [
+        "slow"
+      ],
+      "observed": {}
+    },
+    "dns-mail-dmarc": {
+      "name": "Mail policy record (DMARC)",
+      "component": "dns",
+      "severity": "sev3",
+      "suite": "slow",
+      "ok": true,
+      "status": null,
+      "latency_ms": 0,
+      "detail": "",
+      "checked_at": "2026-11-14T20:37:15.475Z",
+      "consecutive_failures": 0,
+      "consecutive_successes": 1,
+      "last_ok_at": "2026-11-14T20:37:15.475Z",
+      "last_failure_at": null,
+      "failing_since": null,
+      "suites": [
+        "slow"
+      ],
+      "observed": {}
+    },
+    "dns-other-records": {
+      "name": "Other records carried from GoDaddy",
+      "component": "dns",
+      "severity": "sev4",
+      "suite": "slow",
+      "ok": true,
+      "status": null,
+      "latency_ms": 58,
+      "detail": "",
+      "checked_at": "2026-11-14T20:37:15.475Z",
+      "consecutive_failures": 0,
+      "consecutive_successes": 1,
+      "last_ok_at": "2026-11-14T20:37:15.475Z",
+      "last_failure_at": null,
+      "failing_since": null,
+      "suites": [
+        "slow"
+      ],
+      "observed": {}
+    },
+    "domain-expiry": {
+      "name": "Registration of diamondecho.com",
+      "component": "domain",
+      "severity": "sev3",
+      "suite": "slow",
+      "ok": true,
+      "status": null,
+      "latency_ms": 120,
+      "detail": "Registered until 2027-07-17 (245 days left).",
+      "checked_at": "2026-11-14T20:37:15.475Z",
+      "consecutive_failures": 0,
+      "consecutive_successes": 1,
+      "last_ok_at": "2026-11-14T20:37:15.475Z",
+      "last_failure_at": null,
+      "failing_since": null,
+      "suites": [
+        "slow"
+      ],
+      "observed": {
+        "expires": "2027-07-17"
+      }
+    },
+    "domain-registrar-lock": {
+      "name": "Registrar lock",
+      "component": "domain",
+      "severity": "sev3",
+      "suite": "slow",
+      "ok": true,
+      "status": null,
+      "latency_ms": 120,
+      "detail": "Transfer, delete and update locks are on.",
+      "checked_at": "2026-11-14T20:37:15.475Z",
+      "consecutive_failures": 0,
+      "consecutive_successes": 1,
+      "last_ok_at": "2026-11-14T20:37:15.475Z",
+      "last_failure_at": null,
+      "failing_since": null,
+      "suites": [
+        "slow"
+      ],
+      "observed": {
+        "locks": "transfer, delete, update",
+        "registrar": "GoDaddy.com, LLC"
+      }
+    },
+    "domain-delegation": {
+      "name": "Registry points at the nameservers on record",
+      "component": "domain",
+      "severity": "sev2",
+      "suite": "slow",
+      "ok": true,
+      "status": null,
+      "latency_ms": 120,
+      "detail": "",
+      "checked_at": "2026-11-14T20:37:15.475Z",
+      "consecutive_failures": 0,
+      "consecutive_successes": 1,
+      "last_ok_at": "2026-11-14T20:37:15.475Z",
+      "last_failure_at": null,
+      "failing_since": null,
+      "suites": [
+        "slow"
+      ],
+      "observed": {
+        "nameservers": "georgia.ns.cloudflare.com, jasper.ns.cloudflare.com"
+      }
+    },
+    "edge-www-redirect": {
+      "name": "www is sent to the bare name",
+      "component": "public-site",
+      "severity": "sev3",
+      "suite": "slow",
+      "ok": true,
+      "status": 301,
+      "latency_ms": 42,
+      "detail": "",
+      "checked_at": "2026-11-14T20:37:15.475Z",
+      "consecutive_failures": 0,
+      "consecutive_successes": 1,
+      "last_ok_at": "2026-11-14T20:37:15.475Z",
+      "last_failure_at": null,
+      "failing_since": null,
+      "suites": [
+        "slow"
+      ],
+      "observed": {}
+    },
+    "edge-dnssec": {
+      "name": "DNSSEC (information)",
+      "component": "dns",
+      "severity": "sev4",
+      "suite": "slow",
+      "ok": true,
+      "status": null,
+      "latency_ms": 36,
+      "detail": "DNSSEC is not switched on: DNS answers for the domain are not signed. Information only; see docs/sre/edge.md.",
+      "checked_at": "2026-11-14T20:37:15.475Z",
+      "consecutive_failures": 0,
+      "consecutive_successes": 1,
+      "last_ok_at": "2026-11-14T20:37:15.475Z",
+      "last_failure_at": null,
+      "failing_since": null,
+      "suites": [
+        "slow"
+      ],
+      "observed": {
+        "dnssec": "absent"
+      }
+    },
+    "edge-caa": {
+      "name": "CAA record (information)",
+      "component": "dns",
+      "severity": "sev4",
+      "suite": "slow",
+      "ok": true,
+      "status": null,
+      "latency_ms": 10,
+      "detail": "No CAA record: any certificate authority may issue for the domain. Information only; see docs/sre/edge.md.",
+      "checked_at": "2026-11-14T20:37:15.475Z",
+      "consecutive_failures": 0,
+      "consecutive_successes": 1,
+      "last_ok_at": "2026-11-14T20:37:15.475Z",
+      "last_failure_at": null,
+      "failing_since": null,
+      "suites": [
+        "slow"
+      ],
+      "observed": {
+        "caa": "absent"
+      }
     }
   },
   "last_runs": {
     "fast": {
       "at": "2026-11-14T20:06:24.432Z",
       "region": null
+    },
+    "slow": {
+      "at": "2026-11-14T20:37:11.281Z",
+      "region": "eastus",
+      "cloudflare_refused": 1
     }
   }
 }
