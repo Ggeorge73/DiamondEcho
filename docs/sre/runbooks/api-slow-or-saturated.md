@@ -9,11 +9,10 @@
 
 ## Symptoms
 
-- Deal Studio takes many seconds after "Analyze", then may show "The
-  analysis service could not be reached, so nothing was calculated. Check
-  your connection and try again." (Google refused or cut off the request), or
-  "Request failed with status code 503" (or another number). The visitor's
-  figures and connection are fine: the service was busy. Deal Studio does not
+- Deal Studio takes many seconds after "Analyze" (it gives up after 20
+  seconds), then shows "The calculator is temporarily unavailable. Please try
+  again shortly." with a Try again button. The visitor's figures are kept and
+  their connection is fine: the service was busy. Deal Studio does not
   calculate on the device when the service is busy or down; see
   [capacity.md](../capacity.md).
 - The form says "We could not send your request just now. Nothing was
@@ -35,10 +34,9 @@ request each). When all three are busy, other requests wait, and after a
 while Google refuses them. Deal Studio, the assistant, the inquiry form and
 the market brief all share those three places, and every page load asks for
 the market brief, so a busy site is a busy API. A refused inquiry is never
-stored. When our own limit refuses it, the visitor is asked to call or email.
-When Google refuses it, the visitor only reads "We could not send your
-request just now. Nothing was submitted." with no suggestion to call, so the
-inquiry may be lost to the business even though nothing was lost silently. The pages themselves, search, the mortgage
+stored. Whoever refuses it, our own limit or Google, the visitor reads "We
+couldn't send your request. Please try again, or call or email us." with the
+office contacts, and what they typed stays in the form. The pages themselves, search, the mortgage
 simulator and the seller net sheet keep working.
 
 ## Check first

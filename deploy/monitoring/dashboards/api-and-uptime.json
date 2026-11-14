@@ -14,7 +14,7 @@
         "widget": {
           "title": "About this dashboard",
           "text": {
-            "content": "The API (Cloud Run service diamondecho-api) and the Google Cloud uptime checks. Every number here is measured by Google Cloud; nothing is estimated. The site's pages are served by Cloudflare and do not appear here except through the uptime checks. Guide: docs/sre/observability.md. Logs Explorer filters: jsonPayload.event=\"request.error\" (server errors, by route) and jsonPayload.event=\"request.slow\" (slow requests, by route).",
+            "content": "The API (Cloud Run service diamondecho-api) and the Google Cloud uptime check of the API. Every number here is measured by Google Cloud; nothing is estimated. The site's pages are served by Cloudflare and do not appear here: no web page is checked from Google Cloud. Guide: docs/sre/observability.md. Logs Explorer filters: jsonPayload.event=\"request.error\" (server errors, by route) and jsonPayload.event=\"request.slow\" (slow requests, by route).",
             "format": "MARKDOWN"
           }
         }

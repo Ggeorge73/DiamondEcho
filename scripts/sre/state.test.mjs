@@ -202,3 +202,39 @@ test("a run where Cloudflare refused the monitor files only what was measured (n
   assert.deepEqual(uptime["public-site"]["2026-11-13"], { runs: 1, failed: 0 });
   assert.deepEqual(uptime.api["2026-11-13"], { runs: 2, failed: 0 });
 });
+
+test("a check its suite no longer makes is dropped at once, so the headline is not 'unknown' over it", () => {
+  const api = check({ id: "api-health", name: "API is up", component: "api", severity: "sev2", slis: ["api-availability"] });
+  const redirect = check({ id: "public-www-redirect", name: "www redirects", component: "public-site", severity: "sev2", status: 301, slis: [] });
+  const searchPage = check({ id: "search-page", name: "Property search page", component: "search", severity: "sev2", ok: false, status: 403, slis: [] });
+  // The monitor loaded pages once (and they failed), then stopped asking for
+  // them. Hours later a run makes only the checks that are left.
+  const before = replay([[check({ ok: false, status: 403 }), searchPage, redirect, api]]);
+  assert.deepEqual(Object.keys(before.status.components), ["public-site", "search", "api"]);
+  const later = recordRun({ status: before.status, uptime: before.uptime, run: aRun(T0 + 600 * MIN, [redirect, api]), now: T0 + 600 * MIN + 5000 });
+  assert.deepEqual(Object.keys(later.status.checks).sort(), ["api-health", "public-www-redirect"]);
+  assert.deepEqual(Object.keys(later.status.components), ["public-site", "api"], "search has no check left, so it has no row");
+  assert.equal(later.status.overall, "operational");
+});
+
+test("checks are kept when the run is not whole, or when another suite also makes them", () => {
+  const home = check();
+  const api = check({ id: "api-health", name: "API is up", component: "api", severity: "sev2" });
+  const tls = check({ id: "tls-public", name: "Certificate", component: "tls", severity: "sev3" });
+  let state = replay([[home, api]]);
+  // The slow suite also makes api-health, and makes tls-public.
+  state = recordRun({ status: state.status, uptime: state.uptime, run: aRun(T0 + 7 * MIN, [api, tls], "slow"), now: T0 + 7 * MIN + 5000 });
+  assert.deepEqual(Object.keys(state.status.checks).sort(), ["api-health", "public-home", "tls-public"], "a slow run does not drop fast checks");
+  // A module broke: it handed in a monitor- check instead of its own.
+  const broken = check({ id: "monitor-pages", name: "Monitor could run the website page checks", component: "public-site", severity: "sev3", ok: false, status: null, latency_ms: null, slis: [] });
+  state = recordRun({ status: state.status, uptime: state.uptime, run: aRun(T0 + 10 * MIN, [broken, api]), now: T0 + 10 * MIN + 5000 });
+  assert.ok(state.status.checks["public-home"], "kept: its part must show as not watched, not vanish");
+  // A whole fast run without api-health: kept, because the slow suite makes it too.
+  state = recordRun({ status: state.status, uptime: state.uptime, run: aRun(T0 + 15 * MIN, [home]), now: T0 + 15 * MIN + 5000 });
+  assert.ok(state.status.checks["api-health"]);
+  assert.equal(state.status.checks["monitor-pages"], undefined, "the monitor fault is gone once the module runs again");
+  // A blind run drops nothing.
+  const dead = (id, component) => check({ id, name: id, component, ok: false, status: null, latency_ms: null, slis: [] });
+  state = recordRun({ status: state.status, uptime: state.uptime, run: aRun(T0 + 20 * MIN, [dead("outside-dns-probe", "dns"), dead("x-a", "api"), dead("x-b", "api")]), now: T0 + 20 * MIN + 5000 });
+  assert.ok(state.status.checks["public-home"] && state.status.checks["api-health"]);
+});

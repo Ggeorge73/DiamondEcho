@@ -244,6 +244,7 @@ included: `c` is empty and the run counts against no SLO) and `"refused": N`
 | `bash scripts/sre/cloudrun/deploy.sh [--apply]` | release and change safety | the repository | with `--apply`, a new Cloud Run revision |
 | `node scripts/sre/slo-calc.mjs --state-dir DIR --window-days 28 --out slo.json` | SLO | `history/` | `slo.json` |
 | `node scripts/sre/weekly-report.mjs --state-dir DIR --out report.md [--apply]` | SLO | state dir | `report.md`; with `--apply`, opens (or comments on) that week's `sre-report` issue |
+| `node scripts/sre/handover.mjs --started EPOCH_SECONDS [--interval 300] [--dry-run]` | lead | this workflow's runs (GitHub API) | nothing on disk; waits out the rest of the interval, then starts the next `sre-monitor.yml` run on `main` (`workflow_dispatch`, suite `auto`), or stands down when a newer run is already under way. Needs `actions: write`. Exit 0 or 2 |
 
 `lib/github.mjs` (observability) is the one way scripts talk to GitHub:
 `githubClient({ token, repository, fetch })` returns

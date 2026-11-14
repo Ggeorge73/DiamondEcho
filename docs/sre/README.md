@@ -20,7 +20,7 @@ flowchart LR
     A --> I["sre-incident issue<br/>(email) + optional chat"]
     S --> P["Public status page"]
     A --> R["Rollback engine<br/>(off until switched on)"]
-    G["Google Cloud uptime checks<br/>(several continents, when applied)"] --> E["Email to realtor@"]
+    G["Google Cloud uptime check of the API<br/>(several continents, when applied)"] --> E["Email to realtor@"]
     D["After every merge: post-merge check"] --> A
     W["Weekly reliability report"] --> I
 ```
@@ -75,7 +75,7 @@ flowchart LR
 
 | Workflow | When | What it does | Changes production? |
 | --- | --- | --- | --- |
-| `sre-monitor.yml` | every 5 min (fast), hourly (slow), once `SRE_MONITOR` = `enabled` | checks, state, alerts, status page | no; the rollback engine only if switched on |
+| `sre-monitor.yml` | every 5 min (fast), hourly (slow), once `SRE_MONITOR` = `enabled`; each run starts the next, the schedule is only the watchdog | checks, state, alerts, status page | no; the rollback engine only if switched on |
 | `sre-post-merge-check.yml` | after every merge to `main`, once `SRE_MONITOR` = `enabled` | waits for Cloudflare Pages to report the new site build, then runs the monitor's own checks | no |
 | `sre-weekly-report.yml` | Mondays | reliability report as an issue | no |
 | `sre-chaos.yml` | weekly and by hand | resilience tests, local chaos experiments, monitoring fire drill | no (runs on the GitHub runner only) |
@@ -88,9 +88,9 @@ flowchart LR
 - It does not load-test, submit inquiries to, or change the live site.
 - It does not replace a person: it tells Gbenga, and prepares the fix.
 - Probes every five minutes cannot see an outage shorter than five minutes or
-  a problem only some visitors have. The Google Cloud uptime checks (once
-  applied) add a second view from several continents, and the real-request
-  SLOs a third.
+  a problem only some visitors have. The Google Cloud uptime check of the
+  API (once applied) adds a second view from several continents, and the
+  real-request SLOs a third.
 - **It does not load any web page** (Gbenga's decisions of 2026-11-14; a
   known gap, not a defect). If a page is broken or empty, or Cloudflare has
   an outage, while the API keeps answering, no incident opens and the status

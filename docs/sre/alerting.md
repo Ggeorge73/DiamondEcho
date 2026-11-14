@@ -210,7 +210,7 @@ about it. What covers each failure:
 | --- | --- |
 | One suite stops (the 5-minute or the hourly checks) | The other suite, at its next run: sev3 "Monitoring cannot see the site" after 45 minutes (5-minute checks) or 3 hours (hourly checks) |
 | The monitor's network | The blind-run rule above, after two blind monitor runs in a row: about 2 hours on the hourly checks; 5 to 10 minutes on the 5-minute checks once `outside-dns-probe` is there (until then the 5-minute checks cannot tell, see above) |
-| The whole workflow, or GitHub | **The Google Cloud uptime checks**, which run in Google Cloud from several continents and alert by email on their own. This is the independent heartbeat. Until Gbenga applies them, nobody is told; the status page shows "stale" to visitors after 30 minutes |
+| The whole workflow, or GitHub | **The Google Cloud uptime check of the API**, which runs in Google Cloud from several continents and alert by email on their own. This is the independent heartbeat. Until Gbenga applies them, nobody is told; the status page shows "stale" to visitors after 30 minutes |
 | The uptime checks themselves | The "uptime checks have stopped reporting" policy, after 30 minutes without a result |
 | Both paths at once | Nothing. The 9:00 look at the inquiry queue ([DE-31](../de31-inquiry-routing.md)) is the human safety net for inquiries |
 

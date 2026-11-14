@@ -43,7 +43,7 @@ case "$headers" in *"Bearer fake-access-token"*) ;; *) echo "fake curl: no token
 printf 'curl\\t%s\\t%s\\n' "$method" "$url" >> "$FAKE_LOG"
 [ -n "$body" ] && cp "$body" "$FAKE_SENT/$(basename "$body")"
 case "$method $url" in
-  "GET "*uptimeCheckConfigs*) [ -n "$FAKE_EXISTING" ] && echo '{"uptimeCheckConfigs":[{"name":"projects/diamondecho-prod/uptimeCheckConfigs/home-1","displayName":"DiamondEcho SRE: Home page"}]}' || echo '{}' ;;
+  "GET "*uptimeCheckConfigs*) [ -n "$FAKE_EXISTING" ] && echo '{"uptimeCheckConfigs":[{"name":"projects/diamondecho-prod/uptimeCheckConfigs/home-1","displayName":"DiamondEcho SRE: API is up"}]}' || echo '{}' ;;
   "GET "*/serviceLevelObjectives*) echo '{"serviceLevelObjectives":[{"name":"projects/diamondecho-prod/services/s1/serviceLevelObjectives/o1","userLabels":{"sli":"api-availability"},"displayName":"old name"}]}' ;;
   "GET "*/services*) [ -n "$FAKE_EXISTING" ] && echo '{"services":[{"name":"projects/diamondecho-prod/services/s1","displayName":"DiamondEcho API (Cloud Run diamondecho-api, us-east1)"}]}' || echo '{}' ;;
   "POST "*/services) echo '{"name":"projects/diamondecho-prod/services/new1"}' ;;
@@ -88,7 +88,7 @@ test("the plan reads the project, changes nothing, and lists every definition", 
     assert.match(stdout, /alert-policy\s+update\s+DiamondEcho SRE: API server errors above 5 percent/);
     assert.match(stdout, /alert-policy\s+create\s+DiamondEcho SRE: uptime check failing from 2 or more places/);
     assert.match(stdout, /dashboard\s+create\s+DiamondEcho SRE: API and uptime/);
-    assert.match(stdout, /uptime-check\s+update\s+DiamondEcho SRE: Home page/);
+    assert.match(stdout, /uptime-check\s+update\s+DiamondEcho SRE: API is up/);
     assert.match(stdout, /slo\s+update\s+API availability/, "an SLO is matched by its sli label, not its name");
     assert.match(stdout, /Nothing was changed/);
     assert.ok(!stdout.includes("fake-access-token"), "the token is never printed");

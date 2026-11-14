@@ -1,25 +1,39 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Any, Dict, List, Literal, Optional
+from typing import Annotated, Dict, List, Literal, Optional, Union
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictFloat, StrictInt, StringConstraints, field_validator, model_validator
 
-
-class Jurisdiction(BaseModel):
-    country: str = "US"
-    state: Optional[str] = None
-    locality: Optional[str] = None
+from .calculators import INPUTS
 
 
-class ConversationMessage(BaseModel):
+class RequestModel(BaseModel):
+    """What a visitor sends: a field this service does not know is refused,
+    and so is a number that is not finite."""
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+
+class Jurisdiction(RequestModel):
+    # Also part of the answer, so the limits hold both ways. The chat's state
+    # box takes 30 characters and may hold a state's full name; the service
+    # reads the state from it (intent.normalize_state) and ignores the rest.
+    country: str = Field(default="US", min_length=2, max_length=56)
+    state: Optional[str] = Field(default=None, max_length=56)
+    locality: Optional[str] = Field(default=None, max_length=120)
+
+
+class ConversationMessage(RequestModel):
     role: Literal["user", "assistant"]
     content: str = Field(min_length=1, max_length=6000)
 
 
-class ChatRequest(BaseModel):
+class ChatRequest(RequestModel):
+    # One question of up to 6,000 characters and at most 12 earlier messages
+    # of the same size (the chat sends its last 8). request_guard.py sizes the
+    # whole body from these figures.
     message: str = Field(min_length=2, max_length=6000)
-    session_id: Optional[str] = Field(default=None, max_length=128)
+    session_id: Optional[str] = Field(default=None, min_length=1, max_length=128, pattern=r"^[A-Za-z0-9._:-]+$")
     jurisdiction: Jurisdiction = Field(default_factory=Jurisdiction)
     history: List[ConversationMessage] = Field(default_factory=list, max_length=12)
 
@@ -72,10 +86,23 @@ class ChatResponse(BaseModel):
     handoff: Optional[Handoff] = None
 
 
-class DealAnalysisRequest(BaseModel):
+# A calculator input: a plain JSON number (not text, not true/false), finite,
+# and no larger than the calculators' own ceiling for an amount. Each input's
+# sign and tighter ceiling are checked by the calculator (ai/calculators.py).
+CalculatorNumber = Annotated[Union[StrictInt, StrictFloat], Field(ge=-1e15, le=1e15, allow_inf_nan=False)]
+CalculatorName = Annotated[str, StringConstraints(min_length=1, max_length=64, pattern=r"^[a-z_]+$")]
+
+
+class DealAnalysisRequest(RequestModel):
     model: Literal["mortgage", "rental", "fix_flip", "commercial"]
-    inputs: Dict[str, Any]
+    inputs: Dict[CalculatorName, CalculatorNumber] = Field(max_length=32)
     jurisdiction: Jurisdiction = Field(default_factory=Jurisdiction)
+
+    @model_validator(mode="after")
+    def only_inputs_the_model_reads(self) -> "DealAnalysisRequest":
+        if any(name not in INPUTS[self.model] for name in self.inputs):
+            raise ValueError("inputs holds a name this calculator does not read")
+        return self
 
 
 class DealAnalysisResponse(BaseModel):

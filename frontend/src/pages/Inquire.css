@@ -66,6 +66,8 @@
 .de-inquiry-note { margin: 15px 0 0; }
 .de-inquiry-error { padding: 18px; margin-bottom: 24px; border: 1px solid #f2a99d; color: #fff0ed; }
 .de-inquiry-error p { margin: 8px 0 0; font-size: 13px; line-height: 1.5; }
+.de-inquiry-error:focus-visible { outline: 3px solid var(--steel-bright); outline-offset: 3px; }
+.de-inquiry-error__contact a { color: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
 .de-inquiry-receipt { outline: none; }
 .de-inquiry-receipt > p:not(.eyebrow) { color: var(--mist); line-height: 1.7; }
 .de-inquiry-receipt > .de-inquiry-hours { margin-top: 12px; }

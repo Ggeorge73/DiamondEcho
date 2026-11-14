@@ -215,7 +215,8 @@ class _ScenarioRun:
         scenario = self.scenario
         completed = self.attempted - self.failures
         if completed == 0:
-            raise ValueError(f"Monte Carlo scenario '{scenario.name}' produced no valid iterations")
+            # The scenario's name is whatever the caller sent, so it is not repeated.
+            raise ValueError("A Monte Carlo scenario produced no valid iterations")
         summaries = {
             key: _summary(values, self.losses_without_irr if key == "irr" else 0)
             for key, values in self.observations.items() if values

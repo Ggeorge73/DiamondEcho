@@ -1,9 +1,9 @@
 {
   "displayName": "DiamondEcho SRE: uptime checks have stopped reporting",
   "documentation": {
-    "subject": "DiamondEcho: the Google Cloud uptime checks have gone quiet",
+    "subject": "DiamondEcho: the Google Cloud uptime check has gone quiet",
     "mimeType": "text/markdown",
-    "content": "No uptime check result has arrived for 30 minutes. The checks run every 5 minutes, so they have been deleted, paused, or Cloud Monitoring is having trouble. Without them the only watch left is the GitHub monitor.\n\nWhat to do: follow docs/sre/runbooks/monitoring-is-blind.md.\n\nThis message carries no visitor data."
+    "content": "No uptime check result has arrived for 30 minutes. The check of the API runs every 5 minutes, so it has been deleted, paused, or Cloud Monitoring is having trouble. Without it the only watch left is the GitHub monitor.\n\nWhat to do: follow docs/sre/runbooks/monitoring-is-blind.md.\n\nThis message carries no visitor data."
   },
   "conditions": [
     {

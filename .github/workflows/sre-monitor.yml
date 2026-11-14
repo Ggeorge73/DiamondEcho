@@ -25,17 +25,27 @@ name: SRE monitor
 # nothing here prints a secret, a token or visitor data.
 #
 # The contract between the steps is scripts/sre/README.md.
+#
+# How it keeps time. GitHub's scheduler does not keep a five-minute schedule:
+# on 2026-11-14 it started this workflow 4 times in about 17 hours. A run
+# started through GitHub's API is not scheduled and starts when asked. So
+# each run ends with the "handover" job, which waits out the rest of the five
+# minutes and asks GitHub to start the next run (scripts/sre/handover.mjs).
+# The two schedules below are the watchdog: they start the chain, and restart
+# it if a link breaks. To go back to the schedule alone, set the repository
+# variable SRE_MONITOR_CHAIN to "off".
 on:
   schedule:
-    - cron: '*/5 * * * *' # fast checks, every 5 minutes (GitHub may run it late)
-    - cron: '7 * * * *' # slow checks, every hour at :07
+    - cron: '4-59/10 * * * *' # watchdog: fast checks (GitHub may run it late, or not at all)
+    - cron: '37 * * * *' # watchdog: slow checks, every hour at :37
   workflow_dispatch:
     inputs:
       suite:
         description: Which checks to run
         type: choice
-        options: [fast, slow, post-deploy]
-        default: fast
+        # auto: the fast checks, or the slow ones when they are due (hourly).
+        options: [auto, fast, slow, post-deploy]
+        default: auto
   pull_request:
     paths:
       - scripts/sre/**
@@ -108,6 +118,8 @@ jobs:
     concurrency:
       group: sre-monitor
       cancel-in-progress: false
+    outputs:
+      started: ${{ steps.paths.outputs.started }}
     permissions:
       contents: write # the sre-status branch only (scripts/sre/state-git.sh never touches main)
       issues: write # sre-incident issues
@@ -126,22 +138,26 @@ jobs:
       # The runner's temporary folder is not known at job level, so the paths
       # the later steps share are set here.
       - name: Working paths
+        id: paths
         run: |
           echo "STATE_DIR=$RUNNER_TEMP/sre-state" >> "$GITHUB_ENV"
           echo "RUN_FILE=$RUNNER_TEMP/run.json" >> "$GITHUB_ENV"
+          # When this run began, for the handover job (seconds since 1970).
+          echo "started=$(date +%s)" >> "$GITHUB_OUTPUT"
 
       - name: Open the status branch
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: bash scripts/sre/state-git.sh checkout "$STATE_DIR"
 
-      # The hourly run does the slow checks and the five-minute runs the fast
-      # ones. If the hourly run was dropped while waiting (see the concurrency
-      # note above) or never started, the slow checks would go unseen for
-      # hours. So a five-minute run does the slow checks instead when the last
-      # slow run on record is more than 90 minutes old. Only every other run
-      # may do that (even run numbers), so the fast checks can never be
-      # starved, whatever is wrong with the slow ones.
+      # Which checks this run does. A run started by hand with a named suite
+      # does that suite, and the hourly schedule does the slow checks. Every
+      # other run ("auto": the chain and the five-minute watchdog) does the
+      # fast checks, except that it does the slow checks instead when the last
+      # slow run on record is more than 60 minutes old. That is how the slow
+      # checks stay hourly when GitHub does not keep the hourly schedule. Only
+      # every other run may do that (even run numbers), so the fast checks can
+      # never be starved, whatever is wrong with the slow ones.
       - name: Choose the checks
         id: suite
         # Even if the status branch could not be opened: the site is still checked.
@@ -150,8 +166,8 @@ jobs:
           SCHEDULE: ${{ github.event.schedule }}
           INPUT_SUITE: ${{ inputs.suite }}
         run: |
-          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then suite="$INPUT_SUITE"
-          elif [ "$SCHEDULE" = '7 * * * *' ]; then suite=slow
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] && [ "$INPUT_SUITE" != auto ] && [ -n "$INPUT_SUITE" ]; then suite="$INPUT_SUITE"
+          elif [ "$SCHEDULE" = '37 * * * *' ]; then suite=slow
           else
             suite=fast
             overdue=$(node -e '
@@ -160,13 +176,13 @@ jobs:
                 const fast = Date.parse(status.last_runs?.fast?.at ?? "");
                 const slow = Date.parse(status.last_runs?.slow?.at ?? "");
                 // Only once the monitor has history: the first runs stay as scheduled.
-                const late = Number.isFinite(fast) && !(Date.now() - slow < 90 * 60_000);
+                const late = Number.isFinite(fast) && !(Date.now() - slow < 60 * 60_000);
                 console.log(late ? "yes" : "no");
               } catch { console.log("no"); }
             ')
             if [ "$overdue" = yes ] && [ $((GITHUB_RUN_NUMBER % 2)) -eq 0 ]; then
               suite=slow
-              echo "The last slow run is more than 90 minutes old: this run does the slow checks."
+              echo "The last slow run is more than 60 minutes old: this run does the slow checks."
             fi
           fi
           echo "suite=$suite" >> "$GITHUB_OUTPUT"
@@ -310,3 +326,42 @@ jobs:
       - name: Publish
         id: deploy
         uses: actions/deploy-pages@v4
+
+  # Starts the next run five minutes after this one began (see "How it keeps
+  # time" at the top). It runs even when the checks job failed, so one bad
+  # run cannot stop the watch (a run GitHub cancelled, or dropped while it
+  # waited its turn, hands nothing over: the run that replaced it does). Only on main and only while the monitor is
+  # switched on, so switching SRE_MONITOR off stops the chain. A newer
+  # handover cancels an older one that is still waiting, and the script
+  # stands down when a newer run is already under way: one chain, never two.
+  # The wait holds a runner for up to five minutes of every five.
+  handover:
+    name: Start the next run in five minutes
+    needs: monitor
+    if: >-
+      !cancelled() && needs.monitor.result != 'skipped' && needs.monitor.result != 'cancelled' &&
+      github.repository == 'Ggeorge73/DiamondEcho' && github.ref == 'refs/heads/main' &&
+      vars.SRE_MONITOR == 'enabled' && vars.SRE_MONITOR_CHAIN != 'off'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    concurrency:
+      group: sre-monitor-handover
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      actions: write # read this workflow's runs and start the next one; nothing else
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Wait, then start the next run
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          STARTED: ${{ needs.monitor.outputs.started }}
+        run: |
+          # If the monitor job never got as far as noting its start, count from now.
+          case "$STARTED" in ''|*[!0-9]*) STARTED=$(date +%s) ;; esac
+          node scripts/sre/handover.mjs --started "$STARTED"

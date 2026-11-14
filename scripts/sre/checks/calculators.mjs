@@ -47,8 +47,8 @@ export async function run(ctx) {
   // are not asked (pages.mjs pagesNotAsked).
   if (!pagesNotAsked(ctx)) for (const page of pagesFor("calculators")) checks.push((await checkPage(ctx, page)).check());
 
-  // sev2: when the service is down, Deal Studio shows "The analysis service
-  // could not be reached, so nothing was calculated" and the visitor gets no
+  // sev2: when the service is down, Deal Studio shows "The calculator is
+  // temporarily unavailable" and the visitor gets no
   // figures (it calculates in the browser only when the service answers with
   // an older formula). sev2 is also what lets a bad API deploy that breaks
   // only this route be rolled back (remediation-policy.mjs).

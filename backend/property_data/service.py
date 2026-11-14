@@ -25,6 +25,10 @@ MARKETS = [
     "Seattle, WA", "Tampa, FL", "Washington, DC",
 ]
 
+class ProviderError(RuntimeError):
+    """A provider answered, but not with what it documents."""
+
+
 def _get_json(url: str, headers: dict | None = None, timeout: int = 8):
     request = Request(url, headers=headers or {})
     with urlopen(request, timeout=timeout) as response:  # nosec B310 - provider URLs are fixed
@@ -80,7 +84,15 @@ def lookup(address: str) -> PropertyDetails:
         )
         if not payload:
             raise LookupError("No property record was found for that address.")
+        # RentCast answers with a list of records. Anything else (an error
+        # document, a changed shape) is the provider failing, not a missing
+        # record: the router answers 502 for it (W12).
+        if not isinstance(payload, list) or not isinstance(payload[0], dict):
+            raise ProviderError("RentCast answered with something other than a list of records.")
         item = payload[0]
+        # A record with neither an id nor an address is not a found property (W13).
+        if not item.get("id") and not item.get("formattedAddress"):
+            raise LookupError("No property record was found for that address.")
         assessments = item.get("taxAssessments") or {}
         taxes = item.get("propertyTaxes") or {}
         latest_assessment = next(iter(sorted(assessments.items(), reverse=True)), (None, {}))[1]

@@ -17,7 +17,8 @@ import { classifyFloodZone } from '../lib/floodZone';
 import { downloadDealWorkbook } from '../lib/dealWorkbook';
 import { buildDealRequest } from '../lib/dealRequest';
 import {
-  FIELD_LABELS, MONTE_CARLO_VACANCY_CAP_PERCENT, responseErrorMessage, validateDealForm,
+  DEAL_ANALYSIS_TIMEOUT_MS, DEAL_SERVICE_UNAVAILABLE, DealServiceUnavailable, FIELD_LABELS,
+  MONTE_CARLO_VACANCY_CAP_PERCENT, responseErrorMessage, validateDealForm,
   validateMonteCarloForm, validateMonteCarloScenarios,
 } from '../lib/dealValidation';
 import { simulationLean } from '../lib/monteCarloLean';
@@ -786,8 +787,9 @@ const InvestmentCalculator = () => {
     return buildDealRequest(form);
   };
 
+  // Also the "Try again" button of the unavailable notice, which has no form event.
   const analyze = async (event) => {
-    event.preventDefault();
+    event?.preventDefault();
     const generation = ++baseGeneration.current;
     setLoading(true); setError(''); setResult(null); setDecision(null); setResultMode('base');
     setAnalysisSnapshot(null);
@@ -799,7 +801,12 @@ const InvestmentCalculator = () => {
       if (!backendUrl) analysis = analyzeDealLocally(request);
       else {
         try {
-          const { data } = await axios.post(`${backendUrl}/api/v1/deals/analyze`, request);
+          const { data } = await axios.post(`${backendUrl}/api/v1/deals/analyze`, request, { timeout: DEAL_ANALYSIS_TIMEOUT_MS });
+          // A 2xx that is not an analysis of this deal (a network's sign-in
+          // page, a proxy's page, half an answer) is the service failing.
+          if (!data || typeof data !== 'object' || data.strategy !== request.strategy || !data.metrics || typeof data.metrics !== 'object') {
+            throw new DealServiceUnavailable();
+          }
           // A service still on an older formula for this strategy: calculate here instead.
           analysis = serviceFormulaIsCurrent(data?.formula_version, SERVICE_FORMULA_MINIMUM[data?.strategy])
             ? data
@@ -1328,7 +1335,8 @@ const InvestmentCalculator = () => {
           {resultMode === 'base' && !loading && !result && !error && (
             <div className="studio-empty"><CircleDollarSign /><h2>Your decision canvas</h2><p>Complete the assumptions and run an analysis. DiamondEcho will calculate returns, debt coverage, value creation, and risk signals without hidden inputs.</p></div>
           )}
-          {resultMode === 'base' && error && <div className="studio-error" role="alert"><AlertCircle /><h2>Analysis needs attention</h2><p>{error}</p><button onClick={() => setError('')}><RotateCcw /> Review inputs</button></div>}
+          {resultMode === 'base' && error && error === DEAL_SERVICE_UNAVAILABLE && <div className="studio-error studio-error--unavailable" role="alert"><AlertCircle /><h2>Calculator temporarily unavailable</h2><p>{DEAL_SERVICE_UNAVAILABLE}</p><p>Nothing was calculated. The figures you entered are kept.</p><button type="button" onClick={() => analyze()}><RotateCcw /> Try again</button></div>}
+          {resultMode === 'base' && error && error !== DEAL_SERVICE_UNAVAILABLE && <div className="studio-error" role="alert"><AlertCircle /><h2>Analysis needs attention</h2><p>{error}</p><button type="button" onClick={() => setError('')}><RotateCcw /> Review inputs</button></div>}
           {resultMode === 'base' && resultIssue && <div className="studio-error" role="alert"><AlertCircle /><h2>Analysis needs attention</h2><p>{resultIssue}</p><button onClick={() => { setResult(null); setDecision(null); }}><RotateCcw /> Review inputs</button></div>}
           {resultMode === 'base' && result && !resultIssue && (
             <div className="studio-result">

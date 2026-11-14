@@ -8,13 +8,22 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Annotated, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+
+# The largest dollar amount, area or count of units a request may carry: a
+# thousand trillion. It is far above any real deal, it is the ceiling the
+# assistant's calculators already use (ai/calculators.py), and it is close to
+# the largest whole number a browser holds exactly, which is the only ceiling
+# the Deal Studio form itself applies. With every amount at or under it, and
+# every rate and period bounded below, no sum or growth here can overflow.
+MAX_AMOUNT = 1e15
 
 
 class DealStrategy(str, Enum):
@@ -39,16 +48,16 @@ class PropertyType(str, Enum):
 class PropertyInputs(StrictModel):
     property_type: PropertyType
     unit_count: int = Field(default=1, ge=1, le=1_000_000)
-    rentable_square_feet: Optional[float] = Field(default=None, gt=0)
-    currency: str = Field(default="USD", min_length=3, max_length=3)
+    rentable_square_feet: Optional[float] = Field(default=None, gt=0, le=MAX_AMOUNT)
+    currency: str = Field(default="USD", min_length=3, max_length=3, pattern=r"^[A-Za-z]{3}$")
     market: Optional[str] = Field(default=None, max_length=120)
 
 
 class AcquisitionInputs(StrictModel):
-    purchase_price: float = Field(gt=0)
-    closing_costs: float = Field(default=0, ge=0)
-    due_diligence_costs: float = Field(default=0, ge=0)
-    initial_capex: float = Field(default=0, ge=0)
+    purchase_price: float = Field(gt=0, le=MAX_AMOUNT)
+    closing_costs: float = Field(default=0, ge=0, le=MAX_AMOUNT)
+    due_diligence_costs: float = Field(default=0, ge=0, le=MAX_AMOUNT)
+    initial_capex: float = Field(default=0, ge=0, le=MAX_AMOUNT)
     hold_months: int = Field(default=60, ge=1, le=600)
 
 
@@ -62,7 +71,7 @@ class LoanBasis(str, Enum):
 
 class DebtInputs(StrictModel):
     name: str = Field(default="Senior loan", min_length=1, max_length=80)
-    principal: Optional[float] = Field(default=None, gt=0)
+    principal: Optional[float] = Field(default=None, gt=0, le=MAX_AMOUNT)
     loan_to_value: Optional[float] = Field(default=None, gt=0, le=2)
     annual_interest_rate: float = Field(default=0, ge=0, le=1)
     amortization_years: int = Field(default=30, ge=1, le=50)
@@ -90,16 +99,17 @@ class DebtInputs(StrictModel):
 
 
 class OperatingInputs(StrictModel):
-    gross_scheduled_rent: float = Field(gt=0, description="Year-one annual rent")
-    other_income: float = Field(default=0, ge=0, description="Year-one annual other income")
+    gross_scheduled_rent: float = Field(gt=0, le=MAX_AMOUNT, description="Year-one annual rent")
+    other_income: float = Field(default=0, ge=0, le=MAX_AMOUNT, description="Year-one annual other income")
     vacancy_rate: float = Field(default=0.05, ge=0, lt=1)
     credit_loss_rate: float = Field(default=0, ge=0, lt=1)
-    operating_expenses: float = Field(default=0, ge=0, description="Annual OpEx before management")
+    operating_expenses: float = Field(default=0, ge=0, le=MAX_AMOUNT, description="Annual OpEx before management")
     management_fee_rate: float = Field(default=0, ge=0, le=0.5)
-    replacement_reserves: float = Field(default=0, ge=0, description="Annual below-NOI reserves")
+    replacement_reserves: float = Field(default=0, ge=0, le=MAX_AMOUNT, description="Annual below-NOI reserves")
     annual_below_noi_costs: float = Field(
         default=0,
         ge=0,
+        le=MAX_AMOUNT,
         description="Annual TI, leasing commissions, or recurring capital costs",
     )
     annual_income_growth_rate: float = Field(default=0, ge=-0.5, le=0.5)
@@ -113,15 +123,16 @@ class OperatingInputs(StrictModel):
 
 
 class FlipInputs(StrictModel):
-    after_repair_value: float = Field(gt=0)
-    rehab_cost: float = Field(default=0, ge=0)
+    after_repair_value: float = Field(gt=0, le=MAX_AMOUNT)
+    rehab_cost: float = Field(default=0, ge=0, le=MAX_AMOUNT)
     rehab_contingency_rate: float = Field(default=0.1, ge=0, le=1)
     monthly_holding_costs: float = Field(
         default=0,
         ge=0,
+        le=MAX_AMOUNT,
         description="Taxes, insurance, utilities, and non-debt holding costs",
     )
-    other_project_costs: float = Field(default=0, ge=0)
+    other_project_costs: float = Field(default=0, ge=0, le=MAX_AMOUNT)
 
 
 class LandDrawOrder(str, Enum):
@@ -140,7 +151,7 @@ class LandInputs(StrictModel):
 
     development_type: str = Field(default="", max_length=80)
     disposition_strategy: str = Field(default="", max_length=80)
-    site_acres: float = Field(default=0, ge=0)
+    site_acres: float = Field(default=0, ge=0, le=MAX_AMOUNT)
     parcel_count: int = Field(default=1, ge=1, le=1_000_000)
     current_zoning: str = Field(default="", max_length=120)
     proposed_zoning: str = Field(default="", max_length=120)
@@ -150,36 +161,36 @@ class LandInputs(StrictModel):
     environmental_status: str = Field(default="phase_i_required", max_length=80)
     geotechnical_status: str = Field(default="not_started", max_length=80)
     flood_zone: str = Field(default="", max_length=40)
-    wetlands_acres: float = Field(default=0, ge=0)
-    planned_units: float = Field(default=0, ge=0)
-    buildable_square_feet: float = Field(default=0, ge=0)
+    wetlands_acres: float = Field(default=0, ge=0, le=MAX_AMOUNT)
+    planned_units: float = Field(default=0, ge=0, le=MAX_AMOUNT)
+    buildable_square_feet: float = Field(default=0, ge=0, le=MAX_AMOUNT)
     development_months: int = Field(default=1, ge=1, le=600)
     absorption_months: int = Field(default=0, ge=0, le=600)
-    site_work_cost: float = Field(default=0, ge=0)
-    hard_construction_cost: float = Field(default=0, ge=0)
-    soft_costs: float = Field(default=0, ge=0)
-    permits_impact_fees: float = Field(default=0, ge=0)
-    environmental_remediation: float = Field(default=0, ge=0)
-    developer_fee: float = Field(default=0, ge=0)
+    site_work_cost: float = Field(default=0, ge=0, le=MAX_AMOUNT)
+    hard_construction_cost: float = Field(default=0, ge=0, le=MAX_AMOUNT)
+    soft_costs: float = Field(default=0, ge=0, le=MAX_AMOUNT)
+    permits_impact_fees: float = Field(default=0, ge=0, le=MAX_AMOUNT)
+    environmental_remediation: float = Field(default=0, ge=0, le=MAX_AMOUNT)
+    developer_fee: float = Field(default=0, ge=0, le=MAX_AMOUNT)
     contingency_rate: float = Field(default=0, ge=0, le=1)
-    annual_carrying_costs: float = Field(default=0, ge=0)
-    expected_terminal_value: float = Field(default=0, ge=0)
-    stabilized_noi: float = Field(default=0, ge=0)
+    annual_carrying_costs: float = Field(default=0, ge=0, le=MAX_AMOUNT)
+    expected_terminal_value: float = Field(default=0, ge=0, le=MAX_AMOUNT)
+    stabilized_noi: float = Field(default=0, ge=0, le=MAX_AMOUNT)
     stabilized_exit_cap_rate: float = Field(default=0, ge=0, le=0.5)
     target_profit_margin: float = Field(default=0, ge=0, lt=1)
     draw_order: LandDrawOrder = LandDrawOrder.PRO_RATA
     # A piece of the site sold early: gross proceeds, in the month they close
     # (counted from closing, kept inside the hold). 0 means no early sale.
-    early_sale_proceeds: float = Field(default=0, ge=0)
+    early_sale_proceeds: float = Field(default=0, ge=0, le=MAX_AMOUNT)
     early_sale_month: int = Field(default=0, ge=0, le=600)
     # A piece kept, an existing house say: its value at the end of the hold
     # (not sold, so no selling costs) and its net income each month while held.
-    retained_value: float = Field(default=0, ge=0)
-    retained_monthly_income: float = Field(default=0, ge=0)
+    retained_value: float = Field(default=0, ge=0, le=MAX_AMOUNT)
+    retained_monthly_income: float = Field(default=0, ge=0, le=MAX_AMOUNT)
 
 
 class ExitInputs(StrictModel):
-    explicit_sale_price: Optional[float] = Field(default=None, gt=0)
+    explicit_sale_price: Optional[float] = Field(default=None, gt=0, le=MAX_AMOUNT)
     exit_cap_rate: Optional[float] = Field(default=None, gt=0, le=0.5)
     selling_cost_rate: float = Field(default=0.06, ge=0, le=0.5)
 
@@ -323,9 +334,16 @@ class SensitivityMetric(str, Enum):
     FLIP_ROI = "flip_roi"
 
 
+# A change on a sensitivity axis becomes one field of a ScenarioShock, so it
+# is held to the widest range any of those fields takes (-0.9 to 5; -1 for
+# the interest rate). The field's own narrower range still applies when the
+# shock is built; a change outside it is refused by the router with 422.
+SensitivityChange = Annotated[float, Field(ge=-1, le=5)]
+
+
 class SensitivityAxis(StrictModel):
     field: SensitivityField
-    changes: List[float] = Field(min_length=1, max_length=11)
+    changes: List[SensitivityChange] = Field(min_length=1, max_length=11)
 
 
 class SensitivityAnalysisRequest(StrictModel):
@@ -364,9 +382,12 @@ class MonteCarloDriver(str, Enum):
 
 
 class TriangularDistribution(StrictModel):
-    minimum: float
-    mode: float
-    maximum: float
+    # A driver is a rate, a relative change, or (hold_months_change) a number
+    # of months up to 599 either way. The engine clamps rates and the hold to
+    # their own ranges; this bound only keeps absurd magnitudes out.
+    minimum: float = Field(ge=-1000, le=1000)
+    mode: float = Field(ge=-1000, le=1000)
+    maximum: float = Field(ge=-1000, le=1000)
 
     @model_validator(mode="after")
     def ordered_values(self) -> "TriangularDistribution":

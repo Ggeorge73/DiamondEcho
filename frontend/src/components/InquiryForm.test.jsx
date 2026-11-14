@@ -68,7 +68,7 @@ test('buyer request requires name, email, message, and explicit consent', async 
   expect(input('consent').getAttribute('aria-invalid')).toBe('false');
   axios.post.mockResolvedValueOnce({ status: 201, data: { status: 'queued', request_id: 'REQ-B', submitted_at: '2026-09-24T12:00:00Z' } });
   await submit();
-  expect(container.textContent).not.toContain('Request needs attention');
+  expect(container.querySelector('[role="alert"]')).toBeNull();
   expect(axios.post).toHaveBeenCalledTimes(1);
   expect(axios.post.mock.calls[0][1]).toMatchObject({
     kind: 'buyer', full_name: 'A Buyer', email: 'buyer@example.com',
@@ -128,6 +128,9 @@ test('503 remains an error; duplicate submit is guarded and retry reuses its key
     rejectFirst({ response: { status: 503, data: { detail: 'The staff queue is unavailable. Please retry with the same submission key.' } } });
   });
   expect(container.textContent).toContain('Your request has not been confirmed');
+  expect(container.textContent).toContain("We couldn't send your request. Please try again, or call or email us.");
+  // The service's own sentence is about its internals and is not shown.
+  expect(container.textContent).not.toMatch(/staff queue|submission key/);
   expect(container.textContent).not.toContain('DiamondEcho received your request');
   axios.post.mockResolvedValueOnce({ status: 200, data: { status: 'queued', request_id: 'REQ-R' } });
   await submit();
@@ -182,8 +185,8 @@ test.each([
   await consent();
   await submit();
   const alert = container.querySelector('[role="alert"]');
-  expect(alert.textContent).toContain('We could not send your request just now. Nothing was submitted.');
-  expect(alert.textContent).not.toMatch(/status code|Network Error/);
+  expect(alert.textContent).toContain("We couldn't send your request. Please try again, or call or email us.");
+  expect(alert.textContent).not.toMatch(/status code|Network Error|Method Not Allowed/);
   expect(container.querySelector('.de-inquiry-receipt')).toBeNull();
   expect(input('fullName').value).toBe('A Buyer');
 });

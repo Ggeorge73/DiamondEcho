@@ -1,9 +1,9 @@
 {
   "displayName": "DiamondEcho SRE: uptime check failing from 2 or more places",
   "documentation": {
-    "subject": "DiamondEcho: a page or the API is failing from more than one place",
+    "subject": "DiamondEcho: the API is failing from more than one place",
     "mimeType": "text/markdown",
-    "content": "A Cloud Monitoring uptime check (deploy/monitoring/uptime-checks/) has failed from at least two checker locations at once. One location failing is usually that location's network; two or more is the site.\n\nThis is the second, independent watch: it runs in Google Cloud, not on GitHub, so it still rings when the GitHub monitor is blind or stopped.\n\nWhat to do: open the incident's check id in Monitoring > Uptime checks to see which page, then follow the runbook for it in docs/sre/runbooks/ (site-down.md for pages, api-down.md for the API, search-provider-down.md for the search page). The GitHub incident issue, if one is open, is the place to write what you find.\n\nThis message carries no visitor data."
+    "content": "The Cloud Monitoring uptime check of the API (deploy/monitoring/uptime-checks/) has failed from at least two checker locations at once. One location failing is usually that location's network; two or more is the API. Only the API is checked from Google Cloud: no web page is.\n\nThis is the second, independent watch: it runs in Google Cloud, not on GitHub, so it still rings when the GitHub monitor is blind or stopped.\n\nWhat to do: follow docs/sre/runbooks/api-down.md. The GitHub incident issue, if one is open, is the place to write what you find.\n\nThis message carries no visitor data."
   },
   "conditions": [
     {

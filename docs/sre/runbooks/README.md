@@ -22,7 +22,7 @@ see below.
 | "Your connection is not private", a certificate warning | [tls-certificate.md](tls-certificate.md) |
 | The domain is expiring, has expired, a lock is off, or it is being moved | [domain-expiry.md](domain-expiry.md) |
 | **Something broke right after a merge or an API deploy** | [bad-deploy.md](bad-deploy.md) |
-| **The form fails to send**, or Deal Studio says "The analysis service could not be reached, so nothing was calculated" | [api-down.md](api-down.md) |
+| **The form says "We couldn't send your request"**, or Deal Studio says "The calculator is temporarily unavailable" | [api-down.md](api-down.md) |
 | The form or Deal Studio is slow, or says it is busy | [api-slow-or-saturated.md](api-slow-or-saturated.md) |
 | The form errors and staff cannot open the queue, while the API's health page is fine | [database-unavailable.md](database-unavailable.md) |
 | **A visitor says they sent a request, but it is not in the queue or no alert email came** | [inquiry-not-delivered.md](inquiry-not-delivered.md) |

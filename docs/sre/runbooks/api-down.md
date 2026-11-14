@@ -9,13 +9,15 @@
 
 ## Symptoms
 
-- A visitor who sends the form sees an error instead of "DiamondEcho received
-  your request".
-- Deal Studio's "Run base analysis" shows "The analysis service could not
-  be reached, so nothing was calculated. Check your connection and try
-  again." when the API does not answer, or "Request failed with status code
-  …" when it answers with an error (it calculates on the device only when
-  the API is out of date, not when it is down).
+- A visitor who sends the form sees "We couldn't send your request. Please
+  try again, or call or email us." with the office contacts, instead of
+  "DiamondEcho received your request". What they typed stays in the form.
+- Deal Studio's "Run base analysis" shows "The calculator is temporarily
+  unavailable. Please try again shortly." with a Try again button, and keeps
+  the figures entered (it calculates on the device only when the API is out
+  of date, not when it is down).
+- (Production shows older wording for both until the site build and the API
+  with the 2026-11-14 changes are live.)
 - Staff open the queue and get an error.
 - The incident issue says "API is down" (or names the inquiry form) and may
   carry a line from the automatic rollback engine: read it first.

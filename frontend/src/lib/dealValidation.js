@@ -233,7 +233,36 @@ const rejectedField = (loc) => (Array.isArray(loc) ? loc : [])
   .map((part) => part.replace(/_/g, ' '))
   .join(' › ');
 
+// How long Deal Studio waits for the analysis service before it gives up.
+// The base analysis is a single calculation the service answers in well
+// under a second; without a limit a stalled connection leaves "Calculating…"
+// on screen for as long as the network holds the request.
+export const DEAL_ANALYSIS_TIMEOUT_MS = 20000;
+
+export const DEAL_SERVICE_UNAVAILABLE = 'The calculator is temporarily unavailable. Please try again shortly.';
+
+// Thrown by the page when the service answers 2xx with something that is not
+// an analysis (a sign-in page from a network, a proxy's page, half an answer).
+export class DealServiceUnavailable extends Error {
+  constructor() { super(DEAL_SERVICE_UNAVAILABLE); this.name = 'DealServiceUnavailable'; }
+}
+
+// True when the fault is the service or the connection, not the figures: no
+// answer, a timeout, a 5xx, a 429, or any refusal that says nothing about the
+// inputs. A 4xx that carries the service's reasons is about the inputs.
+export const isServiceUnavailable = (error) => {
+  if (error instanceof DealServiceUnavailable) return true;
+  if (!error?.isAxiosError && !error?.response) return false;
+  const status = error.response?.status;
+  if (!error.response || !(status >= 400 && status < 500) || status === 408 || status === 429) return true;
+  const detail = error.response.data?.detail;
+  return !(typeof detail === 'string' && detail.trim()) && !Array.isArray(detail);
+};
+
 export const responseErrorMessage = (error, fallback) => {
+  // Never the browser library's own words ("Request failed with status code
+  // 504", "timeout of 20000ms exceeded") and never a platform error page.
+  if (isServiceUnavailable(error)) return DEAL_SERVICE_UNAVAILABLE;
   const detail = error.response?.data?.detail;
   // A sentence from the service starts with a capital letter on the page.
   if (typeof detail === 'string') return detail.charAt(0).toUpperCase() + detail.slice(1);
@@ -246,10 +275,6 @@ export const responseErrorMessage = (error, fallback) => {
     if (!lines.length) return fallback;
     const shown = lines.slice(0, 3).join(' · ');
     return lines.length > 3 ? `${shown} · and ${lines.length - 3} more.` : shown;
-  }
-  // No answer at all from the analysis service: say so, and that nothing was calculated.
-  if (error.isAxiosError && !error.response) {
-    return 'The analysis service could not be reached, so nothing was calculated. Check your connection and try again.';
   }
   return error.message || fallback;
 };

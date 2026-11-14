@@ -11,6 +11,8 @@ from google.api_core.exceptions import AlreadyExists
 from deadlines import FIRESTORE_RETRY, IDENTITY_HTTP_SECONDS
 from .service import QueueUnavailable, StaffUnauthorized, StaffForbidden
 
+BEARER_TOKEN = re.compile(r"[A-Za-z0-9._~+/=-]+")
+
 def queue_settings():
     project = os.getenv("FIREBASE_PROJECT_ID", "").strip()
     uids = frozenset(v.strip() for v in os.getenv("INQUIRY_STAFF_UIDS", "").split(",") if v.strip())
@@ -46,7 +48,9 @@ def firebase_app(project):
 def verify_staff(authorization, verifier=None):
     project, allowed, _, _ = queue_settings()
     scheme, _, token = (authorization or "").partition(" ")
-    if scheme.lower() != "bearer" or not token or len(token) > 16384:
+    # A bearer token is letters, digits and a few marks (RFC 6750). Anything
+    # else, or anything absurdly long, is not passed to the identity check.
+    if scheme.lower() != "bearer" or not token or len(token) > 16384 or not BEARER_TOKEN.fullmatch(token):
         raise StaffUnauthorized()
     try:
         decoded = (verifier or (lambda value: auth.verify_id_token(

@@ -1,4 +1,4 @@
-// The Cloud Monitoring uptime checks in this folder: shape, coverage, and how
+// The Cloud Monitoring uptime check in this folder (the API only): shape, and how
 // many executions a month they cost. docs/sre/synthetic-monitoring.md explains
 // them; Gbenga applies them (deploy/monitoring/apply.sh).
 import { test } from "node:test";
@@ -24,8 +24,13 @@ const hostsWeOwn = new Set(Object.entries(TARGETS.production)
   .filter(([key]) => key.endsWith("Origin") && key !== "idxOrigin" && key !== "wwwOrigin")
   .map(([, origin]) => new URL(origin).host));
 
-test("the six checks named in the synthetic monitoring guide are here", () => {
-  assert.deepEqual(files, ["api-health.json", "calculators-deal-page.json", "inquiry-page.json", "public-home.json", "search-page.json", "staff-home.json"]);
+// Gbenga, 2026-11-14: no outside page monitoring. Only the API is checked
+// from Google's network; a check of a page on diamondecho.com or
+// staff.diamondecho.com must not come back here without his say.
+test("only the API check is here: no web page is checked from outside", () => {
+  assert.deepEqual(files, ["api-health.json"]);
+  const apiHost = new URL(TARGETS.production.apiOrigin).host;
+  for (const [name, config] of configs) assert.equal(config.monitoredResource.labels.host, apiHost, name);
 });
 
 test("each check is a read-only HTTPS GET of our own hosts, from several continents", () => {
@@ -66,7 +71,7 @@ test("all checks together stay inside the free monthly allowance, in a 31-day mo
     const locations = config.selectedRegions.reduce((n, region) => n + LOCATIONS[region], 0);
     return sum + Math.ceil((31 * 86_400) / periodSeconds) * locations;
   }, 0);
-  // 6 checks x 6 locations x 8,928 runs = 321,408.
-  assert.equal(perMonth, 321_408);
+  // 1 check x 6 locations x 8,928 runs = 53,568.
+  assert.equal(perMonth, 53_568);
   assert.ok(perMonth < FREE_EXECUTIONS_PER_MONTH / 2, "leave room for anything else in the billing account");
 });

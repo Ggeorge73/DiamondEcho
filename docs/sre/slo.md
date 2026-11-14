@@ -107,8 +107,8 @@ listed under blind spots below.
   number would only be met by luck.
   An API outage is felt, though. The inquiry form cannot send, the staff queue
   cannot load, and Deal Studio cannot produce its analysis: it shows "The
-  analysis service could not be reached, so nothing was calculated" (or
-  "Request failed with status code …"). Only its Monte Carlo risk run, the
+  calculator is temporarily unavailable. Please try again shortly." with a
+  Try again button. Only its Monte Carlo risk run, the
   mortgage simulator and the seller net sheet work fully in the browser. So
   the 3 h 22 min are lost inquiries and failed analyses, not an invisible
   blip. 99.5% is still the right proposal. The causes above are what limit

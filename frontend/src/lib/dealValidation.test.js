@@ -1,4 +1,7 @@
-import { FIELD_LABELS, marketProblem, responseErrorMessage, validateDealForm } from './dealValidation';
+import {
+  DEAL_ANALYSIS_TIMEOUT_MS, DEAL_SERVICE_UNAVAILABLE, DealServiceUnavailable, FIELD_LABELS, isServiceUnavailable,
+  marketProblem, responseErrorMessage, validateDealForm,
+} from './dealValidation';
 
 const apiError = (detail) => ({ isAxiosError: true, response: { status: 422, data: { detail } } });
 
@@ -29,9 +32,37 @@ test('a plain message from the API is shown as written, with a capital letter', 
   expect(responseErrorMessage(apiError('Already capital.'), 'fallback')).toBe('Already capital.');
 });
 
-test('an unreachable service says nothing was calculated', () => {
-  expect(responseErrorMessage({ isAxiosError: true, message: 'Network Error' }, 'fallback'))
-    .toBe('The analysis service could not be reached, so nothing was calculated. Check your connection and try again.');
+const UNAVAILABLE = 'The calculator is temporarily unavailable. Please try again shortly.';
+const axiosFailure = (status, data, message = `Request failed with status code ${status}`) => ({ isAxiosError: true, message, response: { status, data } });
+
+test.each([
+  ['no answer', { isAxiosError: true, message: 'Network Error' }],
+  ['the time limit', { isAxiosError: true, code: 'ECONNABORTED', message: 'timeout of 20000ms exceeded' }],
+  ['500 with a JSON detail', axiosFailure(500, { detail: 'Internal Server Error' })],
+  ['502 with an HTML page', axiosFailure(502, '<html><body>Bad Gateway</body></html>')],
+  ['503 as text', axiosFailure(503, 'Service Unavailable')],
+  ['504 as text', axiosFailure(504, 'upstream request timeout')],
+  ['429 with a detail', axiosFailure(429, { detail: 'Too many analyses were requested.' })],
+  ['404 with a page', axiosFailure(404, '<html>Not Found</html>')],
+  ['405 as text', axiosFailure(405, 'Method Not Allowed')],
+  ['a 2xx that is not an analysis', new DealServiceUnavailable()],
+])('%s is the service being unavailable, in one fixed sentence', (_label, error) => {
+  expect(DEAL_SERVICE_UNAVAILABLE).toBe(UNAVAILABLE);
+  expect(isServiceUnavailable(error)).toBe(true);
+  expect(responseErrorMessage(error, 'fallback')).toBe(UNAVAILABLE);
+});
+
+test('a 4xx that carries reasons, and a check made in the browser, are about the inputs', () => {
+  expect(isServiceUnavailable(apiError('exit cap rate must be positive'))).toBe(false);
+  expect(isServiceUnavailable(apiError([{ loc: ['body', 'x'], msg: 'Field required' }]))).toBe(false);
+  expect(isServiceUnavailable(axiosFailure(400, { detail: 'Hold period is too long.' }))).toBe(false);
+  expect(isServiceUnavailable(new Error('Vacancy must be at least 0 and no more than 100.'))).toBe(false);
+  expect(responseErrorMessage(axiosFailure(400, { detail: 'hold period is too long.' }), 'fallback')).toBe('Hold period is too long.');
+});
+
+test('the time limit is a sensible number of milliseconds', () => {
+  expect(DEAL_ANALYSIS_TIMEOUT_MS).toBeGreaterThanOrEqual(10000);
+  expect(DEAL_ANALYSIS_TIMEOUT_MS).toBeLessThanOrEqual(30000);
 });
 
 test('a check made in the browser keeps its own message', () => {

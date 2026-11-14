@@ -310,26 +310,13 @@ code.
   6. **Not chosen: a paid Cloudflare plan**, where Cloudflare's bot settings
      can be skipped by a rule. A cost; see Cloudflare's plans page. **Needs
      Gbenga's yes.**
-- **Google's uptime checks may meet the same block.** The Cloud Monitoring
-  uptime checks in `deploy/monitoring/uptime-checks/` (item 3.3 of
-  [needs-from-gbenga.md](needs-from-gbenga.md)) set no User-Agent, so they
-  send Google's own checker name. Google documents it as starting
-  `GoogleStackdriverMonitoring-UptimeChecks`. They run from Google's cloud
-  addresses, so Bot Fight Mode may refuse them with a 403 as it did the
-  monitor. Nobody has tested this; they do not exist yet. How Gbenga checks,
-  read-only, within an hour of applying them:
-  1. Google Cloud > Monitoring > Uptime checks. Open each `DiamondEcho SRE: …`
-     check. Healthy: every region passes. A 403 failure in every region
-     means a block.
-  2. Cloudflare > diamondecho.com > Security > Events, filtered to the last
-     hour and the action "Block" or "Challenge". Healthy: no events from
-     Google's checker. A block names the service (for example "Bot Fight
-     Mode" or "Browser Integrity Check") and shows the exact User-Agent.
-  3. If they are blocked by Bot Fight Mode, no rule on the Free plan can let
-     them through. Leave the page checks unapplied (or remove them); the API
-     uptime check is not behind Cloudflare and is not affected. The pages
-     then stay unwatched, as today. Anything else is one of the options
-     above and **needs Gbenga's yes**.
+- **Google's uptime check does not meet this block.** The Cloud Monitoring
+  plan (`deploy/monitoring/uptime-checks/`, item 3.3 of
+  [needs-from-gbenga.md](needs-from-gbenga.md)) now holds one check, of the
+  API, which is not behind Cloudflare. Its five page checks were removed on
+  2026-11-14 (Gbenga: no outside page monitoring); from Google's cloud
+  addresses Bot Fight Mode might have refused them as it refused the
+  monitor.
 
 ### 10. "I'm Under Attack" mode: only during an attack
 

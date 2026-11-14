@@ -58,7 +58,7 @@ pages themselves are never watched, blind or not: see above.)
    Healthy: `fast` within the last 10 minutes and `slow` within the last
    70 minutes.
 6. **Gbenga.** If the Google Cloud email came: Monitoring > Uptime checks.
-   Healthy: six checks, all enabled, with recent results.
+   Healthy: the one check (`DiamondEcho SRE: API is up`), enabled, with recent results.
 
 ## Fix
 
