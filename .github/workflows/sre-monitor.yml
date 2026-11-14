@@ -95,7 +95,9 @@ jobs:
     timeout-minutes: 10
     # One monitor run at a time: a running one is never cut off. If runs pile
     # up, GitHub keeps only the newest one waiting and drops the older waiting
-    # one, which is fine here: the newest look at the site is the one wanted.
+    # one. For the fast checks that is fine: the newest look at the site is
+    # the one wanted. An hourly slow run dropped that way is caught up by a
+    # later five-minute run ("Choose the checks" below).
     # (Other workflows that write the sre-status branch use their own groups
     # and rely on state-git.sh's rebase-and-retry.)
     concurrency:
@@ -123,26 +125,52 @@ jobs:
           echo "STATE_DIR=$RUNNER_TEMP/sre-state" >> "$GITHUB_ENV"
           echo "RUN_FILE=$RUNNER_TEMP/run.json" >> "$GITHUB_ENV"
 
+      - name: Open the status branch
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: bash scripts/sre/state-git.sh checkout "$STATE_DIR"
+
+      # The hourly run does the slow checks and the five-minute runs the fast
+      # ones. If the hourly run was dropped while waiting (see the concurrency
+      # note above) or never started, the slow checks would go unseen for
+      # hours. So a five-minute run does the slow checks instead when the last
+      # slow run on record is more than 90 minutes old. Only every other run
+      # may do that (even run numbers), so the fast checks can never be
+      # starved, whatever is wrong with the slow ones.
       - name: Choose the checks
         id: suite
+        # Even if the status branch could not be opened: the site is still checked.
+        if: ${{ !cancelled() }}
         env:
           SCHEDULE: ${{ github.event.schedule }}
           INPUT_SUITE: ${{ inputs.suite }}
         run: |
           if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then suite="$INPUT_SUITE"
           elif [ "$SCHEDULE" = '7 * * * *' ]; then suite=slow
-          else suite=fast; fi
+          else
+            suite=fast
+            overdue=$(node -e '
+              try {
+                const status = JSON.parse(require("fs").readFileSync(process.env.STATE_DIR + "/status.json", "utf8"));
+                const fast = Date.parse(status.last_runs?.fast?.at ?? "");
+                const slow = Date.parse(status.last_runs?.slow?.at ?? "");
+                // Only once the monitor has history: the first runs stay as scheduled.
+                const late = Number.isFinite(fast) && !(Date.now() - slow < 90 * 60_000);
+                console.log(late ? "yes" : "no");
+              } catch { console.log("no"); }
+            ')
+            if [ "$overdue" = yes ] && [ $((GITHUB_RUN_NUMBER % 2)) -eq 0 ]; then
+              suite=slow
+              echo "The last slow run is more than 90 minutes old: this run does the slow checks."
+            fi
+          fi
           echo "suite=$suite" >> "$GITHUB_OUTPUT"
 
       - name: Run the checks (read-only)
+        if: ${{ !cancelled() }}
         env:
           SUITE: ${{ steps.suite.outputs.suite }}
         run: node scripts/sre/synthetic-checks.mjs --suite "$SUITE" --out "$RUN_FILE"
-
-      - name: Open the status branch
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: bash scripts/sre/state-git.sh checkout "$STATE_DIR"
 
       - name: File the result
         run: node scripts/sre/state.mjs record --run "$RUN_FILE" --state-dir "$STATE_DIR"
@@ -217,6 +245,21 @@ jobs:
             bash scripts/sre/state-git.sh commit "$STATE_DIR" "$SUITE checks, run $GITHUB_RUN_ID"
           fi
 
+      # The public status page. Published from here as a GitHub Pages
+      # deployment, not by GitHub building the sre-status branch on every
+      # push: branch builds are limited to about 10 an hour and this workflow
+      # saves about 13 times an hour. Off until Gbenga has set Pages to
+      # "GitHub Actions" and the variable SRE_STATUS_PAGE to "enabled"
+      # (docs/sre/needs-from-gbenga.md 2.2). Only after every step before it
+      # worked, so a half-updated state is never published. The .git folder
+      # is left out.
+      - name: Pack the status page
+        if: vars.SRE_STATUS_PAGE == 'enabled'
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: ${{ runner.temp }}/sre-state
+          retention-days: 1
+
       - name: Summary
         if: always()
         env:
@@ -240,3 +283,25 @@ jobs:
               } catch {}
             '
           } >> "$GITHUB_STEP_SUMMARY"
+
+  status-page:
+    name: Publish the status page
+    needs: monitor
+    if: needs.monitor.result == 'success' && vars.SRE_STATUS_PAGE == 'enabled'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # The newest state is the one wanted: a deployment still waiting when a
+    # newer one arrives is dropped, and a running one is never cut off.
+    concurrency:
+      group: sre-status-page
+      cancel-in-progress: false
+    permissions:
+      pages: write # publish the Pages deployment
+      id-token: write # GitHub Pages checks that the deployment comes from this workflow
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Publish
+        id: deploy
+        uses: actions/deploy-pages@v4

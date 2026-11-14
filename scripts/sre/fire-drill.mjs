@@ -81,7 +81,7 @@ export const FAST_CHECKS = [
   page("calculators-deal-page", "Deal Studio page", "calculators", "sev2", ["calculators-availability"]),
   page("calculators-mortgage-page", "Mortgage simulator page", "calculators", "sev2", ["calculators-availability"]),
   page("calculators-net-sheet-page", "Seller net sheet page", "calculators", "sev2", ["calculators-availability"]),
-  page("calculators-api-analyze", "Deal analysis service returns the reference figures", "calculators", "sev3", ["api-availability"]),
+  page("calculators-api-analyze", "Deal analysis service returns the reference figures", "calculators", "sev2", ["api-availability"]),
   page("inquiry-page", "Contact page", "inquiry", "sev2", ["inquiry-availability"]),
   page("inquiry-preflight", "Inquiry form is allowed to send from the website", "inquiry", "sev2", ["inquiry-availability"]),
   page("inquiry-route", "Inquiry route exists", "inquiry", "sev2", ["inquiry-availability"]),

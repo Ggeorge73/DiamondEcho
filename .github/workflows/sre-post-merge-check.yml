@@ -61,7 +61,16 @@ jobs:
 
   post-merge:
     name: Merged build is live and healthy
-    if: github.repository == 'Ggeorge73/DiamondEcho' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    # After a merge this runs only once Gbenga has set the repository variable
+    # SRE_MONITOR to "enabled", the same switch as the scheduled monitor
+    # (docs/sre/needs-from-gbenga.md 1.1). Until the Cloudflare rule lets the
+    # monitor through, Cloudflare answers 403 to /version.json, and every
+    # merge would wait out its time and open a false incident. A run started
+    # by hand always runs.
+    if: >-
+      github.repository == 'Ggeorge73/DiamondEcho' && github.event_name != 'pull_request' &&
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'workflow_dispatch' || vars.SRE_MONITOR == 'enabled')
     needs: release-script-tests
     runs-on: ubuntu-latest
     timeout-minutes: 30

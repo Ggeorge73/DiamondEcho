@@ -64,7 +64,7 @@ test("a wrong figure fails and names both figures", async () => {
   const check = byId(await run(ctx(fetch)))["calculators-api-analyze"];
   assert.equal(check.ok, false);
   assert.match(check.detail, /41000\.00, expected 44800\.00/);
-  assert.equal(check.severity, "sev3");
+  assert.equal(check.severity, "sev2");
 });
 
 test("an answer without a formula version, or not JSON, fails", () => {

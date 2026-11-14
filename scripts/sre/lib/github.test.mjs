@@ -144,3 +144,15 @@ test("editIssue changes only the title", async () => {
   assert.equal(calls[0].url, "https://api.github.test/repos/owner/repo/issues/7");
   assert.deepEqual(calls[0].body, { title: "Website is down" });
 });
+
+test("listComments reads every page, so an ack after the hundredth comment is seen", async () => {
+  const filler = Array.from({ length: 100 }, (_, i) => ({ user: { login: "github-actions[bot]", type: "Bot" }, created_at: "2026-11-13T00:10:00Z", body: `update ${i}` }));
+  const { client, calls } = live([
+    [200, filler],
+    [200, [{ user: { login: "someone", type: "User" }, author_association: "OWNER", created_at: "2026-11-14T00:00:00Z", body: "ack" }]],
+  ]);
+  const comments = await client.listComments(12);
+  assert.equal(comments.length, 101);
+  assert.equal(comments.at(-1).first_line, "ack");
+  assert.deepEqual(calls.map((call) => new URL(call.url).searchParams.get("page")), ["1", "2"]);
+});

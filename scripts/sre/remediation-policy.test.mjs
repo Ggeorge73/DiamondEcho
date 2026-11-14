@@ -206,6 +206,21 @@ test("DNS must be healthy; a sev3 DNS failure (no DMARC) does not block", () => 
   assert.equal(plan(input).decisions.find((d) => d.trigger === "api").code, "site-or-dns-unhealthy");
 });
 
+test("a minor (sev3 or sev4) website or DNS incident is a notice and does not block the rollback", () => {
+  for (const [component, severity] of [["dns", "sev3"], ["dns", "sev4"], ["public-site", "sev3"]]) {
+    const input = scenario();
+    input.incidents.open.push({ key: component, component, severity, opened_at: at(600) });
+    assert.equal(plan(input).decisions.find((d) => d.trigger === "api").decision, "proceed", `${component} ${severity}`);
+  }
+});
+
+test("the analysis check is serious enough for the calculators rollback to be reachable", async () => {
+  const { run } = await import("./checks/calculators.mjs");
+  const source = run.toString();
+  assert.match(source, /id: "calculators-api-analyze"[^}]*severity: "sev2"/);
+  assert.ok(API_CHECKS.calculators.includes("calculators-api-analyze"));
+});
+
 test("refusals are not API faults", () => {
   const input = scenario();
   for (const status of [401, 403, 429]) {

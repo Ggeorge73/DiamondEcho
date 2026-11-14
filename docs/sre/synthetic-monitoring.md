@@ -62,7 +62,7 @@ counts toward (an *SLI* is a measured share of good answers; see
 | `public-asset-js`, `public-asset-css` | Site script / stylesheet loads | public-site | sev1 / sev2 | The files the home page names answer 200 with a script / stylesheet type (headers only; the file is not downloaded) |
 | `search-page` | Property search page | search | sev2 | `/search` passes the page test and contains the Georgia MLS search frame |
 | `calculators-deal-page`, `-mortgage-page`, `-net-sheet-page` | Calculator pages | calculators | sev2 | page test |
-| `calculators-api-analyze` | Deal analysis service returns the reference figures | calculators | sev3 | One fixed fix-and-flip sent to `POST /api/v1/deals/analyze`; the answer carries a formula version and a profit of exactly 44,800.00 |
+| `calculators-api-analyze` | Deal analysis service returns the reference figures | calculators | sev2 | One fixed fix-and-flip sent to `POST /api/v1/deals/analyze`; the answer carries a formula version and a profit of exactly 44,800.00 |
 | `inquiry-page` | Contact page | inquiry | sev2 | page test, the request form is there and the "call or email us" card is not |
 | `inquiry-preflight` | Inquiry form is allowed to send from the website | inquiry | sev2 | The browser's permission question (`OPTIONS`, the *CORS preflight*) for the form is answered yes for `https://diamondecho.com`, POST and the form's headers |
 | `inquiry-route` | Inquiry route exists | inquiry | sev2 | `GET /api/v1/inquiries` answers 405 "POST only": the route is there |
@@ -108,6 +108,11 @@ It runs in the fast and post-deploy suites; the slow suite's own DNS checks
 (`checks/dns.mjs`) ask the same resolvers about our domain.
 
 ### Slow suite: hourly
+
+If the hourly run is missed (GitHub drops a waiting run when a newer one
+arrives), a five-minute run does the slow checks instead once the last slow
+run is more than 90 minutes old. Only every other run may do that, so the
+fast checks keep running.
 
 | Id | Name | Component | Severity | What passes |
 | --- | --- | --- | --- | --- |
