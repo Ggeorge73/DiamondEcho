@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generated_at": "2026-11-15T19:08:55.821Z",
+  "generated_at": "2026-11-15T20:58:50.373Z",
   "window_days": 28,
   "slos": [
     {
@@ -66,7 +66,7 @@
       "attainment": 1,
       "budget_remaining": 1,
       "burn": {
-        "1h": 0,
+        "1h": null,
         "6h": 0,
         "3d": 0
       },
@@ -92,7 +92,7 @@
       "attainment": 0.5625,
       "budget_remaining": -7.75,
       "burn": {
-        "1h": 10,
+        "1h": null,
         "6h": 10,
         "3d": 8.75
       },
@@ -144,7 +144,7 @@
       "attainment": 0.96,
       "budget_remaining": -7,
       "burn": {
-        "1h": 0,
+        "1h": null,
         "6h": 0,
         "3d": 8
       },
@@ -170,7 +170,7 @@
       "attainment": 0.888889,
       "budget_remaining": -21.2222,
       "burn": {
-        "1h": 0,
+        "1h": null,
         "6h": 0,
         "3d": 22.22
       },
@@ -222,7 +222,7 @@
   "probe_interval_minutes": 5,
   "inputs": {
     "history_files": 2,
-    "lines": 12,
+    "lines": 13,
     "skipped_lines": 0,
     "unknown_slis": []
   }

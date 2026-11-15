@@ -452,14 +452,14 @@
         "ok": true,
         "status": 404,
         "detail": "",
-        "at": "2026-11-15T15:36:02.622Z",
+        "at": "2026-11-15T20:58:50.264Z",
         "suites": [
           "slow"
         ],
         "fails": 0,
-        "oks": 4,
+        "oks": 5,
         "failing_since": null,
-        "recent": "1111"
+        "recent": "11111"
       },
       "search-idx-provider": {
         "name": "Georgia MLS search (outside provider)",
@@ -469,14 +469,14 @@
         "ok": true,
         "status": 200,
         "detail": "",
-        "at": "2026-11-15T15:36:02.622Z",
+        "at": "2026-11-15T20:58:50.264Z",
         "suites": [
           "slow"
         ],
         "fails": 0,
-        "oks": 4,
+        "oks": 5,
         "failing_since": null,
-        "recent": "1111"
+        "recent": "11111"
       },
       "tls-public": {
         "name": "Certificate for diamondecho.com",
@@ -486,14 +486,14 @@
         "ok": true,
         "status": null,
         "detail": "",
-        "at": "2026-11-15T15:36:02.622Z",
+        "at": "2026-11-15T20:58:50.264Z",
         "suites": [
           "slow"
         ],
         "fails": 0,
-        "oks": 4,
+        "oks": 5,
         "failing_since": null,
-        "recent": "1111"
+        "recent": "11111"
       },
       "tls-www": {
         "name": "Certificate for www.diamondecho.com",
@@ -503,14 +503,14 @@
         "ok": true,
         "status": null,
         "detail": "",
-        "at": "2026-11-15T15:36:02.622Z",
+        "at": "2026-11-15T20:58:50.264Z",
         "suites": [
           "slow"
         ],
         "fails": 0,
-        "oks": 4,
+        "oks": 5,
         "failing_since": null,
-        "recent": "1111"
+        "recent": "11111"
       },
       "tls-staff": {
         "name": "Certificate for staff.diamondecho.com",
@@ -520,14 +520,14 @@
         "ok": true,
         "status": null,
         "detail": "",
-        "at": "2026-11-15T15:36:02.622Z",
+        "at": "2026-11-15T20:58:50.264Z",
         "suites": [
           "slow"
         ],
         "fails": 0,
-        "oks": 4,
+        "oks": 5,
         "failing_since": null,
-        "recent": "1111"
+        "recent": "11111"
       },
       "tls-api": {
         "name": "Certificate for diamondecho-api-180189726732.us-east1.run.app",
@@ -537,14 +537,14 @@
         "ok": true,
         "status": null,
         "detail": "",
-        "at": "2026-11-15T15:36:02.622Z",
+        "at": "2026-11-15T20:58:50.264Z",
         "suites": [
           "slow"
         ],
         "fails": 0,
-        "oks": 4,
+        "oks": 5,
         "failing_since": null,
-        "recent": "1111"
+        "recent": "11111"
       },
       "dns-apex-resolves": {
         "name": "Website address resolves",
@@ -554,14 +554,14 @@
         "ok": true,
         "status": null,
         "detail": "",
-        "at": "2026-11-15T15:36:02.622Z",
+        "at": "2026-11-15T20:58:50.264Z",
         "suites": [
           "slow"
         ],
         "fails": 0,
-        "oks": 4,
+        "oks": 5,
         "failing_since": null,
-        "recent": "1111"
+        "recent": "11111"
       },
       "dns-staff-resolves": {
         "name": "Staff site address resolves",
@@ -571,14 +571,14 @@
         "ok": true,
         "status": null,
         "detail": "",
-        "at": "2026-11-15T15:36:02.622Z",
+        "at": "2026-11-15T20:58:50.264Z",
         "suites": [
           "slow"
         ],
         "fails": 0,
-        "oks": 4,
+        "oks": 5,
         "failing_since": null,
-        "recent": "1111"
+        "recent": "11111"
       },
       "dns-nameservers": {
         "name": "Nameservers are the two on record",
@@ -588,14 +588,14 @@
         "ok": true,
         "status": null,
         "detail": "",
-        "at": "2026-11-15T15:36:02.622Z",
+        "at": "2026-11-15T20:58:50.264Z",
         "suites": [
           "slow"
         ],
         "fails": 0,
-        "oks": 4,
+        "oks": 5,
         "failing_since": null,
-        "recent": "1111"
+        "recent": "11111"
       },
       "dns-mail-mx": {
         "name": "Mail delivery records (MX)",
@@ -605,14 +605,14 @@
         "ok": true,
         "status": null,
         "detail": "",
-        "at": "2026-11-15T15:36:02.622Z",
+        "at": "2026-11-15T20:58:50.264Z",
         "suites": [
           "slow"
         ],
         "fails": 0,
-        "oks": 4,
+        "oks": 5,
         "failing_since": null,
-        "recent": "1111"
+        "recent": "11111"
       },
       "dns-mail-spf": {
         "name": "Mail sender record (SPF)",
@@ -622,14 +622,14 @@
         "ok": true,
         "status": null,
         "detail": "",
-        "at": "2026-11-15T15:36:02.622Z",
+        "at": "2026-11-15T20:58:50.264Z",
         "suites": [
           "slow"
         ],
         "fails": 0,
-        "oks": 4,
+        "oks": 5,
         "failing_since": null,
-        "recent": "1111"
+        "recent": "11111"
       },
       "dns-mail-microsoft-365": {
         "name": "Microsoft 365 mail records",
@@ -639,14 +639,14 @@
         "ok": true,
         "status": null,
         "detail": "",
-        "at": "2026-11-15T15:36:02.622Z",
+        "at": "2026-11-15T20:58:50.264Z",
         "suites": [
           "slow"
         ],
         "fails": 0,
-        "oks": 4,
+        "oks": 5,
         "failing_since": null,
-        "recent": "1111"
+        "recent": "11111"
       },
       "dns-mail-dmarc": {
         "name": "Mail policy record (DMARC)",
@@ -656,14 +656,14 @@
         "ok": true,
         "status": null,
         "detail": "",
-        "at": "2026-11-15T15:36:02.622Z",
+        "at": "2026-11-15T20:58:50.264Z",
         "suites": [
           "slow"
         ],
         "fails": 0,
-        "oks": 4,
+        "oks": 5,
         "failing_since": null,
-        "recent": "1111"
+        "recent": "11111"
       },
       "dns-other-records": {
         "name": "Other records carried from GoDaddy",
@@ -673,14 +673,14 @@
         "ok": true,
         "status": null,
         "detail": "",
-        "at": "2026-11-15T15:36:02.622Z",
+        "at": "2026-11-15T20:58:50.264Z",
         "suites": [
           "slow"
         ],
         "fails": 0,
-        "oks": 4,
+        "oks": 5,
         "failing_since": null,
-        "recent": "1111"
+        "recent": "11111"
       },
       "domain-expiry": {
         "name": "Registration of diamondecho.com",
@@ -690,14 +690,14 @@
         "ok": true,
         "status": null,
         "detail": "",
-        "at": "2026-11-15T15:36:02.622Z",
+        "at": "2026-11-15T20:58:50.264Z",
         "suites": [
           "slow"
         ],
         "fails": 0,
-        "oks": 4,
+        "oks": 5,
         "failing_since": null,
-        "recent": "1111"
+        "recent": "11111"
       },
       "domain-registrar-lock": {
         "name": "Registrar lock",
@@ -707,14 +707,14 @@
         "ok": true,
         "status": null,
         "detail": "",
-        "at": "2026-11-15T15:36:02.622Z",
+        "at": "2026-11-15T20:58:50.264Z",
         "suites": [
           "slow"
         ],
         "fails": 0,
-        "oks": 4,
+        "oks": 5,
         "failing_since": null,
-        "recent": "1111"
+        "recent": "11111"
       },
       "domain-delegation": {
         "name": "Registry points at the nameservers on record",
@@ -724,14 +724,14 @@
         "ok": true,
         "status": null,
         "detail": "",
-        "at": "2026-11-15T15:36:02.622Z",
+        "at": "2026-11-15T20:58:50.264Z",
         "suites": [
           "slow"
         ],
         "fails": 0,
-        "oks": 4,
+        "oks": 5,
         "failing_since": null,
-        "recent": "1111"
+        "recent": "11111"
       },
       "edge-www-redirect": {
         "name": "www is sent to the bare name",
@@ -741,14 +741,14 @@
         "ok": true,
         "status": 301,
         "detail": "",
-        "at": "2026-11-15T15:36:02.622Z",
+        "at": "2026-11-15T20:58:50.264Z",
         "suites": [
           "slow"
         ],
         "fails": 0,
-        "oks": 4,
+        "oks": 5,
         "failing_since": null,
-        "recent": "1111"
+        "recent": "11111"
       },
       "edge-dnssec": {
         "name": "DNSSEC (information)",
@@ -758,14 +758,14 @@
         "ok": true,
         "status": null,
         "detail": "",
-        "at": "2026-11-15T15:36:02.622Z",
+        "at": "2026-11-15T20:58:50.264Z",
         "suites": [
           "slow"
         ],
         "fails": 0,
-        "oks": 4,
+        "oks": 5,
         "failing_since": null,
-        "recent": "1111"
+        "recent": "11111"
       },
       "edge-caa": {
         "name": "CAA record (information)",
@@ -775,27 +775,27 @@
         "ok": true,
         "status": null,
         "detail": "",
-        "at": "2026-11-15T15:36:02.622Z",
+        "at": "2026-11-15T20:58:50.264Z",
         "suites": [
           "slow"
         ],
         "fails": 0,
-        "oks": 4,
+        "oks": 5,
         "failing_since": null,
-        "recent": "1111"
+        "recent": "11111"
       }
     },
     "runs": {
       "fast": "2026-11-15T19:08:50.705Z",
-      "slow": "2026-11-15T15:35:54.642Z"
+      "slow": "2026-11-15T20:58:42.544Z"
     },
     "blind": {
       "streak": 0,
       "since": null
     },
     "cloudflare": {
-      "streak": 0,
-      "since": null,
+      "streak": 1,
+      "since": "2026-11-15T20:58:50.264Z",
       "active": false
     },
     "incidents": {
@@ -803,7 +803,7 @@
         "members": {},
         "severity_since": "2026-11-14T23:53:42.981Z",
         "escalation": 0,
-        "last_comment_at": "2026-11-15T19:08:55.876Z",
+        "last_comment_at": "2026-11-15T20:58:50.425Z",
         "pending": [],
         "acknowledged": false,
         "silenced": false,
@@ -813,7 +813,7 @@
         "clear": 0,
         "ever": [],
         "hard": false,
-        "reason": "The slow checks have not run since 2026-11-15T15:35:54.642Z (more than 3 hours)",
+        "reason": "The fast checks have not run since 2026-11-15T19:08:50.705Z (more than 45 minutes)",
         "cause": "blind"
       }
     },
@@ -823,7 +823,7 @@
       "monitoring": []
     },
     "comment_reads": {
-      "127": "2026-11-15T19:08:55.876Z"
+      "127": "2026-11-15T20:58:50.425Z"
     }
   },
   "open": [
