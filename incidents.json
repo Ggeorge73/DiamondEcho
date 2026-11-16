@@ -10,14 +10,14 @@
         "ok": true,
         "status": 200,
         "detail": "",
-        "at": "2026-11-15T23:23:47.718Z",
+        "at": "2026-11-16T02:56:42.487Z",
         "suites": [
           "fast"
         ],
         "fails": 0,
-        "oks": 9,
+        "oks": 10,
         "failing_since": null,
-        "recent": "111111111"
+        "recent": "1111111111"
       },
       "public-home": {
         "name": "Home page",
@@ -146,14 +146,14 @@
         "ok": true,
         "status": 301,
         "detail": "",
-        "at": "2026-11-15T23:23:47.718Z",
+        "at": "2026-11-16T02:56:42.487Z",
         "suites": [
           "fast"
         ],
         "fails": 0,
-        "oks": 9,
+        "oks": 10,
         "failing_since": null,
-        "recent": "111111111"
+        "recent": "1111111111"
       },
       "public-asset-js": {
         "name": "Site script loads",
@@ -197,14 +197,14 @@
         "ok": true,
         "status": 200,
         "detail": "",
-        "at": "2026-11-15T23:23:47.718Z",
+        "at": "2026-11-16T02:56:42.487Z",
         "suites": [
           "fast"
         ],
         "fails": 0,
-        "oks": 9,
+        "oks": 10,
         "failing_since": null,
-        "recent": "111111111"
+        "recent": "1111111111"
       },
       "api-identity": {
         "name": "API identity",
@@ -214,14 +214,14 @@
         "ok": true,
         "status": 200,
         "detail": "",
-        "at": "2026-11-15T23:23:47.718Z",
+        "at": "2026-11-16T02:56:42.487Z",
         "suites": [
           "fast"
         ],
         "fails": 0,
-        "oks": 9,
+        "oks": 10,
         "failing_since": null,
-        "recent": "111111111"
+        "recent": "1111111111"
       },
       "api-cors-allowed": {
         "name": "API accepts calls from the website",
@@ -231,14 +231,14 @@
         "ok": true,
         "status": 200,
         "detail": "",
-        "at": "2026-11-15T23:23:47.718Z",
+        "at": "2026-11-16T02:56:42.487Z",
         "suites": [
           "fast"
         ],
         "fails": 0,
-        "oks": 9,
+        "oks": 10,
         "failing_since": null,
-        "recent": "111111111"
+        "recent": "1111111111"
       },
       "api-cors-refused": {
         "name": "API refuses calls from other sites",
@@ -248,14 +248,14 @@
         "ok": true,
         "status": 200,
         "detail": "",
-        "at": "2026-11-15T23:23:47.718Z",
+        "at": "2026-11-16T02:56:42.487Z",
         "suites": [
           "fast"
         ],
         "fails": 0,
-        "oks": 9,
+        "oks": 10,
         "failing_since": null,
-        "recent": "111111111"
+        "recent": "1111111111"
       },
       "calculators-deal-page": {
         "name": "Deal Studio page",
@@ -316,14 +316,14 @@
         "ok": true,
         "status": 200,
         "detail": "",
-        "at": "2026-11-15T23:23:47.718Z",
+        "at": "2026-11-16T02:56:42.487Z",
         "suites": [
           "fast"
         ],
         "fails": 0,
-        "oks": 9,
+        "oks": 10,
         "failing_since": null,
-        "recent": "111111111"
+        "recent": "1111111111"
       },
       "inquiry-page": {
         "name": "Contact page",
@@ -350,14 +350,14 @@
         "ok": true,
         "status": 200,
         "detail": "",
-        "at": "2026-11-15T23:23:47.718Z",
+        "at": "2026-11-16T02:56:42.487Z",
         "suites": [
           "fast"
         ],
         "fails": 0,
-        "oks": 9,
+        "oks": 10,
         "failing_since": null,
-        "recent": "111111111"
+        "recent": "1111111111"
       },
       "inquiry-route": {
         "name": "Inquiry route exists",
@@ -367,14 +367,14 @@
         "ok": true,
         "status": 405,
         "detail": "",
-        "at": "2026-11-15T23:23:47.718Z",
+        "at": "2026-11-16T02:56:42.487Z",
         "suites": [
           "fast"
         ],
         "fails": 0,
-        "oks": 9,
+        "oks": 10,
         "failing_since": null,
-        "recent": "111111111"
+        "recent": "1111111111"
       },
       "inquiry-queue": {
         "name": "Inquiry queue is switched on",
@@ -384,14 +384,14 @@
         "ok": true,
         "status": 401,
         "detail": "",
-        "at": "2026-11-15T23:23:47.718Z",
+        "at": "2026-11-16T02:56:42.487Z",
         "suites": [
           "fast"
         ],
         "fails": 0,
-        "oks": 9,
+        "oks": 10,
         "failing_since": null,
-        "recent": "111111111"
+        "recent": "1111111111"
       },
       "search-page": {
         "name": "Property search page",
@@ -435,14 +435,14 @@
         "ok": true,
         "status": 401,
         "detail": "",
-        "at": "2026-11-15T23:23:47.718Z",
+        "at": "2026-11-16T02:56:42.487Z",
         "suites": [
           "fast"
         ],
         "fails": 0,
-        "oks": 9,
+        "oks": 10,
         "failing_since": null,
-        "recent": "111111111"
+        "recent": "1111111111"
       },
       "api-docs-off": {
         "name": "API route list is not published",
@@ -786,7 +786,7 @@
       }
     },
     "runs": {
-      "fast": "2026-11-15T23:23:40.067Z",
+      "fast": "2026-11-16T02:56:40.573Z",
       "slow": "2026-11-16T00:56:35.877Z"
     },
     "blind": {
@@ -794,8 +794,8 @@
       "since": null
     },
     "cloudflare": {
-      "streak": 1,
-      "since": "2026-11-16T00:56:44.194Z",
+      "streak": 0,
+      "since": null,
       "active": false
     },
     "incidents": {
@@ -810,7 +810,7 @@
         "hand_closed": false,
         "webhooked": false,
         "budget_noted": [],
-        "clear": 0,
+        "clear": 1,
         "ever": [],
         "hard": false,
         "reason": "The fast checks have not run since 2026-11-15T23:23:40.067Z (more than 45 minutes)",
@@ -823,7 +823,7 @@
       "monitoring": []
     },
     "comment_reads": {
-      "127": "2026-11-16T00:56:44.414Z"
+      "127": "2026-11-16T02:56:42.640Z"
     }
   },
   "open": [
