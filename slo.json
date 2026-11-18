@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generated_at": "2026-11-17T21:14:36.094Z",
+  "generated_at": "2026-11-18T02:50:50.440Z",
   "window_days": 28,
   "slos": [
     {
@@ -66,7 +66,7 @@
       "attainment": 1,
       "budget_remaining": 1,
       "burn": {
-        "1h": 0,
+        "1h": null,
         "6h": 0,
         "3d": 0
       },
@@ -92,9 +92,9 @@
       "attainment": 0.566667,
       "budget_remaining": -7.6667,
       "burn": {
-        "1h": 10,
+        "1h": null,
         "6h": 10,
-        "3d": 9.09
+        "3d": 9
       },
       "enough_data": false,
       "kind": "latency",
@@ -144,7 +144,7 @@
       "attainment": 0.978261,
       "budget_remaining": -3.3478,
       "burn": {
-        "1h": 0,
+        "1h": null,
         "6h": 0,
         "3d": 0
       },
@@ -170,7 +170,7 @@
       "attainment": 0.9375,
       "budget_remaining": -11.5,
       "burn": {
-        "1h": 0,
+        "1h": null,
         "6h": 0,
         "3d": 0
       },
@@ -221,8 +221,8 @@
   ],
   "probe_interval_minutes": 5,
   "inputs": {
-    "history_files": 4,
-    "lines": 26,
+    "history_files": 5,
+    "lines": 27,
     "skipped_lines": 0,
     "unknown_slis": []
   }
