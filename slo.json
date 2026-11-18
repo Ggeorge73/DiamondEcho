@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generated_at": "2026-11-18T02:58:06.259Z",
+  "generated_at": "2026-11-18T11:28:40.818Z",
   "window_days": 28,
   "slos": [
     {
@@ -66,8 +66,8 @@
       "attainment": 1,
       "budget_remaining": 1,
       "burn": {
-        "1h": 0,
-        "6h": 0,
+        "1h": null,
+        "6h": null,
         "3d": 0
       },
       "enough_data": false,
@@ -92,9 +92,9 @@
       "attainment": 0.59375,
       "budget_remaining": -7.125,
       "burn": {
-        "1h": 0,
-        "6h": 5,
-        "3d": 8.18
+        "1h": null,
+        "6h": null,
+        "3d": 8
       },
       "enough_data": false,
       "kind": "latency",
@@ -144,8 +144,8 @@
       "attainment": 0.979592,
       "budget_remaining": -3.0816,
       "burn": {
-        "1h": 0,
-        "6h": 0,
+        "1h": null,
+        "6h": null,
         "3d": 0
       },
       "enough_data": false,
@@ -170,8 +170,8 @@
       "attainment": 0.941176,
       "budget_remaining": -10.7647,
       "burn": {
-        "1h": 0,
-        "6h": 0,
+        "1h": null,
+        "6h": null,
         "3d": 0
       },
       "enough_data": false,
@@ -222,7 +222,7 @@
   "probe_interval_minutes": 5,
   "inputs": {
     "history_files": 5,
-    "lines": 28,
+    "lines": 29,
     "skipped_lines": 0,
     "unknown_slis": []
   }
