@@ -452,12 +452,12 @@
         "ok": true,
         "status": 404,
         "detail": "",
-        "at": "2026-11-18T11:28:40.698Z",
+        "at": "2026-11-18T11:28:58.894Z",
         "suites": [
           "slow"
         ],
         "fails": 0,
-        "oks": 13,
+        "oks": 14,
         "failing_since": null,
         "recent": "111111111111"
       },
@@ -469,14 +469,14 @@
         "ok": true,
         "status": 200,
         "detail": "",
-        "at": "2026-11-18T11:28:40.698Z",
+        "at": "2026-11-18T11:28:58.894Z",
         "suites": [
           "slow"
         ],
         "fails": 0,
-        "oks": 3,
+        "oks": 4,
         "failing_since": null,
-        "recent": "111111110111"
+        "recent": "111111101111"
       },
       "tls-public": {
         "name": "Certificate for diamondecho.com",
@@ -486,12 +486,12 @@
         "ok": true,
         "status": null,
         "detail": "",
-        "at": "2026-11-18T11:28:40.698Z",
+        "at": "2026-11-18T11:28:58.894Z",
         "suites": [
           "slow"
         ],
         "fails": 0,
-        "oks": 13,
+        "oks": 14,
         "failing_since": null,
         "recent": "111111111111"
       },
@@ -503,12 +503,12 @@
         "ok": true,
         "status": null,
         "detail": "",
-        "at": "2026-11-18T11:28:40.698Z",
+        "at": "2026-11-18T11:28:58.894Z",
         "suites": [
           "slow"
         ],
         "fails": 0,
-        "oks": 13,
+        "oks": 14,
         "failing_since": null,
         "recent": "111111111111"
       },
@@ -520,12 +520,12 @@
         "ok": true,
         "status": null,
         "detail": "",
-        "at": "2026-11-18T11:28:40.698Z",
+        "at": "2026-11-18T11:28:58.894Z",
         "suites": [
           "slow"
         ],
         "fails": 0,
-        "oks": 13,
+        "oks": 14,
         "failing_since": null,
         "recent": "111111111111"
       },
@@ -537,12 +537,12 @@
         "ok": true,
         "status": null,
         "detail": "",
-        "at": "2026-11-18T11:28:40.698Z",
+        "at": "2026-11-18T11:28:58.894Z",
         "suites": [
           "slow"
         ],
         "fails": 0,
-        "oks": 13,
+        "oks": 14,
         "failing_since": null,
         "recent": "111111111111"
       },
@@ -554,12 +554,12 @@
         "ok": true,
         "status": null,
         "detail": "",
-        "at": "2026-11-18T11:28:40.698Z",
+        "at": "2026-11-18T11:28:58.894Z",
         "suites": [
           "slow"
         ],
         "fails": 0,
-        "oks": 13,
+        "oks": 14,
         "failing_since": null,
         "recent": "111111111111"
       },
@@ -571,12 +571,12 @@
         "ok": true,
         "status": null,
         "detail": "",
-        "at": "2026-11-18T11:28:40.698Z",
+        "at": "2026-11-18T11:28:58.894Z",
         "suites": [
           "slow"
         ],
         "fails": 0,
-        "oks": 13,
+        "oks": 14,
         "failing_since": null,
         "recent": "111111111111"
       },
@@ -588,12 +588,12 @@
         "ok": true,
         "status": null,
         "detail": "",
-        "at": "2026-11-18T11:28:40.698Z",
+        "at": "2026-11-18T11:28:58.894Z",
         "suites": [
           "slow"
         ],
         "fails": 0,
-        "oks": 13,
+        "oks": 14,
         "failing_since": null,
         "recent": "111111111111"
       },
@@ -605,12 +605,12 @@
         "ok": true,
         "status": null,
         "detail": "",
-        "at": "2026-11-18T11:28:40.698Z",
+        "at": "2026-11-18T11:28:58.894Z",
         "suites": [
           "slow"
         ],
         "fails": 0,
-        "oks": 13,
+        "oks": 14,
         "failing_since": null,
         "recent": "111111111111"
       },
@@ -622,12 +622,12 @@
         "ok": true,
         "status": null,
         "detail": "",
-        "at": "2026-11-18T11:28:40.698Z",
+        "at": "2026-11-18T11:28:58.894Z",
         "suites": [
           "slow"
         ],
         "fails": 0,
-        "oks": 13,
+        "oks": 14,
         "failing_since": null,
         "recent": "111111111111"
       },
@@ -639,12 +639,12 @@
         "ok": true,
         "status": null,
         "detail": "",
-        "at": "2026-11-18T11:28:40.698Z",
+        "at": "2026-11-18T11:28:58.894Z",
         "suites": [
           "slow"
         ],
         "fails": 0,
-        "oks": 13,
+        "oks": 14,
         "failing_since": null,
         "recent": "111111111111"
       },
@@ -656,12 +656,12 @@
         "ok": true,
         "status": null,
         "detail": "",
-        "at": "2026-11-18T11:28:40.698Z",
+        "at": "2026-11-18T11:28:58.894Z",
         "suites": [
           "slow"
         ],
         "fails": 0,
-        "oks": 13,
+        "oks": 14,
         "failing_since": null,
         "recent": "111111111111"
       },
@@ -673,12 +673,12 @@
         "ok": true,
         "status": null,
         "detail": "",
-        "at": "2026-11-18T11:28:40.698Z",
+        "at": "2026-11-18T11:28:58.894Z",
         "suites": [
           "slow"
         ],
         "fails": 0,
-        "oks": 13,
+        "oks": 14,
         "failing_since": null,
         "recent": "111111111111"
       },
@@ -690,12 +690,12 @@
         "ok": true,
         "status": null,
         "detail": "",
-        "at": "2026-11-18T11:28:40.698Z",
+        "at": "2026-11-18T11:28:58.894Z",
         "suites": [
           "slow"
         ],
         "fails": 0,
-        "oks": 13,
+        "oks": 14,
         "failing_since": null,
         "recent": "111111111111"
       },
@@ -707,12 +707,12 @@
         "ok": true,
         "status": null,
         "detail": "",
-        "at": "2026-11-18T11:28:40.698Z",
+        "at": "2026-11-18T11:28:58.894Z",
         "suites": [
           "slow"
         ],
         "fails": 0,
-        "oks": 13,
+        "oks": 14,
         "failing_since": null,
         "recent": "111111111111"
       },
@@ -724,12 +724,12 @@
         "ok": true,
         "status": null,
         "detail": "",
-        "at": "2026-11-18T11:28:40.698Z",
+        "at": "2026-11-18T11:28:58.894Z",
         "suites": [
           "slow"
         ],
         "fails": 0,
-        "oks": 13,
+        "oks": 14,
         "failing_since": null,
         "recent": "111111111111"
       },
@@ -741,12 +741,12 @@
         "ok": true,
         "status": 301,
         "detail": "",
-        "at": "2026-11-18T11:28:40.698Z",
+        "at": "2026-11-18T11:28:58.894Z",
         "suites": [
           "slow"
         ],
         "fails": 0,
-        "oks": 13,
+        "oks": 14,
         "failing_since": null,
         "recent": "111111111111"
       },
@@ -758,12 +758,12 @@
         "ok": true,
         "status": null,
         "detail": "",
-        "at": "2026-11-18T11:28:40.698Z",
+        "at": "2026-11-18T11:28:58.894Z",
         "suites": [
           "slow"
         ],
         "fails": 0,
-        "oks": 13,
+        "oks": 14,
         "failing_since": null,
         "recent": "111111111111"
       },
@@ -775,46 +775,48 @@
         "ok": true,
         "status": null,
         "detail": "",
-        "at": "2026-11-18T11:28:40.698Z",
+        "at": "2026-11-18T11:28:58.894Z",
         "suites": [
           "slow"
         ],
         "fails": 0,
-        "oks": 13,
+        "oks": 14,
         "failing_since": null,
         "recent": "111111111111"
       }
     },
     "runs": {
       "fast": "2026-11-18T02:58:04.174Z",
-      "slow": "2026-11-18T11:28:32.553Z"
+      "slow": "2026-11-18T11:28:57.100Z"
     },
     "blind": {
       "streak": 0,
       "since": null
     },
     "cloudflare": {
-      "streak": 1,
+      "streak": 2,
       "since": "2026-11-18T11:28:40.698Z",
-      "active": false
+      "active": true
     },
     "incidents": {
       "monitoring": {
         "members": {},
-        "severity_since": "2026-11-14T23:53:42.981Z",
+        "severity_since": "2026-11-18T11:28:59.051Z",
         "escalation": 0,
-        "last_comment_at": "2026-11-18T11:28:40.881Z",
-        "pending": [],
+        "last_comment_at": "2026-11-18T11:28:59.051Z",
+        "pending": [
+          "Cloudflare has refused the monitor's requests to the website in 2 runs since 2026-11-18T11:28:40.698Z, while nothing else failed. Visitors may be fine; the monitor cannot see the pages. The fast checks have not run since 2026-11-18T02:58:04.174Z (more than 45 minutes)."
+        ],
         "acknowledged": false,
         "silenced": false,
         "hand_closed": false,
-        "webhooked": false,
+        "webhooked": true,
         "budget_noted": [],
         "clear": 0,
         "ever": [],
         "hard": false,
-        "reason": "The fast checks have not run since 2026-11-18T02:58:04.174Z (more than 45 minutes)",
-        "cause": "blind"
+        "reason": "Cloudflare has refused the monitor's requests to the website in 2 runs since 2026-11-18T11:28:40.698Z, while nothing else failed. Visitors may be fine; the monitor cannot see the pages. The fast checks have not run since 2026-11-18T02:58:04.174Z (more than 45 minutes)",
+        "cause": "cloudflare"
       }
     },
     "pending_closes": [],
@@ -830,8 +832,8 @@
     {
       "key": "monitoring",
       "component": "monitoring",
-      "severity": "sev3",
-      "title": "Monitoring cannot see the site",
+      "severity": "sev2",
+      "title": "Cloudflare is refusing the monitor",
       "opened_at": "2026-11-14T23:53:42.981Z",
       "failing_checks": [],
       "issue_number": 127,
@@ -840,6 +842,10 @@
         {
           "at": "2026-11-14T23:53:42.981Z",
           "text": "Opened: The slow checks have not run since 2026-11-14T20:37:11.281Z (more than 3 hours)."
+        },
+        {
+          "at": "2026-11-18T11:28:59.051Z",
+          "text": "Worse: now a partial outage. Cloudflare has refused the monitor's requests to the website in 2 runs since 2026-11-18T11:28:40.698Z, while nothing else failed. Visitors may be fine; the monitor cannot see the pages. The fast checks have not run since 2026-11-18T02:58:04.174Z (more than 45 minutes)."
         }
       ]
     }

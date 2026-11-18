@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generated_at": "2026-11-18T11:28:40.818Z",
+  "generated_at": "2026-11-18T11:28:58.996Z",
   "window_days": 28,
   "slos": [
     {
@@ -222,7 +222,7 @@
   "probe_interval_minutes": 5,
   "inputs": {
     "history_files": 5,
-    "lines": 29,
+    "lines": 30,
     "skipped_lines": 0,
     "unknown_slis": []
   }
