@@ -10,12 +10,12 @@
         "ok": true,
         "status": 200,
         "detail": "",
-        "at": "2026-11-17T21:14:36.020Z",
+        "at": "2026-11-18T02:58:06.188Z",
         "suites": [
           "fast"
         ],
         "fails": 0,
-        "oks": 15,
+        "oks": 16,
         "failing_since": null,
         "recent": "111111111111"
       },
@@ -146,12 +146,12 @@
         "ok": true,
         "status": 301,
         "detail": "",
-        "at": "2026-11-17T21:14:36.020Z",
+        "at": "2026-11-18T02:58:06.188Z",
         "suites": [
           "fast"
         ],
         "fails": 0,
-        "oks": 15,
+        "oks": 16,
         "failing_since": null,
         "recent": "111111111111"
       },
@@ -197,12 +197,12 @@
         "ok": true,
         "status": 200,
         "detail": "",
-        "at": "2026-11-17T21:14:36.020Z",
+        "at": "2026-11-18T02:58:06.188Z",
         "suites": [
           "fast"
         ],
         "fails": 0,
-        "oks": 15,
+        "oks": 16,
         "failing_since": null,
         "recent": "111111111111"
       },
@@ -214,12 +214,12 @@
         "ok": true,
         "status": 200,
         "detail": "",
-        "at": "2026-11-17T21:14:36.020Z",
+        "at": "2026-11-18T02:58:06.188Z",
         "suites": [
           "fast"
         ],
         "fails": 0,
-        "oks": 15,
+        "oks": 16,
         "failing_since": null,
         "recent": "111111111111"
       },
@@ -231,12 +231,12 @@
         "ok": true,
         "status": 200,
         "detail": "",
-        "at": "2026-11-17T21:14:36.020Z",
+        "at": "2026-11-18T02:58:06.188Z",
         "suites": [
           "fast"
         ],
         "fails": 0,
-        "oks": 15,
+        "oks": 16,
         "failing_since": null,
         "recent": "111111111111"
       },
@@ -248,12 +248,12 @@
         "ok": true,
         "status": 200,
         "detail": "",
-        "at": "2026-11-17T21:14:36.020Z",
+        "at": "2026-11-18T02:58:06.188Z",
         "suites": [
           "fast"
         ],
         "fails": 0,
-        "oks": 15,
+        "oks": 16,
         "failing_since": null,
         "recent": "111111111111"
       },
@@ -316,12 +316,12 @@
         "ok": true,
         "status": 200,
         "detail": "",
-        "at": "2026-11-17T21:14:36.020Z",
+        "at": "2026-11-18T02:58:06.188Z",
         "suites": [
           "fast"
         ],
         "fails": 0,
-        "oks": 15,
+        "oks": 16,
         "failing_since": null,
         "recent": "111111111111"
       },
@@ -350,12 +350,12 @@
         "ok": true,
         "status": 200,
         "detail": "",
-        "at": "2026-11-17T21:14:36.020Z",
+        "at": "2026-11-18T02:58:06.188Z",
         "suites": [
           "fast"
         ],
         "fails": 0,
-        "oks": 15,
+        "oks": 16,
         "failing_since": null,
         "recent": "111111111111"
       },
@@ -367,12 +367,12 @@
         "ok": true,
         "status": 405,
         "detail": "",
-        "at": "2026-11-17T21:14:36.020Z",
+        "at": "2026-11-18T02:58:06.188Z",
         "suites": [
           "fast"
         ],
         "fails": 0,
-        "oks": 15,
+        "oks": 16,
         "failing_since": null,
         "recent": "111111111111"
       },
@@ -384,12 +384,12 @@
         "ok": true,
         "status": 401,
         "detail": "",
-        "at": "2026-11-17T21:14:36.020Z",
+        "at": "2026-11-18T02:58:06.188Z",
         "suites": [
           "fast"
         ],
         "fails": 0,
-        "oks": 15,
+        "oks": 16,
         "failing_since": null,
         "recent": "111111111111"
       },
@@ -435,12 +435,12 @@
         "ok": true,
         "status": 401,
         "detail": "",
-        "at": "2026-11-17T21:14:36.020Z",
+        "at": "2026-11-18T02:58:06.188Z",
         "suites": [
           "fast"
         ],
         "fails": 0,
-        "oks": 15,
+        "oks": 16,
         "failing_since": null,
         "recent": "111111111111"
       },
@@ -786,7 +786,7 @@
       }
     },
     "runs": {
-      "fast": "2026-11-17T21:14:27.194Z",
+      "fast": "2026-11-18T02:58:04.174Z",
       "slow": "2026-11-18T02:50:42.235Z"
     },
     "blind": {
@@ -794,8 +794,8 @@
       "since": null
     },
     "cloudflare": {
-      "streak": 1,
-      "since": "2026-11-18T02:50:50.336Z",
+      "streak": 0,
+      "since": null,
       "active": false
     },
     "incidents": {
@@ -810,7 +810,7 @@
         "hand_closed": false,
         "webhooked": false,
         "budget_noted": [],
-        "clear": 0,
+        "clear": 1,
         "ever": [],
         "hard": false,
         "reason": "The fast checks have not run since 2026-11-17T21:14:27.194Z (more than 45 minutes)",

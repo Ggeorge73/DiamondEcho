@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generated_at": "2026-11-18T02:50:50.440Z",
+  "generated_at": "2026-11-18T02:58:06.259Z",
   "window_days": 28,
   "slos": [
     {
@@ -61,25 +61,25 @@
       "component": "api",
       "target": 0.995,
       "accepted": false,
-      "good": 45,
-      "total": 45,
+      "good": 48,
+      "total": 48,
       "attainment": 1,
       "budget_remaining": 1,
       "burn": {
-        "1h": null,
+        "1h": 0,
         "6h": 0,
         "3d": 0
       },
       "enough_data": false,
       "kind": "availability",
       "threshold_ms": null,
-      "runs": 15,
+      "runs": 16,
       "bad_runs": 0,
-      "coverage": 0.0019,
+      "coverage": 0.002,
       "budget_minutes": 201.6,
       "budget_state": "unknown",
       "first_event_at": "2026-11-14T02:36:13.632Z",
-      "last_event_at": "2026-11-17T21:14:27.194Z"
+      "last_event_at": "2026-11-18T02:58:04.174Z"
     },
     {
       "id": "api-latency",
@@ -87,25 +87,25 @@
       "component": "api",
       "target": 0.95,
       "accepted": false,
-      "good": 17,
-      "total": 30,
-      "attainment": 0.566667,
-      "budget_remaining": -7.6667,
+      "good": 19,
+      "total": 32,
+      "attainment": 0.59375,
+      "budget_remaining": -7.125,
       "burn": {
-        "1h": null,
-        "6h": 10,
-        "3d": 9
+        "1h": 0,
+        "6h": 5,
+        "3d": 8.18
       },
       "enough_data": false,
       "kind": "latency",
       "threshold_ms": 1000,
-      "runs": 15,
+      "runs": 16,
       "bad_runs": 13,
-      "coverage": 0.0019,
+      "coverage": 0.002,
       "budget_minutes": 2016,
       "budget_state": "unknown",
       "first_event_at": "2026-11-14T02:36:13.632Z",
-      "last_event_at": "2026-11-17T21:14:27.194Z"
+      "last_event_at": "2026-11-18T02:58:04.174Z"
     },
     {
       "id": "calculators-availability",
@@ -139,25 +139,25 @@
       "component": "inquiry",
       "target": 0.995,
       "accepted": false,
-      "good": 45,
-      "total": 46,
-      "attainment": 0.978261,
-      "budget_remaining": -3.3478,
+      "good": 48,
+      "total": 49,
+      "attainment": 0.979592,
+      "budget_remaining": -3.0816,
       "burn": {
-        "1h": null,
+        "1h": 0,
         "6h": 0,
         "3d": 0
       },
       "enough_data": false,
       "kind": "availability",
       "threshold_ms": null,
-      "runs": 15,
+      "runs": 16,
       "bad_runs": 1,
-      "coverage": 0.0019,
+      "coverage": 0.002,
       "budget_minutes": 201.6,
       "budget_state": "unknown",
       "first_event_at": "2026-11-14T02:36:13.632Z",
-      "last_event_at": "2026-11-17T21:14:27.194Z"
+      "last_event_at": "2026-11-18T02:58:04.174Z"
     },
     {
       "id": "staff-availability",
@@ -165,25 +165,25 @@
       "component": "staff-site",
       "target": 0.995,
       "accepted": false,
-      "good": 15,
-      "total": 16,
-      "attainment": 0.9375,
-      "budget_remaining": -11.5,
+      "good": 16,
+      "total": 17,
+      "attainment": 0.941176,
+      "budget_remaining": -10.7647,
       "burn": {
-        "1h": null,
+        "1h": 0,
         "6h": 0,
         "3d": 0
       },
       "enough_data": false,
       "kind": "availability",
       "threshold_ms": null,
-      "runs": 15,
+      "runs": 16,
       "bad_runs": 1,
-      "coverage": 0.0019,
+      "coverage": 0.002,
       "budget_minutes": 201.6,
       "budget_state": "unknown",
       "first_event_at": "2026-11-14T02:36:13.632Z",
-      "last_event_at": "2026-11-17T21:14:27.194Z"
+      "last_event_at": "2026-11-18T02:58:04.174Z"
     }
   ],
   "burn_alerts": [],
@@ -222,7 +222,7 @@
   "probe_interval_minutes": 5,
   "inputs": {
     "history_files": 5,
-    "lines": 27,
+    "lines": 28,
     "skipped_lines": 0,
     "unknown_slis": []
   }
