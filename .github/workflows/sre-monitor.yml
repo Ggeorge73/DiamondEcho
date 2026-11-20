@@ -201,13 +201,13 @@ jobs:
       # dry runs read the real Cloud Run revisions too.
       - name: Sign in to Google Cloud (only once the sign-in is set up)
         if: vars.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && github.ref == 'refs/heads/main'
-        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2.1.13
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
         with:
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ vars.GCP_SRE_SERVICE_ACCOUNT }}
       - name: Set up gcloud (only once the sign-in is set up)
         if: vars.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && github.ref == 'refs/heads/main'
-        uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f # v2.2.1
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
 
       # Proves on every run that the sign-in can read Cloud Run, so a missing
       # permission shows up now, not first during a real incident. Read-only.
@@ -260,7 +260,7 @@ jobs:
       # is left out.
       - name: Pack the status page
         if: vars.SRE_STATUS_PAGE == 'enabled'
-        uses: actions/upload-pages-artifact@v4
+        uses: actions/upload-pages-artifact@v5
         with:
           path: ${{ runner.temp }}/sre-state
           retention-days: 1
@@ -309,4 +309,4 @@ jobs:
     steps:
       - name: Publish
         id: deploy
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
