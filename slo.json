@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generated_at": "2026-11-26T20:27:12.070Z",
+  "generated_at": "2026-11-26T23:44:04.049Z",
   "window_days": 28,
   "slos": [
     {
@@ -68,7 +68,7 @@
       "burn": {
         "1h": null,
         "6h": null,
-        "3d": 0
+        "3d": null
       },
       "enough_data": false,
       "kind": "availability",
@@ -94,7 +94,7 @@
       "burn": {
         "1h": null,
         "6h": null,
-        "3d": 0
+        "3d": null
       },
       "enough_data": false,
       "kind": "latency",
@@ -146,7 +146,7 @@
       "burn": {
         "1h": null,
         "6h": null,
-        "3d": 0
+        "3d": null
       },
       "enough_data": false,
       "kind": "availability",
@@ -172,7 +172,7 @@
       "burn": {
         "1h": null,
         "6h": null,
-        "3d": 0
+        "3d": null
       },
       "enough_data": false,
       "kind": "availability",
@@ -222,7 +222,7 @@
   "probe_interval_minutes": 5,
   "inputs": {
     "history_files": 13,
-    "lines": 80,
+    "lines": 81,
     "skipped_lines": 0,
     "unknown_slis": []
   }
