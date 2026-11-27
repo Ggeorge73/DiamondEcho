@@ -10,12 +10,12 @@
         "ok": true,
         "status": 200,
         "detail": "",
-        "at": "2026-11-23T21:27:37.225Z",
+        "at": "2026-11-27T21:35:04.759Z",
         "suites": [
           "fast"
         ],
         "fails": 0,
-        "oks": 27,
+        "oks": 28,
         "failing_since": null,
         "recent": "111111111111"
       },
@@ -27,12 +27,12 @@
         "ok": true,
         "status": 301,
         "detail": "",
-        "at": "2026-11-23T21:27:37.225Z",
+        "at": "2026-11-27T21:35:04.759Z",
         "suites": [
           "fast"
         ],
         "fails": 0,
-        "oks": 27,
+        "oks": 28,
         "failing_since": null,
         "recent": "111111111111"
       },
@@ -44,12 +44,12 @@
         "ok": true,
         "status": 200,
         "detail": "",
-        "at": "2026-11-23T21:27:37.225Z",
+        "at": "2026-11-27T21:35:04.759Z",
         "suites": [
           "fast"
         ],
         "fails": 0,
-        "oks": 27,
+        "oks": 28,
         "failing_since": null,
         "recent": "111111111111"
       },
@@ -61,12 +61,12 @@
         "ok": true,
         "status": 200,
         "detail": "",
-        "at": "2026-11-23T21:27:37.225Z",
+        "at": "2026-11-27T21:35:04.759Z",
         "suites": [
           "fast"
         ],
         "fails": 0,
-        "oks": 27,
+        "oks": 28,
         "failing_since": null,
         "recent": "111111111111"
       },
@@ -78,12 +78,12 @@
         "ok": true,
         "status": 200,
         "detail": "",
-        "at": "2026-11-23T21:27:37.225Z",
+        "at": "2026-11-27T21:35:04.759Z",
         "suites": [
           "fast"
         ],
         "fails": 0,
-        "oks": 27,
+        "oks": 28,
         "failing_since": null,
         "recent": "111111111111"
       },
@@ -95,12 +95,12 @@
         "ok": true,
         "status": 200,
         "detail": "",
-        "at": "2026-11-23T21:27:37.225Z",
+        "at": "2026-11-27T21:35:04.759Z",
         "suites": [
           "fast"
         ],
         "fails": 0,
-        "oks": 27,
+        "oks": 28,
         "failing_since": null,
         "recent": "111111111111"
       },
@@ -112,12 +112,12 @@
         "ok": true,
         "status": 200,
         "detail": "",
-        "at": "2026-11-23T21:27:37.225Z",
+        "at": "2026-11-27T21:35:04.759Z",
         "suites": [
           "fast"
         ],
         "fails": 0,
-        "oks": 27,
+        "oks": 28,
         "failing_since": null,
         "recent": "111111111111"
       },
@@ -129,12 +129,12 @@
         "ok": true,
         "status": 200,
         "detail": "",
-        "at": "2026-11-23T21:27:37.225Z",
+        "at": "2026-11-27T21:35:04.759Z",
         "suites": [
           "fast"
         ],
         "fails": 0,
-        "oks": 27,
+        "oks": 28,
         "failing_since": null,
         "recent": "111111111111"
       },
@@ -146,12 +146,12 @@
         "ok": true,
         "status": 405,
         "detail": "",
-        "at": "2026-11-23T21:27:37.225Z",
+        "at": "2026-11-27T21:35:04.759Z",
         "suites": [
           "fast"
         ],
         "fails": 0,
-        "oks": 27,
+        "oks": 28,
         "failing_since": null,
         "recent": "111111111111"
       },
@@ -163,12 +163,12 @@
         "ok": true,
         "status": 401,
         "detail": "",
-        "at": "2026-11-23T21:27:37.225Z",
+        "at": "2026-11-27T21:35:04.759Z",
         "suites": [
           "fast"
         ],
         "fails": 0,
-        "oks": 27,
+        "oks": 28,
         "failing_since": null,
         "recent": "111111111111"
       },
@@ -180,12 +180,12 @@
         "ok": true,
         "status": 401,
         "detail": "",
-        "at": "2026-11-23T21:27:37.225Z",
+        "at": "2026-11-27T21:35:04.759Z",
         "suites": [
           "fast"
         ],
         "fails": 0,
-        "oks": 27,
+        "oks": 28,
         "failing_since": null,
         "recent": "111111111111"
       },
@@ -531,7 +531,7 @@
       }
     },
     "runs": {
-      "fast": "2026-11-23T21:27:35.507Z",
+      "fast": "2026-11-27T21:34:56.323Z",
       "slow": "2026-11-27T18:08:31.970Z"
     },
     "blind": {
@@ -539,16 +539,16 @@
       "since": null
     },
     "cloudflare": {
-      "streak": 20,
-      "since": "2026-11-24T05:28:54.377Z",
-      "active": true
+      "streak": 0,
+      "since": null,
+      "active": false
     },
     "incidents": {
       "monitoring": {
         "members": {},
-        "severity_since": "2026-11-24T05:54:33.725Z",
-        "escalation": 2,
-        "last_comment_at": "2026-11-27T18:08:40.633Z",
+        "severity_since": "2026-11-27T21:35:04.933Z",
+        "escalation": 0,
+        "last_comment_at": "2026-11-27T21:35:04.933Z",
         "pending": [],
         "acknowledged": false,
         "silenced": false,
@@ -558,8 +558,8 @@
         "clear": 0,
         "ever": [],
         "hard": false,
-        "reason": "Cloudflare has refused the monitor's requests to the website in 20 runs since 2026-11-24T05:28:54.377Z, while nothing else failed. Visitors may be fine; the monitor cannot see the pages. The fast checks have not run since 2026-11-23T21:27:35.507Z (more than 45 minutes)",
-        "cause": "cloudflare"
+        "reason": "The slow checks have not run since 2026-11-27T18:08:31.970Z (more than 3 hours)",
+        "cause": "blind"
       }
     },
     "pending_closes": [],
@@ -568,15 +568,15 @@
       "monitoring": []
     },
     "comment_reads": {
-      "127": "2026-11-27T18:08:40.633Z"
+      "127": "2026-11-27T21:35:04.933Z"
     }
   },
   "open": [
     {
       "key": "monitoring",
       "component": "monitoring",
-      "severity": "sev2",
-      "title": "Cloudflare is refusing the monitor",
+      "severity": "sev3",
+      "title": "Monitoring cannot see the site",
       "opened_at": "2026-11-14T23:53:42.981Z",
       "failing_checks": [],
       "issue_number": 127,
@@ -597,6 +597,10 @@
         {
           "at": "2026-11-24T05:54:33.725Z",
           "text": "Worse: now a partial outage. Cloudflare has refused the monitor's requests to the website in 2 runs since 2026-11-24T05:28:54.377Z, while nothing else failed. Visitors may be fine; the monitor cannot see the pages. The fast checks have not run since 2026-11-23T21:27:35.507Z (more than 45 minutes)."
+        },
+        {
+          "at": "2026-11-27T21:35:04.933Z",
+          "text": "Improving: now a minor problem."
         }
       ]
     }

@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated_at": "2026-11-27T18:08:40.545Z",
+  "updated_at": "2026-11-27T21:35:04.818Z",
   "overall": "unknown",
   "components": {
     "public-site": {
@@ -14,24 +14,24 @@
     },
     "search": {
       "name": "Property search",
-      "state": "operational",
-      "since": "2026-11-22T18:27:23.624Z",
+      "state": "unknown",
+      "since": "2026-11-27T21:35:04.818Z",
       "checks": [
         "search-idx-provider"
       ]
     },
     "calculators": {
       "name": "Intelligence calculators",
-      "state": "unknown",
-      "since": "2026-11-24T05:28:54.423Z",
+      "state": "operational",
+      "since": "2026-11-27T21:35:04.818Z",
       "checks": [
         "calculators-api-analyze"
       ]
     },
     "inquiry": {
       "name": "Inquiry form",
-      "state": "unknown",
-      "since": "2026-11-24T05:28:54.423Z",
+      "state": "operational",
+      "since": "2026-11-27T21:35:04.818Z",
       "checks": [
         "inquiry-preflight",
         "inquiry-queue",
@@ -52,8 +52,8 @@
     },
     "staff-site": {
       "name": "Staff site",
-      "state": "unknown",
-      "since": "2026-11-24T05:28:54.423Z",
+      "state": "operational",
+      "since": "2026-11-27T21:35:04.818Z",
       "checks": [
         "staff-api-auth"
       ]
@@ -78,8 +78,8 @@
     },
     "tls": {
       "name": "TLS certificates",
-      "state": "operational",
-      "since": "2026-11-22T18:27:23.624Z",
+      "state": "unknown",
+      "since": "2026-11-27T21:35:04.818Z",
       "checks": [
         "tls-api",
         "tls-public",
@@ -89,8 +89,8 @@
     },
     "domain": {
       "name": "Domain registration",
-      "state": "operational",
-      "since": "2026-11-22T18:27:23.624Z",
+      "state": "unknown",
+      "since": "2026-11-27T21:35:04.818Z",
       "checks": [
         "domain-delegation",
         "domain-expiry",
@@ -106,12 +106,12 @@
       "suite": "fast",
       "ok": true,
       "status": 200,
-      "latency_ms": 87,
+      "latency_ms": 129,
       "detail": "",
-      "checked_at": "2026-11-23T21:27:37.225Z",
+      "checked_at": "2026-11-27T21:35:04.759Z",
       "consecutive_failures": 0,
-      "consecutive_successes": 27,
-      "last_ok_at": "2026-11-23T21:27:37.225Z",
+      "consecutive_successes": 28,
+      "last_ok_at": "2026-11-27T21:35:04.759Z",
       "last_failure_at": null,
       "failing_since": null,
       "suites": [
@@ -126,12 +126,12 @@
       "suite": "fast",
       "ok": true,
       "status": 301,
-      "latency_ms": 111,
+      "latency_ms": 100,
       "detail": "",
-      "checked_at": "2026-11-23T21:27:37.225Z",
+      "checked_at": "2026-11-27T21:35:04.759Z",
       "consecutive_failures": 0,
-      "consecutive_successes": 27,
-      "last_ok_at": "2026-11-23T21:27:37.225Z",
+      "consecutive_successes": 28,
+      "last_ok_at": "2026-11-27T21:35:04.759Z",
       "last_failure_at": null,
       "failing_since": null,
       "suites": [
@@ -146,12 +146,12 @@
       "suite": "fast",
       "ok": true,
       "status": 200,
-      "latency_ms": 106,
+      "latency_ms": 7067,
       "detail": "",
-      "checked_at": "2026-11-23T21:27:37.225Z",
+      "checked_at": "2026-11-27T21:35:04.759Z",
       "consecutive_failures": 0,
-      "consecutive_successes": 27,
-      "last_ok_at": "2026-11-23T21:27:37.225Z",
+      "consecutive_successes": 28,
+      "last_ok_at": "2026-11-27T21:35:04.759Z",
       "last_failure_at": null,
       "failing_since": null,
       "suites": [
@@ -166,12 +166,12 @@
       "suite": "fast",
       "ok": true,
       "status": 200,
-      "latency_ms": 67,
+      "latency_ms": 32,
       "detail": "",
-      "checked_at": "2026-11-23T21:27:37.225Z",
+      "checked_at": "2026-11-27T21:35:04.759Z",
       "consecutive_failures": 0,
-      "consecutive_successes": 27,
-      "last_ok_at": "2026-11-23T21:27:37.225Z",
+      "consecutive_successes": 28,
+      "last_ok_at": "2026-11-27T21:35:04.759Z",
       "last_failure_at": null,
       "failing_since": null,
       "suites": [
@@ -186,12 +186,12 @@
       "suite": "fast",
       "ok": true,
       "status": 200,
-      "latency_ms": 67,
+      "latency_ms": 32,
       "detail": "",
-      "checked_at": "2026-11-23T21:27:37.225Z",
+      "checked_at": "2026-11-27T21:35:04.759Z",
       "consecutive_failures": 0,
-      "consecutive_successes": 27,
-      "last_ok_at": "2026-11-23T21:27:37.225Z",
+      "consecutive_successes": 28,
+      "last_ok_at": "2026-11-27T21:35:04.759Z",
       "last_failure_at": null,
       "failing_since": null,
       "suites": [
@@ -206,12 +206,12 @@
       "suite": "fast",
       "ok": true,
       "status": 200,
-      "latency_ms": 78,
+      "latency_ms": 26,
       "detail": "",
-      "checked_at": "2026-11-23T21:27:37.225Z",
+      "checked_at": "2026-11-27T21:35:04.759Z",
       "consecutive_failures": 0,
-      "consecutive_successes": 27,
-      "last_ok_at": "2026-11-23T21:27:37.225Z",
+      "consecutive_successes": 28,
+      "last_ok_at": "2026-11-27T21:35:04.759Z",
       "last_failure_at": null,
       "failing_since": null,
       "suites": [
@@ -226,12 +226,12 @@
       "suite": "fast",
       "ok": true,
       "status": 200,
-      "latency_ms": 75,
+      "latency_ms": 40,
       "detail": "",
-      "checked_at": "2026-11-23T21:27:37.225Z",
+      "checked_at": "2026-11-27T21:35:04.759Z",
       "consecutive_failures": 0,
-      "consecutive_successes": 27,
-      "last_ok_at": "2026-11-23T21:27:37.225Z",
+      "consecutive_successes": 28,
+      "last_ok_at": "2026-11-27T21:35:04.759Z",
       "last_failure_at": null,
       "failing_since": null,
       "suites": [
@@ -246,12 +246,12 @@
       "suite": "fast",
       "ok": true,
       "status": 200,
-      "latency_ms": 70,
+      "latency_ms": 23,
       "detail": "",
-      "checked_at": "2026-11-23T21:27:37.225Z",
+      "checked_at": "2026-11-27T21:35:04.759Z",
       "consecutive_failures": 0,
-      "consecutive_successes": 27,
-      "last_ok_at": "2026-11-23T21:27:37.225Z",
+      "consecutive_successes": 28,
+      "last_ok_at": "2026-11-27T21:35:04.759Z",
       "last_failure_at": null,
       "failing_since": null,
       "suites": [
@@ -266,12 +266,12 @@
       "suite": "fast",
       "ok": true,
       "status": 405,
-      "latency_ms": 76,
+      "latency_ms": 45,
       "detail": "",
-      "checked_at": "2026-11-23T21:27:37.225Z",
+      "checked_at": "2026-11-27T21:35:04.759Z",
       "consecutive_failures": 0,
-      "consecutive_successes": 27,
-      "last_ok_at": "2026-11-23T21:27:37.225Z",
+      "consecutive_successes": 28,
+      "last_ok_at": "2026-11-27T21:35:04.759Z",
       "last_failure_at": null,
       "failing_since": null,
       "suites": [
@@ -286,12 +286,12 @@
       "suite": "fast",
       "ok": true,
       "status": 401,
-      "latency_ms": 71,
+      "latency_ms": 29,
       "detail": "",
-      "checked_at": "2026-11-23T21:27:37.225Z",
+      "checked_at": "2026-11-27T21:35:04.759Z",
       "consecutive_failures": 0,
-      "consecutive_successes": 27,
-      "last_ok_at": "2026-11-23T21:27:37.225Z",
+      "consecutive_successes": 28,
+      "last_ok_at": "2026-11-27T21:35:04.759Z",
       "last_failure_at": null,
       "failing_since": null,
       "suites": [
@@ -306,12 +306,12 @@
       "suite": "fast",
       "ok": true,
       "status": 401,
-      "latency_ms": 65,
+      "latency_ms": 27,
       "detail": "",
-      "checked_at": "2026-11-23T21:27:37.225Z",
+      "checked_at": "2026-11-27T21:35:04.759Z",
       "consecutive_failures": 0,
-      "consecutive_successes": 27,
-      "last_ok_at": "2026-11-23T21:27:37.225Z",
+      "consecutive_successes": 28,
+      "last_ok_at": "2026-11-27T21:35:04.759Z",
       "last_failure_at": null,
       "failing_since": null,
       "suites": [
@@ -751,8 +751,8 @@
   },
   "last_runs": {
     "fast": {
-      "at": "2026-11-23T21:27:35.507Z",
-      "region": "westus3"
+      "at": "2026-11-27T21:34:56.323Z",
+      "region": "eastus"
     },
     "slow": {
       "at": "2026-11-27T18:08:31.970Z",
